@@ -17,6 +17,11 @@ import androidx.media3.session.MediaSessionService
  */
 class PlaybackService : MediaSessionService() {
 
+    companion object {
+        var audioSessionId: Int = 0
+            private set
+    }
+
     private var mediaSession: MediaSession? = null
 
     override fun onCreate() {
@@ -42,6 +47,7 @@ class PlaybackService : MediaSessionService() {
             .setMediaSourceFactory(DefaultMediaSourceFactory(httpDataSourceFactory))
             .setLoadControl(loadControl)
             .build()
+        audioSessionId = player.audioSessionId
         mediaSession = MediaSession.Builder(this, player).build()
     }
 

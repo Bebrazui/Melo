@@ -67,11 +67,18 @@ object NewPipeResolver {
     fun isSoundCloud(url: String): Boolean =
         url.contains("soundcloud.com", ignoreCase = true)
 
-    /** Поддерживается ли URL движком NewPipe (иначе — yt-dlp). */
-    fun isSupported(url: String): Boolean = isYouTube(url) || isSoundCloud(url)
+    fun isBandcamp(url: String): Boolean =
+        url.contains("bandcamp.com", ignoreCase = true)
 
-    private fun serviceFor(url: String): StreamingService =
-        if (isSoundCloud(url)) ServiceList.SoundCloud else ServiceList.YouTube
+    /** Поддерживается ли URL движком NewPipe (иначе — yt-dlp). */
+    fun isSupported(url: String): Boolean =
+        isYouTube(url) || isSoundCloud(url) || isBandcamp(url)
+
+    private fun serviceFor(url: String): StreamingService = when {
+        isSoundCloud(url) -> ServiceList.SoundCloud
+        isBandcamp(url) -> ServiceList.Bandcamp
+        else -> ServiceList.YouTube
+    }
 
     suspend fun resolve(context: Context, url: String): ResolvedTrack = withContext(Dispatchers.IO) {
         val t0 = android.os.SystemClock.elapsedRealtime()
@@ -87,6 +94,11 @@ object NewPipeResolver {
             ?: candidates.maxByOrNull { it.averageBitrate }
             ?: throw IllegalStateException("NewPipe не нашёл аудио-потоков")
         val t3 = android.os.SystemClock.elapsedRealtime()
+        val source = when {
+            isSoundCloud(url) -> Source.SOUNDCLOUD
+            isBandcamp(url) -> Source.BANDCAMP
+            else -> Source.YOUTUBE_MUSIC
+        }
         android.util.Log.e(
             "MeloPerf",
             "resolve init=${t1 - t0}ms getInfo=${t2 - t1}ms pick=${t3 - t2}ms TOTAL=${t3 - t0}ms",
@@ -106,30 +118,34 @@ object NewPipeResolver {
      */
     fun search(context: Context, query: String): Flow<List<TrackItem>> = channelFlow {
         ensureInit(context)
-        val acc = mutableListOf<TrackItem>()
         val mutex = Mutex()
+        val allItems = mutableListOf<TrackItem>()
 
-        suspend fun emitFrom(tag: String, block: () -> List<TrackItem>) {
+        suspend fun emitAll(tag: String, source: Source, block: suspend () -> List<TrackItem>) {
             val part = runCatching { block() }
                 .onFailure { android.util.Log.e("MeloSearch", "$tag failed: $it", it) }
                 .getOrDefault(emptyList())
+                .take(15)
             android.util.Log.e("MeloSearch", "$tag → ${part.size} items")
             if (part.isEmpty()) return
             mutex.withLock {
-                acc.addAll(part)
-                // Исполнители — наверх, треки — ниже (стабильно).
-                send(acc.sortedBy { if (it.kind == ItemKind.ARTIST) 0 else 1 })
+                allItems.addAll(part)
+                // Сортируем ВСЕ результаты по релевантности, невзирая на источник.
+                send(RelevanceScorer.rank(query, allItems))
             }
         }
 
         launch(Dispatchers.IO) {
-            emitFrom("YouTube") { searchYouTube(query) }
+            emitAll("YouTube", Source.YOUTUBE_MUSIC) { searchYouTube(query) }
         }
         launch(Dispatchers.IO) {
-            emitFrom("SoundCloud") {
-                SoundCloudFix.ensure(context) // client_id с рабочих хостов, минуя soundcloud.com
+            emitAll("SoundCloud", Source.SOUNDCLOUD) {
+                SoundCloudFix.ensure(context)
                 searchService(ServiceList.SoundCloud, query, Source.SOUNDCLOUD, listOf("tracks"))
             }
+        }
+        launch(Dispatchers.IO) {
+            emitAll("Bandcamp", Source.BANDCAMP) { BandcampSearcher.search(query) }
         }
     }
 
@@ -151,7 +167,11 @@ object NewPipeResolver {
         withContext(Dispatchers.IO) {
             ensureInit(context)
             val service = serviceFor(channelUrl)
-            val source = if (isSoundCloud(channelUrl)) Source.SOUNDCLOUD else Source.YOUTUBE_MUSIC
+            val source = when {
+                isSoundCloud(channelUrl) -> Source.SOUNDCLOUD
+                isBandcamp(channelUrl) -> Source.BANDCAMP
+                else -> Source.YOUTUBE_MUSIC
+            }
             val channel = ChannelInfo.getInfo(service, channelUrl)
             val tab = channel.tabs.firstOrNull { lh ->
                 lh.contentFilters.any {

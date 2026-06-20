@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
                     onPlayResolved = ::playResolved,
                     onTogglePlayPause = ::togglePlayPause,
                     playerProvider = { controller },
+                    audioSessionIdProvider = { PlaybackService.audioSessionId },
                 )
             }
         }

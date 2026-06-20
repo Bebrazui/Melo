@@ -22,7 +22,7 @@ data class ResolvedTrack(
 )
 
 /** Источник трека (для индикатора в UI). */
-enum class Source { YOUTUBE_MUSIC, SOUNDCLOUD }
+enum class Source { YOUTUBE_MUSIC, SOUNDCLOUD, BANDCAMP, DEEZER, TIDAL }
 
 /** Тип элемента списка: воспроизводимый трек или исполнитель/канал. */
 enum class ItemKind { TRACK, ARTIST }
@@ -37,6 +37,14 @@ data class TrackItem(
     val source: Source,
     val kind: ItemKind = ItemKind.TRACK,
 )
+
+/** Определяет источник по URL (для Deezer/Tidal, которые идут через yt-dlp). */
+fun sourceForUrl(url: String): Source = when {
+    url.contains("deezer.com", ignoreCase = true) ||
+        url.contains("deezer.page.link", ignoreCase = true) -> Source.DEEZER
+    url.contains("tidal.com", ignoreCase = true) -> Source.TIDAL
+    else -> Source.YOUTUBE_MUSIC
+}
 
 /**
  * Обёртка над yt-dlp, работающим прямо на устройстве (youtubedl-android).
@@ -57,16 +65,21 @@ object Extractor {
     private val inFlight = ConcurrentHashMap<String, Deferred<ResolvedTrack>>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** Очередь фонового prefetch: один воркер, чтобы не конкурировать с тапом. */
+    /** Очередь фонового prefetch: несколько воркеров для параллельного резолва. */
     @Volatile
     private var appCtx: Context? = null
     private val prefetchQueue = Channel<String>(Channel.UNLIMITED)
 
     init {
-        scope.launch {
-            for (url in prefetchQueue) {
-                val ctx = appCtx ?: continue
-                if (!isCached(url)) runCatching { resolveAudioUrl(ctx, url) }
+        repeat(4) { worker ->
+            scope.launch {
+                for (url in prefetchQueue) {
+                    val ctx = appCtx ?: continue
+                    if (!isCached(url)) {
+                        android.util.Log.e("MeloPerf", "prefetch[$worker] resolve $url")
+                        runCatching { resolveAudioUrl(ctx, url) }
+                    }
+                }
             }
         }
     }

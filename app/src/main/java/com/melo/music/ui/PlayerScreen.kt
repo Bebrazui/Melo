@@ -17,6 +17,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Arrangement
@@ -87,6 +88,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -111,6 +113,7 @@ import kotlinx.coroutines.flow.catch
 import com.melo.music.extractor.ResolvedTrack
 import com.melo.music.extractor.Source
 import com.melo.music.extractor.TrackItem
+import com.melo.music.favorites.FavoritesManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -135,6 +138,7 @@ fun PlayerScreen(
     onPlayResolved: (ResolvedTrack) -> Unit,
     onTogglePlayPause: () -> Unit,
     playerProvider: () -> MediaController?,
+    audioSessionIdProvider: () -> Int = { 0 },
 ) {
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -152,25 +156,33 @@ fun PlayerScreen(
     }
 
     val scope = rememberCoroutineScope()
-    var selectedTab by remember { mutableStateOf(MeloTab.Home) }
-    var playerExpanded by remember { mutableStateOf(false) }
-    var artistOpen by remember { mutableStateOf<TrackItem?>(null) }
-    var query by remember { mutableStateOf("") }
-    var items by remember { mutableStateOf<List<TrackItem>>(emptyList()) }
-    var listTitle by remember { mutableStateOf(recommendationsTitle) }
-    var listLoading by remember { mutableStateOf(true) }
-    var listError by remember { mutableStateOf<String?>(null) }
+    var selectedTab by rememberSaveable { mutableStateOf(MeloTab.Home) }
+    var playerExpanded by rememberSaveable { mutableStateOf(false) }
+    var artistOpen by rememberSaveable(stateSaver = TrackSaver.singleSaver()) { mutableStateOf<TrackItem?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var items by rememberSaveable(stateSaver = TrackSaver.listOfSaver()) { mutableStateOf<List<TrackItem>>(emptyList()) }
+    var listTitle by rememberSaveable { mutableStateOf(recommendationsTitle) }
+    var listLoading by rememberSaveable { mutableStateOf(true) }
+    var listError by rememberSaveable { mutableStateOf<String?>(null) }
 
-    var nowPlaying by remember { mutableStateOf<TrackItem?>(null) }
-    var resolvingUrl by remember { mutableStateOf<String?>(null) }
+    var nowPlaying by rememberSaveable(stateSaver = TrackSaver.singleSaver()) { mutableStateOf<TrackItem?>(null) }
+    var resolvingUrl by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Очередь воспроизведения (управляется в UI) + режимы.
-    var playingList by remember { mutableStateOf<List<TrackItem>>(emptyList()) }
-    var playingIndex by remember { mutableStateOf(-1) }
-    var shuffle by remember { mutableStateOf(false) }
-    var repeatOne by remember { mutableStateOf(false) }
-    val liked = remember { mutableStateListOf<TrackItem>() }
-    fun isLiked(item: TrackItem) = liked.any { it.url == item.url }
+    var playingList by rememberSaveable(stateSaver = TrackSaver.listOfSaver()) { mutableStateOf<List<TrackItem>>(emptyList()) }
+    var playingIndex by rememberSaveable { mutableIntStateOf(-1) }
+    var shuffle by rememberSaveable { mutableStateOf(false) }
+    var repeatOne by rememberSaveable { mutableStateOf(false) }
+    // Избранное — сохраняется в SharedPreferences.
+    var likedVersion by remember { mutableIntStateOf(0) }
+    fun getLiked(): MutableList<TrackItem> = FavoritesManager.getAll()
+    fun isLiked(item: TrackItem): Boolean = FavoritesManager.isLiked(item.url)
+    fun toggleLike(item: TrackItem) {
+        FavoritesManager.toggle(item)
+        likedVersion++
+    }
+
+    var contextMenuTrack by remember { mutableStateOf<TrackItem?>(null) }
 
     val controller = playerProvider()
     val playback = rememberPlaybackState(controller)
@@ -204,7 +216,8 @@ fun PlayerScreen(
                 .catch { listError = it.message }
                 .collect { partial ->
                     items = partial
-                    partial.filter { it.kind == ItemKind.TRACK }.take(8)
+                    // Агрессивный prefetch: все треки из частичной выдачи (YT + SC + Bandcamp)
+                    partial.filter { it.kind == ItemKind.TRACK }
                         .forEach { onPrefetch(it.url) }
                 }
             listLoading = false
@@ -233,10 +246,19 @@ fun PlayerScreen(
                         "MeloPerf",
                         "TAP→resolved ${android.os.SystemClock.elapsedRealtime() - tStart}ms",
                     )
-                    onPlayResolved(it)
+                    // Если пользователь уже переключился — не играть старый трек.
+                    if (resolvingUrl == item.url) {
+                        onPlayResolved(it)
+                    }
                 }
-                .onFailure { listError = "Не удалось воспроизвести: ${it.message}" }
-            resolvingUrl = null
+                .onFailure {
+                    if (resolvingUrl == item.url) {
+                        listError = "Не удалось воспроизвести: ${it.message}"
+                    }
+                }
+            if (resolvingUrl == item.url) {
+                resolvingUrl = null
+            }
         }
         prefetchAround(list, index)
     }
@@ -250,11 +272,6 @@ fun PlayerScreen(
         val prev = if (playingIndex <= 0) playingList.lastIndex else playingIndex - 1
         playAt(playingList, prev)
     }
-    fun toggleLike(item: TrackItem) {
-        val i = liked.indexOfFirst { it.url == item.url }
-        if (i >= 0) liked.removeAt(i) else liked.add(item)
-    }
-
     // Автопереход в конце трека (или повтор).
     val playbackState = playback.playbackState
     var lastEndedFor by remember { mutableStateOf<String?>(null) }
@@ -267,6 +284,14 @@ fun PlayerScreen(
             } else {
                 playNext()
             }
+        }
+    }
+
+    // Назад: закрыть плеер → закрыть артиста → выйти.
+    BackHandler(enabled = playerExpanded || artistOpen != null) {
+        when {
+            playerExpanded -> playerExpanded = false
+            artistOpen != null -> artistOpen = null
         }
     }
 
@@ -330,6 +355,7 @@ fun PlayerScreen(
                                             val tracks = items.filter { it.kind == ItemKind.TRACK }
                                             playAt(tracks, tracks.indexOf(item))
                                         },
+                                        onLongClick = { contextMenuTrack = item },
                                     )
                                 }
                             }
@@ -350,31 +376,35 @@ fun PlayerScreen(
                     }
                 }
 
-                MeloTab.Favorite -> if (liked.isEmpty()) {
-                    Placeholder(
-                        icon = Icons.Filled.Favorite,
-                        title = "Избранное",
-                        subtitle = "Лайкнутые треки появятся здесь",
-                    )
-                } else {
-                    Text(
-                        text = "Избранное",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 8.dp),
-                    )
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        itemsIndexed(liked, key = { _, it -> it.url }) { index, item ->
-                            TrackCard(
-                                item = item,
-                                resolving = resolvingUrl == item.url,
-                                playing = nowPlaying?.url == item.url && isPlaying,
-                                onClick = { playAt(liked.toList(), index) },
-                            )
+                MeloTab.Favorite -> {
+                    val likedList = getLiked()
+                    if (likedList.isEmpty()) {
+                        Placeholder(
+                            icon = Icons.Filled.Favorite,
+                            title = "Избранное",
+                            subtitle = "Лайкнутые треки появятся здесь",
+                        )
+                    } else {
+                        Text(
+                            text = "Избранное",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 8.dp),
+                        )
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            itemsIndexed(likedList, key = { _, it -> it.url }) { index, item ->
+                                TrackCard(
+                                    item = item,
+                                    resolving = resolvingUrl == item.url,
+                                    playing = nowPlaying?.url == item.url && isPlaying,
+                                    onClick = { playAt(likedList, index) },
+                                    onLongClick = { contextMenuTrack = item },
+                                )
+                            }
                         }
                     }
                 }
@@ -406,6 +436,7 @@ fun PlayerScreen(
                     repeatOne = repeatOne,
                     position = playback.position,
                     duration = playback.duration,
+                    audioSessionId = audioSessionIdProvider(),
                     onSeek = { ms -> controller?.seekTo(ms) },
                     onTogglePlayPause = onTogglePlayPause,
                     onNext = { playNext() },
@@ -431,12 +462,19 @@ fun PlayerScreen(
                     nowPlayingUrl = nowPlaying?.url,
                     isPlaying = isPlaying,
                     resolvingUrl = resolvingUrl,
+                    audioSessionId = audioSessionIdProvider(),
                     onPlay = { tracks, index -> playAt(tracks, index) },
+                    onTrackLongClick = { contextMenuTrack = it },
                     onClose = { artistOpen = null },
                 )
             }
         }
     }
+
+    TrackContextMenu(
+        item = contextMenuTrack,
+        onDismiss = { contextMenuTrack = null },
+    )
 }
 
 private enum class MeloTab(val label: String) {
@@ -644,12 +682,16 @@ private fun TrackCard(
     resolving: Boolean,
     playing: Boolean,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
 ) {
     ElevatedCard(
         shape = RoundedCornerShape(24.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
     ) {
         Row(
             modifier = Modifier.padding(10.dp),
@@ -761,7 +803,9 @@ private fun ArtistScreen(
     nowPlayingUrl: String?,
     isPlaying: Boolean,
     resolvingUrl: String?,
+    audioSessionId: Int,
     onPlay: (List<TrackItem>, Int) -> Unit,
+    onTrackLongClick: (TrackItem) -> Unit,
     onClose: () -> Unit,
 ) {
     BackHandler(onBack = onClose)
@@ -781,14 +825,11 @@ private fun ArtistScreen(
     val white = Color.White
 
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0E0E12))) {
-        if (hiRes != null) {
-            AsyncImage(
-                model = hiRes,
-                contentDescription = null,
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().blur(60.dp),
-            )
-        }
+        FlowingBackground(
+            thumbnailUrl = hiRes,
+            audioSessionId = audioSessionId,
+            modifier = Modifier.fillMaxSize(),
+        )
         Box(
             modifier = Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
@@ -860,6 +901,7 @@ private fun ArtistScreen(
                         resolving = resolvingUrl == t.url,
                         playing = nowPlayingUrl == t.url && isPlaying,
                         onClick = { onPlay(tracks, index) },
+                        onLongClick = { onTrackLongClick(t) },
                     )
                 }
             }
@@ -870,6 +912,9 @@ private fun ArtistScreen(
 private fun sourceLabel(source: Source): String = when (source) {
     Source.YOUTUBE_MUSIC -> "YouTube Music"
     Source.SOUNDCLOUD -> "SoundCloud"
+    Source.BANDCAMP -> "Bandcamp"
+    Source.DEEZER -> "Deezer"
+    Source.TIDAL -> "Tidal"
 }
 
 @Composable
@@ -885,6 +930,24 @@ private fun SourceBadge(source: Source, modifier: Modifier = Modifier) {
             imageVector = Icons.Filled.PlayCircle,
             contentDescription = "YouTube Music",
             tint = Color(0xFFFF0000),
+            modifier = modifier,
+        )
+        Source.BANDCAMP -> Icon(
+            imageVector = Icons.Filled.MusicNote,
+            contentDescription = "Bandcamp",
+            tint = Color(0xFF629AA9),
+            modifier = modifier,
+        )
+        Source.DEEZER -> Icon(
+            imageVector = Icons.Filled.MusicNote,
+            contentDescription = "Deezer",
+            tint = Color(0xFFA238FF),
+            modifier = modifier,
+        )
+        Source.TIDAL -> Icon(
+            imageVector = Icons.Filled.MusicNote,
+            contentDescription = "Tidal",
+            tint = Color(0xFF000000),
             modifier = modifier,
         )
     }
@@ -1008,6 +1071,7 @@ private fun FullPlayer(
     repeatOne: Boolean,
     position: Long,
     duration: Long,
+    audioSessionId: Int,
     onSeek: (Long) -> Unit,
     onTogglePlayPause: () -> Unit,
     onNext: () -> Unit,
@@ -1063,14 +1127,11 @@ private fun FullPlayer(
                 )
             },
     ) {
-        if (hiRes != null) {
-            AsyncImage(
-                model = hiRes,
-                contentDescription = null,
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().blur(48.dp),
-            )
-        }
+        FlowingBackground(
+            thumbnailUrl = hiRes,
+            audioSessionId = audioSessionId,
+            modifier = Modifier.fillMaxSize(),
+        )
         Box(
             modifier = Modifier.fillMaxSize().background(
                 Brush.verticalGradient(

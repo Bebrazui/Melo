@@ -6,6 +6,7 @@ import coil.ImageLoaderFactory
 import com.melo.music.extractor.Extractor
 import com.melo.music.extractor.NewPipeResolver
 import com.melo.music.extractor.SoundCloudFix
+import com.melo.music.favorites.FavoritesManager
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -18,6 +19,7 @@ import java.util.concurrent.TimeUnit
 class MeloApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
+        FavoritesManager.init(this)
         Thread {
             runCatching { Extractor.ensureInit(this) }
             runCatching { NewPipeResolver.ensureInit(this) }
