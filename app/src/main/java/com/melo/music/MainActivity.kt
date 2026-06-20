@@ -28,18 +28,27 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
 
     private lateinit var controllerFuture: ListenableFuture<MediaController>
-    // Наблюдаемый — чтобы Compose подцепил Player.Listener, как только контроллер готов.
     private var controller by mutableStateOf<MediaController?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
+        controllerFuture = MediaController.Builder(this, token).buildAsync()
+        controllerFuture.addListener(
+            { controller = controllerFuture.get() },
+            ContextCompat.getMainExecutor(this),
+        )
+
         setContent {
             MeloTheme {
                 PlayerScreen(
                     onSearch = { query -> NewPipeResolver.search(this, query) },
+                    onGetSuggestions = { query -> NewPipeResolver.getSuggestions(query) },
                     onLoadRecommendations = { NewPipeResolver.recommendations(this) },
                     onLoadArtistTracks = { url -> NewPipeResolver.artistTracks(this, url) },
+                    onLoadShelf = { seed -> NewPipeResolver.shelf(this, seed) },
                     scGetId = { SoundCloudFix.currentId(this) },
                     onScSetManual = { id ->
                         withContext(Dispatchers.IO) { SoundCloudFix.setManual(this@MainActivity, id) }
@@ -60,20 +69,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
-        controllerFuture = MediaController.Builder(this, token).buildAsync()
-        controllerFuture.addListener(
-            { controller = controllerFuture.get() },
-            ContextCompat.getMainExecutor(this),
-        )
-    }
-
-    override fun onStop() {
-        controller = null
+    override fun onDestroy() {
         MediaController.releaseFuture(controllerFuture)
-        super.onStop()
+        super.onDestroy()
     }
 
     private fun playResolved(track: ResolvedTrack) {
@@ -84,7 +82,6 @@ class MainActivity : ComponentActivity() {
                 MediaMetadata.Builder().setTitle(track.title).build(),
             )
             .build()
-        android.util.Log.e("MeloPerf", "setMediaItem+prepare+play")
         player.setMediaItem(item)
         player.prepare()
         player.play()

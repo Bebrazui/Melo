@@ -119,7 +119,10 @@ object RelevanceScorer {
         }
     }
 
-    /** Сортирует треки по релевантности относительно запроса. */
-    fun rank(query: String, items: List<TrackItem>): List<TrackItem> =
-        items.sortedByDescending { score(query, it) }
+    /** Сортирует треки по релевантности относительно запроса. Исполнители всегда наверху. */
+    fun rank(query: String, items: List<TrackItem>): List<TrackItem> {
+        val artists = items.filter { it.kind == ItemKind.ARTIST }
+        val tracks = items.filter { it.kind == ItemKind.TRACK }
+        return artists + tracks.sortedByDescending { score(query, it) }
+    }
 }

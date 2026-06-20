@@ -149,16 +149,49 @@ object NewPipeResolver {
         }
     }
 
-    /** YouTube: треки + исполнители (каналы) в одной выдаче. */
+    /** YouTube Music: только музыкальные треки (фильтр music_songs). */
     private fun searchYouTube(query: String): List<TrackItem> {
         val service = ServiceList.YouTube
-        val info = SearchInfo.getInfo(service, service.searchQHFactory.fromQuery(query))
+        val handler = service.searchQHFactory.fromQuery(query, listOf("music_songs"), "")
+        val info = SearchInfo.getInfo(service, handler)
         return info.relatedItems.mapNotNull { item ->
             when (item) {
                 is StreamInfoItem -> item.toTrackItem(Source.YOUTUBE_MUSIC)
                 is ChannelInfoItem -> item.toArtistItem(Source.YOUTUBE_MUSIC)
                 else -> null
             }
+        }
+    }
+
+    /**
+     * Подсказки для поиска через YouTube suggest API.
+     * Возвращает список строк — кандидатов для autocomplete.
+     */
+    fun getSuggestions(query: String): List<String> {
+        if (query.isBlank()) return emptyList()
+        return try {
+            val url = "https://suggestqueries.google.com/complete/search" +
+                "?client=firefox&ds=yt&q=${
+                    java.net.URLEncoder.encode(query.trim(), "UTF-8")
+                }"
+            val request = okhttp3.Request.Builder()
+                .url(url)
+                .header("User-Agent", "Mozilla/5.0")
+                .build()
+            val client = okhttp3.OkHttpClient.Builder()
+                .callTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return emptyList()
+                val body = resp.body?.string() ?: return emptyList()
+                // Ответ — JSON array: [query, [suggestion1, suggestion2, ...]]
+                val json = org.json.JSONArray(body)
+                if (json.length() < 2) return emptyList()
+                val arr = json.getJSONArray(1)
+                (0 until arr.length()).mapNotNull { arr.optString(it)?.takeIf { s -> s.isNotBlank() } }
+            }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 
@@ -216,6 +249,18 @@ object NewPipeResolver {
                 listOf("music_songs"),
                 "",
             )
+            val info = SearchInfo.getInfo(service, handler)
+            info.relatedItems
+                .filterIsInstance<StreamInfoItem>()
+                .map { it.toTrackItem(Source.YOUTUBE_MUSIC) }
+        }
+
+    /** Полка главной: YouTube Music по произвольному seed-запросу (региональная выдача). */
+    suspend fun shelf(context: Context, seed: String): List<TrackItem> =
+        withContext(Dispatchers.IO) {
+            ensureInit(context)
+            val service = ServiceList.YouTube
+            val handler = service.searchQHFactory.fromQuery(seed, listOf("music_songs"), "")
             val info = SearchInfo.getInfo(service, handler)
             info.relatedItems
                 .filterIsInstance<StreamInfoItem>()

@@ -2,8 +2,7 @@ package com.melo.music.ui
 
 import android.media.audiofx.Visualizer
 import android.media.MediaPlayer
-import androidx.compose.animation.core.EaseInOut
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
@@ -30,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.sin
 
 /**
@@ -109,44 +109,29 @@ fun FlowingBackground(
         }
     }
 
-    // Анимация плавания.
+    // Один непрерывный линейный драйвер фазы → без «замедления и рывка».
     val infinite = rememberInfiniteTransition(label = "flow")
-
-    // Базовая скорость: 15 сек на цикл (медленно).
-    // При басе ускоряется до ~4 сек.
-    val animDuration by remember {
-        mutableStateOf(15_000)
-    }
-    val progressMs by infinite.animateFloat(
+    val angle by infinite.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = animDuration, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 28_000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "angle",
     )
-    // Фаза для масштаба (чуть быстрее).
-    val scalePhase by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = (animDuration * 0.7f).toInt(), easing = EaseInOut),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "scale",
-    )
 
-    // Преобразования.
-    val rad = Math.toRadians(progressMs.toDouble())
+    // Все гармоники целочисленные (и cos) → на стыке 360°→0° значения совпадают,
+    // поэтому петля бесшовная.
+    val rad = Math.toRadians(angle.toDouble())
     val baseOffset = 100f // px
-    val speedMultiplier = 1f + bassLevel * 3f // x1..x4
-    val tx = (sin(rad) * baseOffset * speedMultiplier).toFloat()
-    val ty = (sin(rad * 0.7 + 1.0) * baseOffset * speedMultiplier).toFloat()
+    val amp = 1f + bassLevel * 3f
+    val tx = (sin(rad) * baseOffset * amp).toFloat()
+    val ty = (sin(rad * 2.0 + 1.0) * baseOffset * amp).toFloat()
     val baseScale = 1.12f + bassLevel * 0.1f
-    val scaleOsc = sin(Math.toRadians(scalePhase.toDouble())).toFloat() * 0.06f
+    val scaleOsc = (sin(rad * 2.0) * 0.06).toFloat()
     val scale = baseScale + scaleOsc
-    val rotation = (sin(rad * 0.3) * 3f * speedMultiplier).toFloat()
+    val rotation = (cos(rad) * 3.0 * amp).toFloat()
 
     Box(modifier = modifier.fillMaxSize()) {
         AsyncImage(

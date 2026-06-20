@@ -1,13 +1,24 @@
 package com.melo.music.ui
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -17,31 +28,43 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.melo.music.extractor.Extractor
 import com.melo.music.extractor.ResolvedTrack
 import com.melo.music.extractor.TrackItem
+import com.melo.music.playlists.PlaylistManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.RandomAccessFile
-import java.nio.ByteBuffer
+import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,6 +75,98 @@ fun TrackContextMenu(
     if (item == null) return
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var showPlaylistPicker by remember { mutableStateOf(false) }
+
+    if (showPlaylistPicker) {
+        val playlists = remember { PlaylistManager.getAll() }
+        Dialog(onDismissRequest = { showPlaylistPicker = false }) {
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
+                tonalElevation = 6.dp,
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        "В плейлист",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    if (playlists.isEmpty()) {
+                        Text(
+                            "Нет плейлистов. Создай во вкладке «Аккаунт».",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        playlists.forEach { pl ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable {
+                                        val added = PlaylistManager.addTrack(pl.id, item)
+                                        Toast.makeText(
+                                            context,
+                                            if (added) "Добавлено в «${pl.name}»" else "Уже в плейлисте",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                        showPlaylistPicker = false
+                                        onDismiss()
+                                    }
+                                    .padding(vertical = 8.dp, horizontal = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0xFF26262C)),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (pl.coverUrl != null) {
+                                        AsyncImage(
+                                            model = pl.coverUrl,
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Filled.LibraryMusic,
+                                            contentDescription = null,
+                                            tint = Color.White.copy(alpha = 0.3f),
+                                            modifier = Modifier.size(22.dp),
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(14.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        pl.name,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                    )
+                                    Text(
+                                        "${pl.tracks.size} треков",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(onClick = { showPlaylistPicker = false }) { Text("Закрыть") }
+                    }
+                }
+            }
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -93,7 +208,7 @@ fun TrackContextMenu(
                 subtitle = "Лучшее качество + обложка",
                 onClick = {
                     onDismiss()
-                    scope.launch { downloadTrack(context, item) }
+                    scope.launch(Dispatchers.IO) { downloadTrack(context, item) }
                 },
             )
             ContextMenuItem(
@@ -108,11 +223,8 @@ fun TrackContextMenu(
             ContextMenuItem(
                 icon = Icons.Filled.Add,
                 label = "В плейлист",
-                subtitle = "Скоро будет",
-                onClick = {
-                    onDismiss()
-                    Toast.makeText(context, "Скоро будет", Toast.LENGTH_SHORT).show()
-                },
+                subtitle = "Добавить в один из плейлистов",
+                onClick = { showPlaylistPicker = true },
             )
             Spacer(Modifier.height(24.dp))
         }
@@ -158,95 +270,192 @@ private fun ContextMenuItem(
 
 // ── Скачивание MP3 + ID3 ─────────────────────────────────────────────────────
 
-private val httpClient = OkHttpClient.Builder().build()
+private val httpClient = OkHttpClient.Builder()
+    .connectTimeout(15, TimeUnit.SECONDS)
+    .readTimeout(30, TimeUnit.SECONDS)
+    .writeTimeout(30, TimeUnit.SECONDS)
+    .build()
 
 private fun sanitizeFilename(s: String): String =
     s.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
 
-private fun downloadTrack(context: Context, item: TrackItem) {
-    try {
-        val dir = File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
-            "Melo",
-        )
-        dir.mkdirs()
+// ── Уведомления о загрузке ───────────────────────────────────────────────────
 
-        val filename = sanitizeFilename(
-            "${item.uploader ?: "Unknown"} - ${item.title}",
-        ) + ".mp3"
-        val mp3File = File(dir, filename)
-        if (mp3File.exists()) {
-            android.os.Handler(context.mainLooper).post {
-                Toast.makeText(context, "Уже скачано", Toast.LENGTH_SHORT).show()
-            }
-            return
-        }
+private const val DL_CHANNEL = "melo_downloads"
 
-        // 1. Resolve best URL
-        val resolved: ResolvedTrack = kotlinx.coroutines.runBlocking {
-            Extractor.resolveAudioUrl(context, item.url)
-        }
-
-        // 2. Download MP3
-        val mp3Request = Request.Builder().url(resolved.audioUrl).build()
-        val mp3Response = httpClient.newCall(mp3Request).execute()
-        if (!mp3Response.isSuccessful) throw Exception("HTTP ${mp3Response.code}")
-        mp3File.writeBytes(mp3Response.body!!.bytes())
-
-        // 3. Download artwork
-        var artworkBytes: ByteArray? = null
-        if (!item.thumbnailUrl.isNullOrBlank()) {
-            try {
-                val artRequest = Request.Builder().url(item.thumbnailUrl).build()
-                val artResponse = httpClient.newCall(artRequest).execute()
-                if (artResponse.isSuccessful) {
-                    artworkBytes = artResponse.body!!.bytes()
-                }
-            } catch (_: Exception) { }
-        }
-
-        // 4. Write ID3v2 tag (title + artist + cover art)
-        try {
-            writeId3v2(mp3File, item.title, item.uploader, artworkBytes)
-        } catch (e: Exception) {
-            android.util.Log.e("MeloDownload", "ID3 error: ${e.message}")
-        }
-
-        android.os.Handler(context.mainLooper).post {
-            Toast.makeText(context, "Скачано: $filename", Toast.LENGTH_SHORT).show()
-        }
-    } catch (e: Exception) {
-        android.util.Log.e("MeloDownload", "Download failed: ${e.message}", e)
-        android.os.Handler(context.mainLooper).post {
-            Toast.makeText(context, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
+private fun ensureChannel(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (nm.getNotificationChannel(DL_CHANNEL) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(DL_CHANNEL, "Загрузки", NotificationManager.IMPORTANCE_LOW),
+            )
         }
     }
 }
 
+private fun notifyProgress(context: Context, id: Int, label: String, percent: Int, indeterminate: Boolean) {
+    val n = NotificationCompat.Builder(context, DL_CHANNEL)
+        .setSmallIcon(android.R.drawable.stat_sys_download)
+        .setContentTitle("Скачивание")
+        .setContentText(label)
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setProgress(100, percent, indeterminate)
+        .build()
+    runCatching { NotificationManagerCompat.from(context).notify(id, n) }
+}
+
+private fun notifyDone(context: Context, id: Int, label: String, ok: Boolean, error: String?) {
+    val n = NotificationCompat.Builder(context, DL_CHANNEL)
+        .setSmallIcon(
+            if (ok) android.R.drawable.stat_sys_download_done
+            else android.R.drawable.stat_notify_error,
+        )
+        .setContentTitle(if (ok) "Скачано ✓" else "Ошибка скачивания")
+        .setContentText(if (ok) label else (error ?: "неизвестная ошибка"))
+        .setOngoing(false)
+        .setAutoCancel(true)
+        .build()
+    runCatching { NotificationManagerCompat.from(context).notify(id, n) }
+}
+
+private fun toast(context: Context, text: String) {
+    android.os.Handler(context.mainLooper).post {
+        Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun downloadTrack(context: Context, item: TrackItem) {
+    val notifId = item.url.hashCode()
+    val label = "${item.uploader?.let { "$it — " } ?: ""}${item.title}"
+    ensureChannel(context)
+    try {
+        val filename = sanitizeFilename("${item.uploader ?: "Unknown"} - ${item.title}") + ".mp3"
+
+        if (existsInMusic(context, filename)) {
+            toast(context, "Уже скачано")
+            return
+        }
+
+        notifyProgress(context, notifId, label, 0, indeterminate = true)
+
+        // 1. Резолв прямого аудио-URL (мы на IO-потоке).
+        val resolved: ResolvedTrack = kotlinx.coroutines.runBlocking {
+            Extractor.resolveAudioUrl(context, item.url)
+        }
+
+        // 2. Обложка (необязательно).
+        val artworkBytes: ByteArray? = item.thumbnailUrl?.takeIf { it.isNotBlank() }?.let { url ->
+            runCatching {
+                httpClient.newCall(Request.Builder().url(url).build()).execute().use {
+                    if (it.isSuccessful) it.body?.bytes() else null
+                }
+            }.getOrNull()
+        }
+
+        // 3. ID3v2-тег.
+        val id3 = runCatching { buildId3v2(item.title, item.uploader, artworkBytes) }
+            .getOrDefault(ByteArray(0))
+
+        // 4. Качаем аудио потоком с прогрессом в уведомлении.
+        val mp3Request = Request.Builder().url(resolved.audioUrl).build()
+        val mp3Bytes = httpClient.newCall(mp3Request).execute().use { resp ->
+            if (!resp.isSuccessful) throw Exception("Аудио: HTTP ${resp.code}")
+            val body = resp.body ?: throw Exception("Пустой ответ аудио")
+            val total = body.contentLength()
+            val input = body.byteStream()
+            val out = ByteArrayOutputStream()
+            val buf = ByteArray(16 * 1024)
+            var downloaded = 0L
+            var lastPct = -1
+            while (true) {
+                val r = input.read(buf)
+                if (r < 0) break
+                out.write(buf, 0, r)
+                downloaded += r
+                if (total > 0) {
+                    val pct = (downloaded * 100 / total).toInt()
+                    if (pct >= lastPct + 3) {
+                        notifyProgress(context, notifId, label, pct, false)
+                        lastPct = pct
+                    }
+                }
+            }
+            out.toByteArray()
+        }
+
+        // 5. Сохраняем (MediaStore на Android 10+, иначе обычный файл).
+        saveToMusic(context, filename, id3 + mp3Bytes)
+
+        notifyDone(context, notifId, label, ok = true, error = null)
+    } catch (e: Exception) {
+        android.util.Log.e("MeloDownload", "Download failed", e)
+        notifyDone(context, notifId, label, ok = false, error = e.message ?: e.javaClass.simpleName)
+    }
+}
+
+private const val MELO_DIR = "Melo"
+
+private fun existsInMusic(context: Context, filename: String): Boolean {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val projection = arrayOf(MediaStore.Audio.Media._ID)
+        val selection = "${MediaStore.Audio.Media.DISPLAY_NAME}=? AND " +
+            "${MediaStore.Audio.Media.RELATIVE_PATH} LIKE ?"
+        val args = arrayOf(filename, "%${Environment.DIRECTORY_MUSIC}/$MELO_DIR%")
+        return runCatching {
+            context.contentResolver.query(collection, projection, selection, args, null)
+                ?.use { it.count > 0 } ?: false
+        }.getOrDefault(false)
+    }
+    val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), MELO_DIR)
+    return File(dir, filename).exists()
+}
+
+private fun saveToMusic(context: Context, filename: String, bytes: ByteArray) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val resolver = context.contentResolver
+        val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val values = ContentValues().apply {
+            put(MediaStore.Audio.Media.DISPLAY_NAME, filename)
+            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
+            put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/$MELO_DIR")
+            put(MediaStore.Audio.Media.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(collection, values)
+            ?: throw Exception("MediaStore не дал URI")
+        resolver.openOutputStream(uri)?.use { it.write(bytes) }
+            ?: throw Exception("Не открыть поток записи")
+        values.clear()
+        values.put(MediaStore.Audio.Media.IS_PENDING, 0)
+        resolver.update(uri, values, null, null)
+    } else {
+        val dir = File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
+            MELO_DIR,
+        )
+        dir.mkdirs()
+        val file = File(dir, filename)
+        file.writeBytes(bytes)
+        android.media.MediaScannerConnection.scanFile(
+            context, arrayOf(file.absolutePath), arrayOf("audio/mpeg"), null,
+        )
+    }
+}
+
 /**
- * Записывает ID3v2.3 тег в начало MP3-файла.
+ * Строит ID3v2.3 тег (байты), который кладётся в начало MP3.
  * Поддерживает: TIT2 (title), TPE1 (artist), APIC (cover art).
  */
-private fun writeId3v2(file: File, title: String, artist: String?, artwork: ByteArray?) {
+private fun buildId3v2(title: String, artist: String?, artwork: ByteArray?): ByteArray {
     val frames = mutableListOf<ByteArray>()
-
-    // TIT2 — title
     frames.add(textFrame("TIT2", title))
+    if (!artist.isNullOrBlank()) frames.add(textFrame("TPE1", artist))
+    if (artwork != null && artwork.isNotEmpty()) frames.add(coverFrame(artwork))
 
-    // TPE1 — artist
-    if (!artist.isNullOrBlank()) {
-        frames.add(textFrame("TPE1", artist))
-    }
-
-    // APIC — cover art (JPEG)
-    if (artwork != null && artwork.isNotEmpty()) {
-        frames.add(coverFrame(artwork))
-    }
-
-    // Собираем все фреймы
     val frameBytes = frames.fold(ByteArray(0)) { acc, f -> acc + f }
 
-    // ID3v2.3 header: "ID3" + version 2.3 + flags + size (synchsafe)
     val size = synchsafe(frameBytes.size + 10) // +10 for header
     val header = ByteArray(10)
     header[0] = 'I'.code.toByte()
@@ -260,18 +469,7 @@ private fun writeId3v2(file: File, title: String, artist: String?, artwork: Byte
     header[8] = ((size shr 7) and 0x7F).toByte()
     header[9] = (size and 0x7F).toByte()
 
-    val id3tag = header + frameBytes
-
-    // Вставляем в начало файла
-    val tempFile = File(file.parent, file.name + ".tmp")
-    file.renameTo(tempFile)
-    file.outputStream().use { out ->
-        out.write(id3tag)
-        tempFile.inputStream().use { inp ->
-            inp.copyTo(out)
-        }
-    }
-    tempFile.delete()
+    return header + frameBytes
 }
 
 private fun textFrame(frameId: String, value: String): ByteArray {

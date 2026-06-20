@@ -1,53 +1,78 @@
 package com.melo.music.playback
 
+import android.util.Log
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.melo.music.audio.EqualizerManager
+import com.melo.music.extractor.TrackItem
 
-/**
- * Фоновый плеер на базе Media3. Держит [ExoPlayer] и [MediaSession],
- * чтобы воспроизведение продолжалось при свёрнутом приложении и управлялось
- * с экрана блокировки / наушников / системного уведомления.
- *
- * На следующих шагах сюда придёт DataSource, отдающий стрим-URL, который
- * yt-dlp резолвит на устройстве.
- */
 class PlaybackService : MediaSessionService() {
 
     companion object {
         var audioSessionId: Int = 0
             private set
+
+        /** Текущая очередь. */
+        var queue: List<TrackItem> = emptyList()
+        var queueIndex: Int = 0
+            private set
+
+        /** Вызывается при смене трека (в т.ч. автопереход). */
+        var onQueueChanged: ((index: Int) -> Unit)? = null
+
+        /**
+         * Вызывается при окончании трека (STATE_ENDED).
+         * UI подписывается сюда для автоперехода.
+         */
+        var onTrackEnded: (() -> Unit)? = null
+
+        fun setQueue(list: List<TrackItem>, index: Int) {
+            queue = list
+            queueIndex = index
+        }
     }
 
     private var mediaSession: MediaSession? = null
 
     override fun onCreate() {
         super.onCreate()
-        // YouTube/googlevideo отдают поток капризно — задаём «браузерный» User-Agent
-        // и разрешаем кросс-протокольные редиректы.
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) " +
                     "Gecko/20100101 Firefox/91.0",
             )
             .setAllowCrossProtocolRedirects(true)
-        // Меньше буфера до старта — звук начинается раньше, как только есть URL.
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                /* minBufferMs = */ 15_000,
-                /* maxBufferMs = */ 50_000,
-                /* bufferForPlaybackMs = */ 500,
-                /* bufferForPlaybackAfterRebufferMs = */ 1_000,
+                15_000,
+                50_000,
+                500,
+                1_000,
             )
             .build()
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(httpDataSourceFactory))
             .setLoadControl(loadControl)
             .build()
+
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_ENDED) {
+                    Log.d("MeloService", "STATE_ENDED fired, queue.size=${queue.size}, index=$queueIndex")
+                    onTrackEnded?.invoke()
+                }
+            }
+        })
+
         audioSessionId = player.audioSessionId
+        EqualizerManager.attach(audioSessionId)
         mediaSession = MediaSession.Builder(this, player).build()
     }
 
@@ -55,6 +80,11 @@ class PlaybackService : MediaSessionService() {
         mediaSession
 
     override fun onDestroy() {
+        onTrackEnded = null
+        onQueueChanged = null
+        queue = emptyList()
+        queueIndex = 0
+        EqualizerManager.release()
         mediaSession?.run {
             player.release()
             release()

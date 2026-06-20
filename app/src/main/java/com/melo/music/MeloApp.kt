@@ -3,10 +3,20 @@ package com.melo.music
 import android.app.Application
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
+import coil.request.CachePolicy
+import com.melo.music.audio.EqualizerManager
+import com.melo.music.crash.CrashHandler
 import com.melo.music.extractor.Extractor
 import com.melo.music.extractor.NewPipeResolver
 import com.melo.music.extractor.SoundCloudFix
 import com.melo.music.favorites.FavoritesManager
+import com.melo.music.history.HistoryManager
+import com.melo.music.lyrics.LyricsRepository
+import com.melo.music.playlists.PlaylistManager
+import com.melo.music.recommend.Recommender
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -19,7 +29,13 @@ import java.util.concurrent.TimeUnit
 class MeloApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
+        CrashHandler.install(this)
         FavoritesManager.init(this)
+        PlaylistManager.init(this)
+        HistoryManager.init(this)
+        EqualizerManager.init(this)
+        LyricsRepository.init(this)
+        Recommender.init(this)
         Thread {
             runCatching { Extractor.ensureInit(this) }
             runCatching { NewPipeResolver.ensureInit(this) }
@@ -28,12 +44,21 @@ class MeloApp : Application(), ImageLoaderFactory {
         }.start()
     }
 
-    /** Загрузчик обложек: браузерный UA + таймауты (чтобы запрос не висел вечно). */
+    /**
+     * Загрузчик обложек. Все обложки с одного хоста (googleusercontent), поэтому
+     * поднимаем лимит запросов на хост и НЕ ставим callTimeout (он считает время
+     * в очереди → массовые таймауты). Память + диск кэш, игнор cache-headers,
+     * чтобы при скролле картинки не грузились заново.
+     */
     override fun newImageLoader(): ImageLoader {
+        val dispatcher = Dispatcher().apply {
+            maxRequests = 64
+            maxRequestsPerHost = 8
+        }
         val client = OkHttpClient.Builder()
-            .callTimeout(20, TimeUnit.SECONDS)
+            .dispatcher(dispatcher)
             .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
                     .header(
@@ -47,7 +72,20 @@ class MeloApp : Application(), ImageLoaderFactory {
             .build()
         return ImageLoader.Builder(this)
             .okHttpClient(client)
-            .crossfade(true)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .memoryCache {
+                MemoryCache.Builder(this)
+                    .maxSizePercent(0.25)
+                    .build()
+            }
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(cacheDir.resolve("image_cache"))
+                    .maxSizeBytes(256L * 1024 * 1024)
+                    .build()
+            }
+            .respectCacheHeaders(false)
             .build()
     }
 }
