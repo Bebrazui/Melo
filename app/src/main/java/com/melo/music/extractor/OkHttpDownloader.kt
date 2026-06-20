@@ -1,20 +1,29 @@
 package com.melo.music.extractor
 
+import com.melo.music.byedpi.ByeDpiProxy
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
+import java.net.InetSocketAddress
+import java.net.Proxy
 
 /**
  * Реализация загрузчика NewPipe поверх OkHttp.
- * NewPipe сам формирует запросы (включая расшифровку подписей YouTube),
- * а мы лишь выполняем их по сети.
+ * Динамически проверяет ByeDPI прокси на каждый запрос.
  */
 class OkHttpDownloader(
     private val client: OkHttpClient = OkHttpClient.Builder().build(),
 ) : Downloader() {
+
+    /** Клиент с прокси для ByeDPI. */
+    private val proxyClient: OkHttpClient by lazy {
+        client.newBuilder()
+            .proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", ByeDpiProxy.DEFAULT_PORT)))
+            .build()
+    }
 
     override fun execute(request: Request): Response {
         val httpMethod = request.httpMethod()
@@ -39,7 +48,14 @@ class OkHttpDownloader(
             }
         }
 
-        val response = client.newCall(requestBuilder.build()).execute()
+        // Выбираем клиент: с прокси или без.
+        val activeClient = if (ByeDpiProxy.isEnabled() && ByeDpiProxy.isRunning()) {
+            proxyClient
+        } else {
+            client
+        }
+
+        val response = activeClient.newCall(requestBuilder.build()).execute()
         if (response.code == 429) {
             response.close()
             throw ReCaptchaException("reCaptcha Challenge requested", url)

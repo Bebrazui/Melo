@@ -57,7 +57,7 @@ class MeloApp : Application(), ImageLoaderFactory {
             maxRequests = 64
             maxRequestsPerHost = 8
         }
-        val client = OkHttpClient.Builder()
+        val clientBuilder = OkHttpClient.Builder()
             .dispatcher(dispatcher)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
@@ -71,7 +71,10 @@ class MeloApp : Application(), ImageLoaderFactory {
                     .build()
                 chain.proceed(request)
             }
-            .build()
+        if (ByeDpiProxy.isEnabled() && ByeDpiProxy.isRunning()) {
+            clientBuilder.proxy(ByeDpiProxy.getProxy())
+        }
+        val client = clientBuilder.build()
         return ImageLoader.Builder(this)
             .okHttpClient(client)
             .memoryCachePolicy(CachePolicy.ENABLED)

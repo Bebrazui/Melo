@@ -683,11 +683,11 @@ fun PlayerScreen(
     )
 
     if (homeSettings) {
-        SettingsSheet(
+        SettingsScreen(
             scGetId = scGetId,
             onScSetManual = onScSetManual,
             onScRefresh = onScRefresh,
-            onDismiss = { homeSettings = false },
+            onBack = { homeSettings = false },
         )
     }
 
@@ -1025,11 +1025,11 @@ private fun AccountTab(
     }
 
     if (showSettings) {
-        SettingsSheet(
+        SettingsScreen(
             scGetId = scGetId,
             onScSetManual = onScSetManual,
             onScRefresh = onScRefresh,
-            onDismiss = { showSettings = false },
+            onBack = { showSettings = false },
         )
     }
 }
@@ -1109,352 +1109,6 @@ private fun MeloDialog(onDismiss: () -> Unit, content: @Composable ColumnScope.(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SettingsSheet(
-    scGetId: () -> String?,
-    onScSetManual: suspend (String) -> Boolean,
-    onScRefresh: suspend () -> String?,
-    onDismiss: () -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    var currentId by remember { mutableStateOf(scGetId()) }
-    var manual by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf<String?>(null) }
-
-    // ByeDPI developer section
-    var byeDpiExpanded by remember { mutableStateOf(false) }
-    var byeDpiCmd by remember { mutableStateOf(com.melo.music.byedpi.ByeDpiProxy.getCommandLine()) }
-    var byeDpiRunning by remember { mutableStateOf(com.melo.music.byedpi.ByeDpiProxy.isRunning()) }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(),
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-            Text("Настройки", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(16.dp))
-
-            // ── Для разработчиков (ByeDPI) ──────────────────────────
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { byeDpiExpanded = !byeDpiExpanded },
-            ) {
-                Icon(
-                    imageVector = if (byeDpiExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "Для разработчиков",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (byeDpiRunning) {
-                    Spacer(Modifier.width(8.dp))
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                    ) {
-                        Text(
-                            "ON",
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-            }
-
-            if (byeDpiExpanded) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "ByeDPI — обход DPI. Вставь командную строку (как в CLI).",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = byeDpiCmd,
-                    onValueChange = {
-                        byeDpiCmd = it
-                        com.melo.music.byedpi.ByeDpiProxy.setCommandLine(it)
-                    },
-                    label = { Text("Командная строка ByeDPI") },
-                    placeholder = { Text("--disorder 1 --auto=torst --timeout 3") },
-                    singleLine = false,
-                    minLines = 2,
-                    modifier = Modifier.fillMaxWidth(),
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                byeDpiRunning = com.melo.music.byedpi.ByeDpiProxy.start(byeDpiCmd)
-                                message = if (byeDpiRunning) "ByeDPI запущен ✓" else "Ошибка запуска"
-                            }
-                        },
-                        enabled = !byeDpiRunning && byeDpiCmd.isNotBlank(),
-                    ) { Text("Старт") }
-                    OutlinedButton(
-                        onClick = {
-                            com.melo.music.byedpi.ByeDpiProxy.stop()
-                            byeDpiRunning = false
-                            message = "ByeDPI остановлен"
-                        },
-                        enabled = byeDpiRunning,
-                    ) { Text("Стоп") }
-                }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Примеры:\n" +
-                        "  --disorder 1\n" +
-                        "  --fake -1 --ttl 8\n" +
-                        "  --split 1+s --disorder 3+s\n" +
-                        "  --auto=torst --timeout 3 --tlsrec 1+s",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(12.dp))
-            }
-
-            // ── SoundCloud ───────────────────────────────────────────
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = currentId?.let { "client_id: ✓ сохранён (${it.take(6)}…)" }
-                    ?: "client_id: ✗ нет",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (currentId != null) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.error,
-            )
-
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(
-                onClick = {
-                    if (busy) return@OutlinedButton
-                    scope.launch {
-                        busy = true; message = "Пробую добыть…"
-                        val r = onScRefresh(); currentId = r
-                        message = if (r != null) "Готово ✓" else "Не вышло — вставь вручную"
-                        busy = false
-                    }
-                },
-                enabled = !busy,
-            ) { Text("Обновить автоматически") }
-
-            Spacer(Modifier.height(10.dp))
-            OutlinedTextField(
-                value = manual,
-                onValueChange = { manual = it },
-                label = { Text("client_id вручную") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(8.dp))
-            Button(
-                onClick = {
-                    val id = manual.trim()
-                    if (busy || id.isEmpty()) return@Button
-                    scope.launch {
-                        busy = true; message = "Проверяю…"
-                        val ok = onScSetManual(id)
-                        if (ok) { currentId = id; manual = ""; message = "Сохранён ✓" }
-                        else message = "Неверный client_id"
-                        busy = false
-                    }
-                },
-                enabled = !busy,
-            ) { Text("Сохранить") }
-
-            if (busy) {
-                Spacer(Modifier.height(12.dp))
-                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-            }
-            message?.let {
-                Spacer(Modifier.height(10.dp))
-                Text(it, style = MaterialTheme.typography.bodyMedium)
-            }
-
-            Spacer(Modifier.height(20.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(16.dp))
-
-            EqualizerSection()
-        }
-    }
-}
-
-@Composable
-private fun EqualizerSection() {
-    var enabled by remember { mutableStateOf(EqualizerManager.isEnabled()) }
-    var selectedPreset by remember { mutableIntStateOf(EqualizerManager.getPreset()) }
-    val bandCount = EqualizerManager.bandCount
-    val bandRange = EqualizerManager.bandLevelRange
-    val frequencies = EqualizerManager.bandFrequencies
-    val presets = EqualizerManager.presetNames
-
-    Column {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Filled.Settings,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "Эквалайзер",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f),
-            )
-            Switch(
-                checked = enabled,
-                onCheckedChange = {
-                    enabled = it
-                    EqualizerManager.setEnabled(it)
-                },
-            )
-        }
-
-        if (enabled && bandCount > 0) {
-            Spacer(Modifier.height(12.dp))
-
-            // Пресеты
-            Text(
-                "Пресет",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(6.dp))
-            var presetExpanded by remember { mutableStateOf(false) }
-            Box {
-                OutlinedButton(
-                    onClick = { presetExpanded = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    Text(
-                        if (selectedPreset in 0 until presets.size) presets[selectedPreset]
-                        else "Ручная настройка",
-                        modifier = Modifier.weight(1f),
-                    )
-                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null)
-                }
-                DropdownMenu(
-                    expanded = presetExpanded,
-                    onDismissRequest = { presetExpanded = false },
-                ) {
-                    presets.forEachIndexed { index, name ->
-                        DropdownMenuItem(
-                            text = { Text(name) },
-                            onClick = {
-                                selectedPreset = index
-                                EqualizerManager.setPreset(index)
-                                presetExpanded = false
-                            },
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // Полосы эквалайзера
-            Text(
-                "Полосы",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-
-            val bandLabels = remember(bandCount) {
-                frequencies.map { freq ->
-                    when {
-                        freq < 1000 -> "${freq}Гц"
-                        else -> "${freq / 1000}кГц"
-                    }
-                }
-            }
-
-            // Полосы эквалайзера — горизонтальные слайдеры.
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                for (i in 0 until bandCount) {
-                    var level by remember {
-                        mutableStateOf(EqualizerManager.getBandLevel(i))
-                    }
-                    val dbValue = (level / 100f)
-                    val barColor = when {
-                        dbValue > 0 -> MaterialTheme.colorScheme.primary
-                        dbValue < 0 -> MaterialTheme.colorScheme.error
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                bandLabels[i],
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = if (dbValue > 0) "+${dbValue.toInt()} дБ"
-                                else if (dbValue < 0) "${dbValue.toInt()} дБ" else "0 дБ",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = barColor,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        Slider(
-                            value = level.toFloat(),
-                            onValueChange = { level = it.toInt().toShort() },
-                            onValueChangeFinished = {
-                                selectedPreset = -1
-                                EqualizerManager.setBandLevel(i, level)
-                            },
-                            valueRange = bandRange[0].toFloat()..bandRange[1].toFloat(),
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = SliderDefaults.colors(
-                                thumbColor = barColor,
-                                activeTrackColor = barColor,
-                                inactiveTrackColor = barColor.copy(alpha = 0.15f),
-                            ),
-                        )
-                    }
-                }
-            }
-        } else if (enabled) {
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Эквалайзер недоступен на этом устройстве",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
-    }
-}
-
 @Composable
 private fun SearchBar(
     query: String,
@@ -1469,10 +1123,8 @@ private fun SearchBar(
         if (ghostSuggestion.isBlank() || q.isBlank()) ""
         else ghostSuggestion.removePrefix(q).removePrefix(" ").trimStart()
     }
-
-    // Анимация переключения: blur + затемнение.
     var prevGhost by remember { mutableStateOf("") }
-    var animPhase by remember { mutableFloatStateOf(0f) }
+    var animPhase by remember { mutableFloatStateOf(1f) }
     LaunchedEffect(ghostTail) {
         if (ghostTail == prevGhost) return@LaunchedEffect
         if (prevGhost.isNotEmpty() && ghostTail.isNotEmpty()) {
