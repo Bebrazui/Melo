@@ -62,6 +62,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
@@ -1121,6 +1123,11 @@ private fun SettingsSheet(
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
+    // ByeDPI developer section
+    var byeDpiExpanded by remember { mutableStateOf(false) }
+    var byeDpiCmd by remember { mutableStateOf(com.melo.music.byedpi.ByeDpiProxy.getCommandLine()) }
+    var byeDpiRunning by remember { mutableStateOf(com.melo.music.byedpi.ByeDpiProxy.isRunning()) }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(),
@@ -1129,11 +1136,99 @@ private fun SettingsSheet(
             Text("Настройки", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(16.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                SourceBadge(Source.SOUNDCLOUD, Modifier.size(20.dp))
+            // ── Для разработчиков (ByeDPI) ──────────────────────────
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { byeDpiExpanded = !byeDpiExpanded },
+            ) {
+                Icon(
+                    imageVector = if (byeDpiExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
                 Spacer(Modifier.width(8.dp))
-                Text("SoundCloud", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Для разработчиков",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (byeDpiRunning) {
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    ) {
+                        Text(
+                            "ON",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
             }
+
+            if (byeDpiExpanded) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "ByeDPI — обход DPI. Вставь командную строку (как в CLI).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = byeDpiCmd,
+                    onValueChange = {
+                        byeDpiCmd = it
+                        com.melo.music.byedpi.ByeDpiProxy.setCommandLine(it)
+                    },
+                    label = { Text("Командная строка ByeDPI") },
+                    placeholder = { Text("--disorder 1 --auto=torst --timeout 3") },
+                    singleLine = false,
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                byeDpiRunning = com.melo.music.byedpi.ByeDpiProxy.start(byeDpiCmd)
+                                message = if (byeDpiRunning) "ByeDPI запущен ✓" else "Ошибка запуска"
+                            }
+                        },
+                        enabled = !byeDpiRunning && byeDpiCmd.isNotBlank(),
+                    ) { Text("Старт") }
+                    OutlinedButton(
+                        onClick = {
+                            com.melo.music.byedpi.ByeDpiProxy.stop()
+                            byeDpiRunning = false
+                            message = "ByeDPI остановлен"
+                        },
+                        enabled = byeDpiRunning,
+                    ) { Text("Стоп") }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Примеры:\n" +
+                        "  --disorder 1\n" +
+                        "  --fake -1 --ttl 8\n" +
+                        "  --split 1+s --disorder 3+s\n" +
+                        "  --auto=torst --timeout 3 --tlsrec 1+s",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(12.dp))
+            }
+
+            // ── SoundCloud ───────────────────────────────────────────
             Spacer(Modifier.height(6.dp))
             Text(
                 text = currentId?.let { "client_id: ✓ сохранён (${it.take(6)}…)" }

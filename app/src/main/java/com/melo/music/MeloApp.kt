@@ -7,6 +7,7 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import coil.request.CachePolicy
 import com.melo.music.audio.EqualizerManager
+import com.melo.music.byedpi.ByeDpiProxy
 import com.melo.music.crash.CrashHandler
 import com.melo.music.extractor.Extractor
 import com.melo.music.extractor.NewPipeResolver
@@ -36,6 +37,7 @@ class MeloApp : Application(), ImageLoaderFactory {
         EqualizerManager.init(this)
         LyricsRepository.init(this)
         Recommender.init(this)
+        ByeDpiProxy.init(this)
         Thread {
             runCatching { Extractor.ensureInit(this) }
             runCatching { NewPipeResolver.ensureInit(this) }
