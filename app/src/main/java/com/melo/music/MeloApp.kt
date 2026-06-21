@@ -19,6 +19,12 @@ import com.melo.music.playlists.PlaylistManager
 import com.melo.music.recommend.Recommender
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
+import java.io.IOException
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.net.ProxySelector
+import java.net.SocketAddress
+import java.net.URI
 import java.util.concurrent.TimeUnit
 
 /**
@@ -38,6 +44,9 @@ class MeloApp : Application(), ImageLoaderFactory {
         LyricsRepository.init(this)
         Recommender.init(this)
         ByeDpiProxy.init(this)
+        if (ByeDpiProxy.isEnabled() && ByeDpiProxy.getCommandLine().isNotBlank()) {
+            Thread { ByeDpiProxy.start() }.start()
+        }
         Thread {
             runCatching { Extractor.ensureInit(this) }
             runCatching { NewPipeResolver.ensureInit(this) }
@@ -71,8 +80,17 @@ class MeloApp : Application(), ImageLoaderFactory {
                     .build()
                 chain.proceed(request)
             }
-        if (ByeDpiProxy.isEnabled() && ByeDpiProxy.isRunning()) {
-            clientBuilder.proxy(ByeDpiProxy.getProxy())
+        if (ByeDpiProxy.isEnabled()) {
+            clientBuilder.proxySelector(object : ProxySelector() {
+                override fun select(uri: URI): List<Proxy> {
+                    return if (ByeDpiProxy.isRunning()) {
+                        listOf(ByeDpiProxy.getProxy())
+                    } else {
+                        listOf(Proxy.NO_PROXY)
+                    }
+                }
+                override fun connectFailed(uri: URI, sa: SocketAddress, ioe: IOException) {}
+            })
         }
         val client = clientBuilder.build()
         return ImageLoader.Builder(this)

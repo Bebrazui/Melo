@@ -9,19 +9,29 @@ import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
 import java.net.InetSocketAddress
 import java.net.Proxy
+import java.net.ProxySelector
+import java.net.URI
 
 /**
  * Реализация загрузчика NewPipe поверх OkHttp.
- * Динамически проверяет ByeDPI прокси на каждый запрос.
+ * Динамически проверяет ByeDPI прокси на каждый запрос через ProxySelector.
  */
 class OkHttpDownloader(
     private val client: OkHttpClient = OkHttpClient.Builder().build(),
 ) : Downloader() {
 
-    /** Клиент с прокси для ByeDPI. */
-    private val proxyClient: OkHttpClient by lazy {
+    private val dynamicProxyClient: OkHttpClient by lazy {
         client.newBuilder()
-            .proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", ByeDpiProxy.DEFAULT_PORT)))
+            .proxySelector(object : ProxySelector() {
+                override fun select(uri: URI): List<Proxy> {
+                    return if (ByeDpiProxy.isEnabled() && ByeDpiProxy.isRunning()) {
+                        listOf(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", ByeDpiProxy.DEFAULT_PORT)))
+                    } else {
+                        listOf(Proxy.NO_PROXY)
+                    }
+                }
+                override fun connectFailed(uri: URI, sa: java.net.SocketAddress, ioe: java.io.IOException) {}
+            })
             .build()
     }
 
@@ -48,9 +58,8 @@ class OkHttpDownloader(
             }
         }
 
-        // Выбираем клиент: с прокси или без.
-        val activeClient = if (ByeDpiProxy.isEnabled() && ByeDpiProxy.isRunning()) {
-            proxyClient
+        val activeClient = if (ByeDpiProxy.isEnabled()) {
+            dynamicProxyClient
         } else {
             client
         }

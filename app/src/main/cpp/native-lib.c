@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <sys/socket.h>
 #include <android/log.h>
 
@@ -10,7 +11,6 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-// From ByeDPI - server_fd is the listening socket in proxy.c
 extern int server_fd;
 
 static void *proxy_thread_func(void *arg);
@@ -20,20 +20,17 @@ static char **saved_argv = NULL;
 static int saved_argc = 0;
 
 static void *proxy_thread_func(void *arg) {
-    // Rebuild argc/argv for main()
     int argc = saved_argc;
     char **argv = saved_argv;
 
-    LOGI("ByeDPI proxy thread started, argc=%d", argc);
-    for (int i = 0; i < argc; i++) {
-        LOGI("  argv[%d] = %s", i, argv[i]);
-    }
+    LOGI("ByeDPI thread: argc=%d, calling main()...", argc);
 
-    // main() is blocking - runs the SOCKS5 event loop
+    optind = 1;
+
     extern int main(int argc, char **argv);
     int result = main(argc, argv);
 
-    LOGI("ByeDPI proxy exited with code %d", result);
+    LOGI("ByeDPI thread: main() returned %d", result);
     proxy_running = 0;
     return NULL;
 }

@@ -20,6 +20,9 @@ object ByeDpiProxy {
     const val DEFAULT_PORT = 1080
     const val DEFAULT_HOST = "127.0.0.1"
 
+    /** Стратегия обхода DPI по умолчанию (универсальная, авто-подбор). */
+    const val DEFAULT_CMD = "--auto=torst --tlsrec 1+s --split 1+s --disorder 1"
+
     private var prefs: SharedPreferences? = null
     private var running = false
 
@@ -38,14 +41,15 @@ object ByeDpiProxy {
 
     fun isRunning(): Boolean = running
 
-    fun isEnabled(): Boolean = prefs?.getBoolean(KEY_ENABLED, false) ?: false
+    fun isEnabled(): Boolean = prefs?.getBoolean(KEY_ENABLED, true) ?: true
 
     fun setEnabled(enabled: Boolean) {
         prefs?.edit()?.putBoolean(KEY_ENABLED, enabled)?.apply()
     }
 
     fun getCommandLine(): String {
-        return prefs?.getString(KEY_CMD, "") ?: ""
+        val saved = prefs?.getString(KEY_CMD, null)
+        return if (saved.isNullOrBlank()) DEFAULT_CMD else saved
     }
 
     fun setCommandLine(cmd: String) {

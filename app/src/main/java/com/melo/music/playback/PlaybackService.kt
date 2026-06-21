@@ -4,14 +4,21 @@ import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.melo.music.audio.EqualizerManager
+import com.melo.music.byedpi.ByeDpiProxy
 import com.melo.music.extractor.TrackItem
+import okhttp3.OkHttpClient
+import java.io.IOException
+import java.net.Proxy
+import java.net.ProxySelector
+import java.net.SocketAddress
+import java.net.URI
 
 class PlaybackService : MediaSessionService() {
 
@@ -43,12 +50,25 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+        // Аудио тоже идёт через ByeDPI (когда включён и запущен), иначе напрямую —
+        // динамический ProxySelector решает на каждое соединение.
+        val okClient = OkHttpClient.Builder()
+            .proxySelector(object : ProxySelector() {
+                override fun select(uri: URI): List<Proxy> {
+                    return if (ByeDpiProxy.isEnabled() && ByeDpiProxy.isRunning()) {
+                        listOf(ByeDpiProxy.getProxy())
+                    } else {
+                        listOf(Proxy.NO_PROXY)
+                    }
+                }
+                override fun connectFailed(uri: URI, sa: SocketAddress, ioe: IOException) {}
+            })
+            .build()
+        val httpDataSourceFactory = OkHttpDataSource.Factory(okClient)
             .setUserAgent(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) " +
                     "Gecko/20100101 Firefox/91.0",
             )
-            .setAllowCrossProtocolRedirects(true)
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 15_000,

@@ -10,7 +10,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.Cache
 import okhttp3.OkHttpClient
-import com.melo.music.byedpi.ByeDpiProxy
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.StreamingService
@@ -50,10 +49,6 @@ object NewPipeResolver {
         val cacheDir = File(context.applicationContext.cacheDir, "newpipe_http")
         val builder = OkHttpClient.Builder()
             .cache(Cache(cacheDir, 64L * 1024 * 1024))
-        // Если ByeDPI запущен — направляем трафик через локальный SOCKS5-прокси.
-        if (ByeDpiProxy.isEnabled() && ByeDpiProxy.isRunning()) {
-            builder.proxy(ByeDpiProxy.getProxy())
-        }
         val client = builder.build()
         // Локаль и страна устройства → региональные результаты (RU → русские песни).
         val locale = Locale.getDefault()
