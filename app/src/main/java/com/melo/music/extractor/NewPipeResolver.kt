@@ -116,8 +116,49 @@ object NewPipeResolver {
      * YouTube обычно быстрее (~0.4с), SoundCloud — позже (~2с) и дописывается снизу.
      * Каждый emit — это накопленный список (исполнители сверху, затем треки).
      */
+    /** Похоже ли на ссылку трека одного из источников. */
+    fun isTrackUrl(q: String): Boolean {
+        val s = q.trim()
+        if (!s.startsWith("http", ignoreCase = true)) return false
+        return isYouTube(s) || isSoundCloud(s) || isBandcamp(s)
+    }
+
+    /** Один трек по ссылке (для поля поиска): метаданные без воспроизведения. */
+    suspend fun resolveSingleTrack(context: Context, url: String): TrackItem? =
+        withContext(Dispatchers.IO) {
+            ensureInit(context)
+            runCatching {
+                when {
+                    isYouTube(url) || isSoundCloud(url) -> {
+                        if (isSoundCloud(url)) SoundCloudFix.ensure(context)
+                        val info = StreamInfo.getInfo(serviceFor(url), url)
+                        TrackItem(
+                            title = info.name,
+                            uploader = info.uploaderName?.takeIf { it.isNotBlank() },
+                            url = info.url ?: url,
+                            durationSeconds = info.duration,
+                            thumbnailUrl = info.thumbnails.maxByOrNull { it.height }?.url
+                                ?: info.thumbnails.firstOrNull()?.url,
+                            source = if (isSoundCloud(url)) Source.SOUNDCLOUD else Source.YOUTUBE_MUSIC,
+                            kind = ItemKind.TRACK,
+                        )
+                    }
+                    isBandcamp(url) -> Extractor.fetchMeta(context, url)
+                    else -> null
+                }
+            }.getOrNull()
+        }
+
     fun search(context: Context, query: String): Flow<List<TrackItem>> = channelFlow {
         ensureInit(context)
+
+        // Если в поле вставили ссылку — предлагаем только этот трек.
+        if (isTrackUrl(query)) {
+            val item = resolveSingleTrack(context, query.trim())
+            if (item != null) send(listOf(item))
+            return@channelFlow
+        }
+
         val mutex = Mutex()
         val allItems = mutableListOf<TrackItem>()
 
@@ -149,18 +190,24 @@ object NewPipeResolver {
         }
     }
 
-    /** YouTube Music: только музыкальные треки (фильтр music_songs). */
+    /** YouTube Music: песни (music_songs) + исполнители (music_artists). */
     private fun searchYouTube(query: String): List<TrackItem> {
         val service = ServiceList.YouTube
-        val handler = service.searchQHFactory.fromQuery(query, listOf("music_songs"), "")
-        val info = SearchInfo.getInfo(service, handler)
-        return info.relatedItems.mapNotNull { item ->
-            when (item) {
-                is StreamInfoItem -> item.toTrackItem(Source.YOUTUBE_MUSIC)
-                is ChannelInfoItem -> item.toArtistItem(Source.YOUTUBE_MUSIC)
-                else -> null
-            }
-        }
+        val songs = SearchInfo.getInfo(
+            service,
+            service.searchQHFactory.fromQuery(query, listOf("music_songs"), ""),
+        ).relatedItems.filterIsInstance<StreamInfoItem>().map { it.toTrackItem(Source.YOUTUBE_MUSIC) }
+
+        // Отдельный запрос за исполнителями — music_songs их не отдаёт.
+        val artists = runCatching {
+            SearchInfo.getInfo(
+                service,
+                service.searchQHFactory.fromQuery(query, listOf("music_artists"), ""),
+            ).relatedItems.filterIsInstance<ChannelInfoItem>().map { it.toArtistItem(Source.YOUTUBE_MUSIC) }
+        }.getOrDefault(emptyList())
+
+        // Исполнителей вперёд (и немного), чтобы пережили обрезку списка.
+        return artists.take(3) + songs
     }
 
     /**
@@ -195,28 +242,139 @@ object NewPipeResolver {
         }
     }
 
-    /** Треки исполнителя/канала: открываем вкладку Tracks/Videos канала. */
-    suspend fun artistTracks(context: Context, channelUrl: String): List<TrackItem> =
+    /**
+     * Треки исполнителя: сперва вкладка канала, иначе фолбэк — поиск по имени.
+     * Для YouTube-исполнителей вкладка часто пустая, поэтому фолбэк надёжнее.
+     */
+    suspend fun artistTracks(context: Context, artist: TrackItem): List<TrackItem> =
         withContext(Dispatchers.IO) {
             ensureInit(context)
-            val service = serviceFor(channelUrl)
+            val viaChannel = runCatching { channelTracks(artist.url) }.getOrDefault(emptyList())
+            if (viaChannel.isNotEmpty()) return@withContext viaChannel
+
+            // Фолбэк: ищем песни по имени исполнителя в его источнике
+            // и оставляем только его треки (иначе подмешиваются чужие).
+            runCatching {
+                val raw = when (artist.source) {
+                    Source.SOUNDCLOUD -> {
+                        SoundCloudFix.ensure(context)
+                        searchService(ServiceList.SoundCloud, artist.title, Source.SOUNDCLOUD, listOf("tracks"))
+                    }
+                    Source.BANDCAMP -> BandcampSearcher.search(artist.title)
+                    else -> searchYouTube(artist.title).filter { it.kind == ItemKind.TRACK }
+                }
+                val mine = raw.filter { artistMatches(it.uploader, artist.title) }
+                mine.ifEmpty { raw }
+            }.getOrDefault(emptyList())
+        }
+
+    /** Альбомы/релизы исполнителя (вкладка ALBUMS канала). */
+    suspend fun artistAlbums(context: Context, artist: TrackItem): List<TrackItem> =
+        withContext(Dispatchers.IO) {
+            ensureInit(context)
+            runCatching {
+                val service = serviceFor(artist.url)
+                val channel = ChannelInfo.getInfo(service, artist.url)
+                val tab = channel.tabs.firstOrNull { lh ->
+                    lh.contentFilters.any { it == ChannelTabs.ALBUMS }
+                } ?: return@runCatching emptyList()
+                ChannelTabInfo.getInfo(service, tab).relatedItems
+                    .filterIsInstance<org.schabi.newpipe.extractor.playlist.PlaylistInfoItem>()
+                    .map { pl ->
+                        TrackItem(
+                            title = pl.name,
+                            uploader = artist.title,
+                            url = pl.url,
+                            durationSeconds = 0,
+                            thumbnailUrl = pl.thumbnails.maxByOrNull { it.height }?.url
+                                ?: pl.thumbnails.firstOrNull()?.url,
+                            source = artist.source,
+                            kind = ItemKind.ALBUM,
+                        )
+                    }
+            }.getOrDefault(emptyList())
+        }
+
+    /** Извлекает video id из YouTube-ссылки (?v=ID). */
+    private fun videoId(url: String): String? =
+        Regex("[?&]v=([\\w-]+)").find(url)?.groupValues?.get(1)
+
+    /**
+     * НАСТОЯЩИЕ рекомендации: «похожее» к треку — основа волны «Sea».
+     * Для YouTube берём чистое радио YouTube Music (RDAMVM<id>) — связные песни
+     * без мусора (обычный related-граф youtube.com отдаёт роблокс/клипы/реапы).
+     * Для SoundCloud/Bandcamp — related/autoplay их сервиса.
+     */
+    suspend fun relatedTracks(context: Context, seed: TrackItem): List<TrackItem> =
+        withContext(Dispatchers.IO) {
+            ensureInit(context)
+            // YouTube → радио YouTube Music.
+            if (!isSoundCloud(seed.url) && !isBandcamp(seed.url)) {
+                val vid = videoId(seed.url)
+                if (vid != null) {
+                    val mix = runCatching {
+                        albumTracks(context, "https://music.youtube.com/playlist?list=RDAMVM$vid")
+                    }.getOrDefault(emptyList()).filter { videoId(it.url) != vid }
+                    if (mix.isNotEmpty()) return@withContext mix
+                }
+            }
+            // SoundCloud/Bandcamp или фолбэк: related-граф сервиса.
+            if (isSoundCloud(seed.url)) SoundCloudFix.ensure(context)
             val source = when {
-                isSoundCloud(channelUrl) -> Source.SOUNDCLOUD
-                isBandcamp(channelUrl) -> Source.BANDCAMP
+                isSoundCloud(seed.url) -> Source.SOUNDCLOUD
+                isBandcamp(seed.url) -> Source.BANDCAMP
                 else -> Source.YOUTUBE_MUSIC
             }
-            val channel = ChannelInfo.getInfo(service, channelUrl)
-            val tab = channel.tabs.firstOrNull { lh ->
-                lh.contentFilters.any {
-                    it == ChannelTabs.TRACKS || it == ChannelTabs.VIDEOS
-                }
-            } ?: channel.tabs.firstOrNull()
-            ?: return@withContext emptyList()
-            val tabInfo = ChannelTabInfo.getInfo(service, tab)
-            tabInfo.relatedItems
-                .filterIsInstance<StreamInfoItem>()
-                .map { it.toTrackItem(source) }
+            runCatching {
+                StreamInfo.getInfo(serviceFor(seed.url), seed.url).relatedItems
+                    .filterIsInstance<StreamInfoItem>()
+                    .map { it.toTrackItem(source) }
+                    .filter { it.url != seed.url }
+            }.getOrDefault(emptyList())
         }
+
+    /** Треки альбома/плейлиста по ссылке. */
+    suspend fun albumTracks(context: Context, albumUrl: String): List<TrackItem> =
+        withContext(Dispatchers.IO) {
+            ensureInit(context)
+            val source = when {
+                isSoundCloud(albumUrl) -> Source.SOUNDCLOUD
+                isBandcamp(albumUrl) -> Source.BANDCAMP
+                else -> Source.YOUTUBE_MUSIC
+            }
+            runCatching {
+                org.schabi.newpipe.extractor.playlist.PlaylistInfo
+                    .getInfo(serviceFor(albumUrl), albumUrl)
+                    .relatedItems
+                    .filterIsInstance<StreamInfoItem>()
+                    .map { it.toTrackItem(source) }
+            }.getOrDefault(emptyList())
+        }
+
+    /** Совпадает ли исполнитель трека с именем артиста (с учётом " - Topic"). */
+    private fun artistMatches(uploader: String?, name: String): Boolean {
+        val u = uploader?.lowercase()?.removeSuffix(" - topic")?.trim() ?: return false
+        val n = name.lowercase().removeSuffix(" - topic").trim()
+        if (u.isBlank() || n.isBlank()) return false
+        // Только точное совпадение или uploader, содержащий ПОЛНОЕ имя
+        // (иначе «Dazey» подходит под «Dazey and the Scouts»).
+        return u == n || u.contains(n)
+    }
+
+    private fun channelTracks(channelUrl: String): List<TrackItem> {
+        val service = serviceFor(channelUrl)
+        val source = when {
+            isSoundCloud(channelUrl) -> Source.SOUNDCLOUD
+            isBandcamp(channelUrl) -> Source.BANDCAMP
+            else -> Source.YOUTUBE_MUSIC
+        }
+        val channel = ChannelInfo.getInfo(service, channelUrl)
+        val tab = channel.tabs.firstOrNull { lh ->
+            lh.contentFilters.any { it == ChannelTabs.TRACKS || it == ChannelTabs.VIDEOS }
+        } ?: channel.tabs.firstOrNull() ?: return emptyList()
+        val tabInfo = ChannelTabInfo.getInfo(service, tab)
+        return tabInfo.relatedItems.filterIsInstance<StreamInfoItem>().map { it.toTrackItem(source) }
+    }
 
     private fun searchService(
         service: StreamingService,

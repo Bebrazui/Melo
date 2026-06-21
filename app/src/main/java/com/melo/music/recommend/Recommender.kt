@@ -1,6 +1,7 @@
 package com.melo.music.recommend
 
 import android.content.Context
+import com.melo.music.extractor.ItemKind
 import com.melo.music.extractor.TrackItem
 import com.melo.music.favorites.FavoritesManager
 import com.melo.music.history.HistoryManager
@@ -29,28 +30,52 @@ object Recommender {
      */
     suspend fun generatePersonalizedShelves(
         onLoadShelf: suspend (String) -> List<TrackItem>,
+        related: suspend (TrackItem) -> List<TrackItem> = { emptyList() },
     ): List<Pair<String, List<TrackItem>>> = withContext(Dispatchers.IO) {
         val profile = TasteProfile.build()
-        val seeds = TasteProfile.generateShelfSeeds(profile)
-
-        if (seeds.isEmpty()) return@withContext emptyList()
-
+        val liked = FavoritesManager.getAll()
         val heardUrls = HistoryManager.getAll().map { it.url }.toSet()
-        val likedUrls = FavoritesManager.getAll().map { it.url }.toSet()
+        val likedUrls = liked.map { it.url }.toSet()
         val bannedUrls = SkipTracker.getBannedUrls()
 
         val shelves = mutableListOf<Pair<String, List<TrackItem>>>()
+        val usedSeeds = mutableSetOf<String>()
 
-        for (seed in seeds.take(4)) {
-            val raw = runCatching { onLoadShelf(seed) }.getOrDefault(emptyList())
+        // 1) «Похоже на <артист>» — НАСТОЯЩИЕ рекомендации (радио YouTube Music)
+        //    от лайкнутого трека этого артиста, а не текстовый поиск по имени.
+        for ((artist, _) in profile.topArtists) {
+            if (shelves.size >= 3) break
+            val seed = liked.firstOrNull {
+                val a = it.uploader?.lowercase()?.removeSuffix(" - topic")?.trim()
+                a != null && (a == artist || a.contains(artist)) && it.url !in usedSeeds
+            } ?: continue
+            usedSeeds.add(seed.url)
+            val raw = runCatching { related(seed) }.getOrDefault(emptyList())
             val filtered = raw
-                .filter { it.url !in heardUrls && it.url !in likedUrls && it.url !in bannedUrls }
+                .filter {
+                    it.kind == ItemKind.TRACK &&
+                        it.url !in heardUrls && it.url !in likedUrls && it.url !in bannedUrls
+                }
+                .distinctBy { it.url }
                 .let { TasteProfile.rankByTaste(it, profile) }
-                .take(10)
+                .take(12)
+            if (filtered.size >= 4) {
+                shelves.add("Похоже на ${seed.uploader ?: artist}" to filtered)
+            }
+        }
 
-            if (filtered.isNotEmpty()) {
-                val title = seedToTitle(seed)
-                shelves.add(title to filtered)
+        // 2) Жанровые полки через поиск (без сломанных «похожих хитов») — для разнообразия.
+        if (shelves.size < 4) {
+            val seeds = TasteProfile.generateShelfSeeds(profile)
+                .filterNot { it.contains("похож") }
+            for (seed in seeds) {
+                if (shelves.size >= 4) break
+                val raw = runCatching { onLoadShelf(seed) }.getOrDefault(emptyList())
+                val filtered = raw
+                    .filter { it.url !in heardUrls && it.url !in likedUrls && it.url !in bannedUrls }
+                    .let { TasteProfile.rankByTaste(it, profile) }
+                    .take(10)
+                if (filtered.isNotEmpty()) shelves.add(seedToTitle(seed) to filtered)
             }
         }
 

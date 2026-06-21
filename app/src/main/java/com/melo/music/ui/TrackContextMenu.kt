@@ -26,10 +26,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -132,7 +132,7 @@ fun TrackContextMenu(
                                         )
                                     } else {
                                         Icon(
-                                            Icons.Filled.LibraryMusic,
+                                            Icons.Rounded.LibraryMusic,
                                             contentDescription = null,
                                             tint = Color.White.copy(alpha = 0.3f),
                                             modifier = Modifier.size(22.dp),
@@ -203,7 +203,7 @@ fun TrackContextMenu(
             Spacer(Modifier.height(16.dp))
 
             ContextMenuItem(
-                icon = Icons.Filled.CloudDownload,
+                icon = Icons.Rounded.CloudDownload,
                 label = "Скачать",
                 subtitle = "Лучшее качество + обложка",
                 onClick = {
@@ -212,7 +212,7 @@ fun TrackContextMenu(
                 },
             )
             ContextMenuItem(
-                icon = Icons.Filled.Share,
+                icon = Icons.Rounded.Share,
                 label = "Поделиться",
                 subtitle = "Ссылка на трек",
                 onClick = {
@@ -221,7 +221,7 @@ fun TrackContextMenu(
                 },
             )
             ContextMenuItem(
-                icon = Icons.Filled.Add,
+                icon = Icons.Rounded.Add,
                 label = "В плейлист",
                 subtitle = "Добавить в один из плейлистов",
                 onClick = { showPlaylistPicker = true },
@@ -386,7 +386,12 @@ private fun downloadTrack(context: Context, item: TrackItem) {
         }
 
         // 5. Сохраняем (MediaStore на Android 10+, иначе обычный файл).
-        saveToMusic(context, filename, id3 + mp3Bytes)
+        val savedUri = saveToMusic(context, filename, id3 + mp3Bytes)
+
+        // 6. Регистрируем как офлайн → флаг в UI + воспроизведение с диска.
+        if (savedUri != null) {
+            com.melo.music.offline.OfflineManager.add(item.url, savedUri, label)
+        }
 
         notifyDone(context, notifId, label, ok = true, error = null)
     } catch (e: Exception) {
@@ -413,7 +418,7 @@ private fun existsInMusic(context: Context, filename: String): Boolean {
     return File(dir, filename).exists()
 }
 
-private fun saveToMusic(context: Context, filename: String, bytes: ByteArray) {
+private fun saveToMusic(context: Context, filename: String, bytes: ByteArray): String? {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         val resolver = context.contentResolver
         val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
@@ -430,6 +435,7 @@ private fun saveToMusic(context: Context, filename: String, bytes: ByteArray) {
         values.clear()
         values.put(MediaStore.Audio.Media.IS_PENDING, 0)
         resolver.update(uri, values, null, null)
+        return uri.toString()
     } else {
         val dir = File(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
@@ -441,6 +447,7 @@ private fun saveToMusic(context: Context, filename: String, bytes: ByteArray) {
         android.media.MediaScannerConnection.scanFile(
             context, arrayOf(file.absolutePath), arrayOf("audio/mpeg"), null,
         )
+        return android.net.Uri.fromFile(file).toString()
     }
 }
 

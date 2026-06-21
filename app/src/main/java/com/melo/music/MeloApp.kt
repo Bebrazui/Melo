@@ -12,6 +12,7 @@ import com.melo.music.crash.CrashHandler
 import com.melo.music.extractor.Extractor
 import com.melo.music.extractor.NewPipeResolver
 import com.melo.music.extractor.SoundCloudFix
+import com.melo.music.extractor.StreamCacheStore
 import com.melo.music.favorites.FavoritesManager
 import com.melo.music.history.HistoryManager
 import com.melo.music.lyrics.LyricsRepository
@@ -42,6 +43,8 @@ class MeloApp : Application(), ImageLoaderFactory {
         HistoryManager.init(this)
         EqualizerManager.init(this)
         LyricsRepository.init(this)
+        StreamCacheStore.init(this)
+        com.melo.music.offline.OfflineManager.init(this)
         Recommender.init(this)
         ByeDpiProxy.init(this)
         if (ByeDpiProxy.isEnabled() && ByeDpiProxy.getCommandLine().isNotBlank()) {

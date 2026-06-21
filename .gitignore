@@ -12,3 +12,11 @@
 *.keystore
 # Скриншоты-черновики в корне
 /*.png
+
+# Release signing keystore (keep private!)
+melo-release.jks
+keystore.properties
+
+# Черновые скриншоты и kotlin-логи
+screenshots/
+.kotlin/

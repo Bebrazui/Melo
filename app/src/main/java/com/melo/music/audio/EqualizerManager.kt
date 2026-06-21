@@ -3,10 +3,13 @@ package com.melo.music.audio
 import android.content.Context
 import android.content.SharedPreferences
 import android.media.audiofx.Equalizer
+import android.media.audiofx.LoudnessEnhancer
+import android.media.audiofx.PresetReverb
 
 /**
- * Эквалайзер: обёртка над android.media.audiofx.Equalizer.
- * Привязывается к audioSessionId плеера, сохраняет настройки в SharedPreferences.
+ * Аудио-эффекты: эквалайзер + усиление (gain) + реверберация (reverb).
+ * Обёртка над android.media.audiofx.*. Привязывается к audioSessionId плеера,
+ * сохраняет настройки в SharedPreferences.
  */
 object EqualizerManager {
 
@@ -14,9 +17,32 @@ object EqualizerManager {
     private const val KEY_ENABLED = "enabled"
     private const val KEY_PRESET = "preset"
     private const val KEY_BANDS = "bands"
+    private const val KEY_GAIN = "gain_mb"
+    private const val KEY_REVERB = "reverb_preset"
+
+    /** Максимальное усиление (мДб) = +20 dB. */
+    const val MAX_GAIN_MB = 2000
+
+    /** Названия пресетов реверберации (индекс = значение PresetReverb.PRESET_*). */
+    val reverbPresetNames = arrayOf(
+        "Выкл", "Малая комната", "Средняя комната",
+        "Большая комната", "Средний зал", "Большой зал", "Пластина",
+    )
 
     private var prefs: SharedPreferences? = null
     private var equalizer: Equalizer? = null
+    private var loudness: LoudnessEnhancer? = null
+
+    // Реверберация — ГЛОБАЛЬНЫЙ вспомогательный (auxiliary) эффект на сессии 0.
+    // Плеер шлёт в него звук через setAuxEffectInfo (вставка insert-реверба
+    // на сессию плеера не работает стабильно на многих устройствах).
+    private var auxReverb: PresetReverb? = null
+
+    /** Уровень посыла в реверб, когда он включён. */
+    private const val REVERB_SEND_LEVEL = 0.9f
+
+    /** Сервис подписывается сюда, чтобы переприменить aux-эффект к активному плееру. */
+    var onReverbChanged: (() -> Unit)? = null
 
     /** Количество полос эквалайзера (определяется после привязки). */
     var bandCount: Int = 0
@@ -36,6 +62,15 @@ object EqualizerManager {
 
     fun init(context: Context) {
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        // Глобальный aux-реверб создаём один раз. Сессия 0 = output mix.
+        try {
+            val rv = PresetReverb(1, 0)
+            rv.preset = (prefs?.getInt(KEY_REVERB, 0) ?: 0).toShort()
+            rv.enabled = true // всегда включён; «нет реверба» = preset NONE / send 0.
+            auxReverb = rv
+        } catch (_: Exception) {
+            auxReverb = null
+        }
     }
 
     /**
@@ -70,12 +105,65 @@ object EqualizerManager {
         } catch (_: Exception) {
             equalizer = null
         }
+
+        // ── Усиление (gain) — insert-эффект на сессии плеера ──
+        try {
+            val le = LoudnessEnhancer(audioSessionId)
+            val gain = prefs?.getInt(KEY_GAIN, 0) ?: 0
+            le.setTargetGain(gain)
+            le.enabled = gain > 0
+            loudness = le
+        } catch (_: Exception) {
+            loudness = null
+        }
     }
 
     @Synchronized
     fun release() {
         equalizer?.release()
         equalizer = null
+        loudness?.release()
+        loudness = null
+        // auxReverb НЕ освобождаем — он глобальный, живёт всё время.
+    }
+
+    // ── Усиление (gain) ───────────────────────────────────────────────────────
+
+    /** Текущее усиление в мДб (0…[MAX_GAIN_MB]). */
+    fun getGain(): Int = prefs?.getInt(KEY_GAIN, 0) ?: 0
+
+    @Synchronized
+    fun setGain(mb: Int) {
+        val v = mb.coerceIn(0, MAX_GAIN_MB)
+        loudness?.let {
+            runCatching {
+                it.setTargetGain(v)
+                it.enabled = v > 0
+            }
+        }
+        prefs?.edit()?.putInt(KEY_GAIN, v)?.apply()
+    }
+
+    // ── Реверберация ──────────────────────────────────────────────────────────
+
+    /** Текущий пресет реверберации (0 = выкл). */
+    fun getReverbPreset(): Int = prefs?.getInt(KEY_REVERB, 0) ?: 0
+
+    /** Id aux-эффекта реверба (0 = нет эффекта) — для player.setAuxEffectInfo. */
+    fun reverbEffectId(): Int = auxReverb?.id ?: 0
+
+    /** Уровень посыла в реверб (0 если выключен). */
+    fun reverbSendLevel(): Float = if (getReverbPreset() > 0) REVERB_SEND_LEVEL else 0f
+
+    @Synchronized
+    fun setReverbPreset(preset: Int) {
+        val p = preset.coerceIn(0, reverbPresetNames.lastIndex)
+        auxReverb?.let {
+            runCatching { it.preset = p.toShort() }
+        }
+        prefs?.edit()?.putInt(KEY_REVERB, p)?.apply()
+        // Сервис переустановит aux-send на активном плеере (0 ↔ полный).
+        onReverbChanged?.invoke()
     }
 
     fun isEnabled(): Boolean = equalizer?.enabled ?: false

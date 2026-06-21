@@ -12,8 +12,10 @@ newpipe = "v0.26.3"
 okhttp = "4.12.0"
 desugar = "2.1.2"
 coil = "2.7.0"
+palette = "1.0.0"
 
 [libraries]
+androidx-palette = { group = "androidx.palette", name = "palette-ktx", version.ref = "palette" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }

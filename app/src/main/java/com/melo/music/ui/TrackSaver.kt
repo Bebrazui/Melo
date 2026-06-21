@@ -18,6 +18,7 @@ object TrackSaver {
                     putLongArray("durations", list.map { it.durationSeconds }.toLongArray())
                     putStringArrayList("thumbnails", ArrayList(list.map { it.thumbnailUrl ?: "" }))
                     putStringArrayList("sources", ArrayList(list.map { it.source.name }))
+                    putFloatArray("speeds", list.map { it.speed }.toFloatArray())
                 }
             },
             restore = { bundle ->
@@ -27,6 +28,7 @@ object TrackSaver {
                 val durations = bundle.getLongArray("durations") ?: longArrayOf()
                 val thumbnails = bundle.getStringArrayList("thumbnails") ?: arrayListOf()
                 val sources = bundle.getStringArrayList("sources") ?: arrayListOf()
+                val speeds = bundle.getFloatArray("speeds") ?: floatArrayOf()
                 urls.mapIndexed { i, url ->
                     TrackItem(
                         title = titles.getOrElse(i) { "" },
@@ -37,6 +39,7 @@ object TrackSaver {
                         source = runCatching { Source.valueOf(sources.getOrElse(i) { "YOUTUBE_MUSIC" }) }
                             .getOrDefault(Source.YOUTUBE_MUSIC),
                         kind = ItemKind.TRACK,
+                        speed = speeds.getOrElse(i) { 1f },
                     )
                 }
             },
@@ -54,6 +57,7 @@ object TrackSaver {
                         putLong("duration", it.durationSeconds)
                         putString("thumbnail", it.thumbnailUrl ?: "")
                         putString("source", it.source.name)
+                        putFloat("speed", it.speed)
                     }
                 }
             },
@@ -68,6 +72,7 @@ object TrackSaver {
                     source = runCatching { Source.valueOf(bundle.getString("source") ?: "YOUTUBE_MUSIC") }
                         .getOrDefault(Source.YOUTUBE_MUSIC),
                     kind = ItemKind.TRACK,
+                    speed = bundle.getFloat("speed", 1f),
                 )
             },
         )

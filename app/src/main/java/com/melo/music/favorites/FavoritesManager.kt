@@ -2,6 +2,7 @@ package com.melo.music.favorites
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.melo.music.extractor.Extractor
 import com.melo.music.extractor.ItemKind
 import com.melo.music.extractor.Source
 import com.melo.music.extractor.TrackItem
@@ -18,8 +19,10 @@ object FavoritesManager {
     private const val KEY_TRACKS = "liked_tracks"
 
     private var prefs: SharedPreferences? = null
+    private var appContext: Context? = null
 
     fun init(context: Context) {
+        appContext = context.applicationContext
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     }
 
@@ -37,6 +40,7 @@ object FavoritesManager {
                     thumbnailUrl = obj.optString("thumbnail", null),
                     source = Source.valueOf(obj.optString("source", "YOUTUBE_MUSIC")),
                     kind = ItemKind.TRACK,
+                    speed = obj.optDouble("speed", 1.0).toFloat(),
                 )
             }.toMutableList()
         }.getOrDefault(mutableListOf())
@@ -44,9 +48,13 @@ object FavoritesManager {
 
     fun isLiked(url: String): Boolean = getAll().any { it.url == url }
 
+    /** Совпадение с учётом скорости — slowed/sped up версии хранятся отдельно. */
+    fun isLiked(item: TrackItem): Boolean =
+        getAll().any { it.url == item.url && sameSpeed(it.speed, item.speed) }
+
     fun toggle(item: TrackItem): Boolean {
         val list = getAll()
-        val idx = list.indexOfFirst { it.url == item.url }
+        val idx = list.indexOfFirst { it.url == item.url && sameSpeed(it.speed, item.speed) }
         return if (idx >= 0) {
             list.removeAt(idx)
             save(list)
@@ -54,6 +62,8 @@ object FavoritesManager {
         } else {
             list.add(item)
             save(list)
+            // Заранее резолвим прямую ссылку → следующее воспроизведение мгновенное.
+            appContext?.let { ctx -> Extractor.prefetch(ctx, item.url) }
             true
         }
     }
@@ -68,8 +78,11 @@ object FavoritesManager {
                 put("duration", t.durationSeconds)
                 put("thumbnail", t.thumbnailUrl ?: "")
                 put("source", t.source.name)
+                put("speed", t.speed.toDouble())
             })
         }
         prefs?.edit()?.putString(KEY_TRACKS, arr.toString())?.apply()
     }
+
+    private fun sameSpeed(a: Float, b: Float) = kotlin.math.abs(a - b) < 0.01f
 }

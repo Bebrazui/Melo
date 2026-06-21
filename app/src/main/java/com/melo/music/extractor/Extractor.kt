@@ -24,8 +24,8 @@ data class ResolvedTrack(
 /** Источник трека (для индикатора в UI). */
 enum class Source { YOUTUBE_MUSIC, SOUNDCLOUD, BANDCAMP, DEEZER, TIDAL }
 
-/** Тип элемента списка: воспроизводимый трек или исполнитель/канал. */
-enum class ItemKind { TRACK, ARTIST }
+/** Тип элемента списка: трек, исполнитель/канал или альбом/плейлист. */
+enum class ItemKind { TRACK, ARTIST, ALBUM }
 
 /** Элемент списка (поиск / рекомендации) — ещё без прямого аудио-URL. */
 data class TrackItem(
@@ -36,6 +36,8 @@ data class TrackItem(
     val thumbnailUrl: String?,
     val source: Source,
     val kind: ItemKind = ItemKind.TRACK,
+    /** Скорость/тон воспроизведения (1.0 = оригинал). Сохранённые «slowed/sped up» версии. */
+    val speed: Float = 1f,
 )
 
 /** Определяет источник по URL (для Deezer/Tidal, которые идут через yt-dlp). */
@@ -91,8 +93,19 @@ object Extractor {
         prefetchQueue.trySend(url)
     }
 
-    /** Уже есть в кэше? (чтобы не дёргать prefetch повторно) */
-    fun isCached(url: String): Boolean = streamCache.get(url) != null
+    /** Уже есть в кэше? (память или свежая запись на диске) */
+    fun isCached(url: String): Boolean =
+        streamCache.get(url) != null || StreamCacheStore.get(url) != null
+
+    /**
+     * Выбрасывает трек из всех кэшей — для авто-перерезолва, когда плеер словил
+     * ошибку (например, протухшую/привязанную к IP ссылку → 403).
+     */
+    fun invalidate(url: String) {
+        streamCache.remove(url)
+        StreamCacheStore.remove(url)
+        inFlight.remove(url)
+    }
 
     @Synchronized
     fun ensureInit(context: Context) {
@@ -111,8 +124,23 @@ object Extractor {
         }
 
     suspend fun resolveAudioUrl(context: Context, url: String): ResolvedTrack {
+        // 0) Офлайн: скачанный трек играем прямо с диска, без сети.
+        com.melo.music.offline.OfflineManager.localUri(url)?.let { local ->
+            android.util.Log.e("MeloPerf", "OFFLINE HIT $url")
+            return ResolvedTrack(
+                title = com.melo.music.offline.OfflineManager.titleFor(url) ?: url,
+                audioUrl = local,
+            )
+        }
+        // 1) Память.
         streamCache.get(url)?.let {
-            android.util.Log.e("MeloPerf", "CACHE HIT $url")
+            android.util.Log.e("MeloPerf", "CACHE HIT (mem) $url")
+            return it
+        }
+        // 2) Диск — мгновенно, если ссылка ещё не протухла.
+        StreamCacheStore.get(url)?.let {
+            android.util.Log.e("MeloPerf", "CACHE HIT (disk) $url")
+            streamCache.put(url, it)
             return it
         }
         val app = context.applicationContext
@@ -128,6 +156,7 @@ object Extractor {
                         resolveWithYtDlp(app, url)
                     }
                     streamCache.put(url, resolved)
+                    StreamCacheStore.put(url, resolved)
                     resolved
                 } finally {
                     inFlight.remove(url)
@@ -136,6 +165,28 @@ object Extractor {
         }
         return deferred.await()
     }
+
+    /** Метаданные трека по ссылке (без скачивания) — для подсказки по URL. */
+    suspend fun fetchMeta(context: Context, url: String): TrackItem? =
+        withContext(Dispatchers.IO) {
+            ensureInit(context)
+            runCatching {
+                val request = YoutubeDLRequest(url).apply {
+                    addOption("--no-playlist")
+                    addOption("--skip-download")
+                }
+                val info = YoutubeDL.getInstance().getInfo(request)
+                TrackItem(
+                    title = info.title ?: url,
+                    uploader = info.uploader,
+                    url = url,
+                    durationSeconds = runCatching { info.duration.toLong() }.getOrDefault(0L),
+                    thumbnailUrl = info.thumbnail,
+                    source = Source.BANDCAMP,
+                    kind = ItemKind.TRACK,
+                )
+            }.getOrNull()
+        }
 
     private suspend fun resolveWithYtDlp(context: Context, url: String): ResolvedTrack =
         withContext(Dispatchers.IO) {

@@ -18,10 +18,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.Waves
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -62,10 +64,6 @@ fun SettingsScreen(
 ) {
     val scope = rememberCoroutineScope()
 
-    // SoundCloud state
-    var currentId by remember { mutableStateOf(scGetId()) }
-    var manual by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
     // ByeDPI state
@@ -79,7 +77,7 @@ fun SettingsScreen(
                 title = { Text("Настройки", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Назад")
                     }
                 },
             )
@@ -101,7 +99,7 @@ fun SettingsScreen(
                     .padding(vertical = 12.dp),
             ) {
                 Icon(
-                    imageVector = if (byeDpiExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    imageVector = if (byeDpiExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp),
@@ -190,73 +188,94 @@ fun SettingsScreen(
                 }
             }
 
-            // ── SoundCloud ───────────────────────────────────────────
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("SoundCloud", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = currentId?.let { "client_id: ✓ сохранён (${it.take(6)}…)" }
-                    ?: "client_id: ✗ нет",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (currentId != null) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.error,
-            )
-
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(
-                onClick = {
-                    if (busy) return@OutlinedButton
-                    scope.launch {
-                        busy = true; message = "Пробую добыть…"
-                        val r = onScRefresh(); currentId = r
-                        message = if (r != null) "Готово ✓" else "Не вышло — вставь вручную"
-                        busy = false
-                    }
-                },
-                enabled = !busy,
-            ) { Text("Обновить автоматически") }
-
-            Spacer(Modifier.height(10.dp))
-            OutlinedTextField(
-                value = manual,
-                onValueChange = { manual = it },
-                label = { Text("client_id вручную") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(8.dp))
-            Button(
-                onClick = {
-                    val id = manual.trim()
-                    if (busy || id.isEmpty()) return@Button
-                    scope.launch {
-                        busy = true; message = "Проверяю…"
-                        val ok = onScSetManual(id)
-                        if (ok) { currentId = id; manual = ""; message = "Сохранён ✓" }
-                        else message = "Неверный client_id"
-                        busy = false
-                    }
-                },
-                enabled = !busy,
-            ) { Text("Сохранить") }
-
-            if (busy) {
-                Spacer(Modifier.height(12.dp))
-                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-            }
             message?.let {
-                Spacer(Modifier.height(10.dp))
                 Text(it, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(12.dp))
             }
+
+            // ── Эквалайзер ───────────────────────────────────────────
+            EqualizerSection()
 
             Spacer(Modifier.height(20.dp))
             HorizontalDivider()
             Spacer(Modifier.height(16.dp))
 
-            // ── Эквалайзер ───────────────────────────────────────────
-            EqualizerSection()
+            // ── Усиление + реверберация ──────────────────────────────
+            GainReverbSection()
+
+            Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+@Composable
+private fun GainReverbSection() {
+    var gain by remember { mutableIntStateOf(EqualizerManager.getGain()) }
+    var reverb by remember { mutableIntStateOf(EqualizerManager.getReverbPreset()) }
+
+    Column {
+        // ── Усиление ──
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.VolumeUp,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("Усиление", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            Text(
+                "+${gain / 100} dB",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        androidx.compose.material3.Slider(
+            value = gain.toFloat(),
+            onValueChange = {
+                gain = it.toInt()
+                EqualizerManager.setGain(gain)
+            },
+            valueRange = 0f..EqualizerManager.MAX_GAIN_MB.toFloat(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        // ── Реверберация ──
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Waves,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("Реверберация", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            Text(
+                EqualizerManager.reverbPresetNames.getOrElse(reverb) { "Выкл" },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        androidx.compose.material3.Slider(
+            value = reverb.toFloat(),
+            onValueChange = {
+                reverb = Math.round(it)
+                EqualizerManager.setReverbPreset(reverb)
+            },
+            valueRange = 0f..EqualizerManager.reverbPresetNames.lastIndex.toFloat(),
+            steps = EqualizerManager.reverbPresetNames.size - 2,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -275,7 +294,7 @@ private fun EqualizerSection() {
             modifier = Modifier.fillMaxWidth(),
         ) {
             Icon(
-                imageVector = Icons.Default.GraphicEq,
+                imageVector = Icons.Rounded.GraphicEq,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp),

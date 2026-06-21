@@ -39,6 +39,9 @@ object LyricsRepository {
     private val memCache = LruCache<String, Lyrics>(MAX_CACHE)
     private var prefs: SharedPreferences? = null
 
+    // LruCache не принимает null — для «текст не найден» кладём этот пустой объект.
+    private val EMPTY = Lyrics(null, null)
+
     fun init(context: Context) {
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         // Загружаем дисковый кэш в память.
@@ -106,8 +109,8 @@ object LyricsRepository {
             }
         }.getOrNull()
 
-        // Сохраняем в кэш (включая null — чтобы не запрашивать повторно).
-        memCache.put(key, result)
+        // Сохраняем в кэш (включая «не найдено» — чтобы не запрашивать повторно).
+        memCache.put(key, result ?: EMPTY)
         saveToDisk(key, result)
         result
     }
@@ -127,7 +130,7 @@ object LyricsRepository {
                 val synced = if (obj.has("s")) parseLrc(obj.getString("s")) else null
                 val plain = obj.optString("p", null)
                 val lyrics = if (synced == null && plain.isNullOrBlank()) null else Lyrics(synced, plain)
-                memCache.put(k, lyrics)
+                memCache.put(k, lyrics ?: EMPTY)
             }
         }
     }

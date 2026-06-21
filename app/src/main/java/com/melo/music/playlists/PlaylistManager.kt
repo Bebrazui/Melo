@@ -2,6 +2,7 @@ package com.melo.music.playlists
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.melo.music.extractor.Extractor
 import com.melo.music.extractor.ItemKind
 import com.melo.music.extractor.Source
 import com.melo.music.extractor.TrackItem
@@ -27,8 +28,10 @@ object PlaylistManager {
     private const val KEY = "playlists"
 
     private var prefs: SharedPreferences? = null
+    private var appContext: Context? = null
 
     fun init(context: Context) {
+        appContext = context.applicationContext
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     }
 
@@ -69,9 +72,11 @@ object PlaylistManager {
         val idx = list.indexOfFirst { it.id == playlistId }
         if (idx < 0) return false
         val pl = list[idx]
-        if (pl.tracks.any { it.url == track.url }) return false
+        if (pl.tracks.any { it.url == track.url && kotlin.math.abs(it.speed - track.speed) < 0.01f }) return false
         list[idx] = pl.copy(tracks = pl.tracks + track)
         save(list)
+        // Заранее резолвим прямую ссылку → воспроизведение из плейлиста мгновенное.
+        appContext?.let { ctx -> Extractor.prefetch(ctx, track.url) }
         return true
     }
 
@@ -109,6 +114,7 @@ object PlaylistManager {
                     put("duration", t.durationSeconds)
                     put("thumbnail", t.thumbnailUrl ?: "")
                     put("source", t.source.name)
+                    put("speed", t.speed.toDouble())
                 },
             )
         }
@@ -127,6 +133,7 @@ object PlaylistManager {
                 source = runCatching { Source.valueOf(obj.optString("source", "YOUTUBE_MUSIC")) }
                     .getOrDefault(Source.YOUTUBE_MUSIC),
                 kind = ItemKind.TRACK,
+                speed = obj.optDouble("speed", 1.0).toFloat(),
             )
         }
 }

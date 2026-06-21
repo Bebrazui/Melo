@@ -47,8 +47,11 @@ class MainActivity : ComponentActivity() {
                     onSearch = { query -> NewPipeResolver.search(this, query) },
                     onGetSuggestions = { query -> NewPipeResolver.getSuggestions(query) },
                     onLoadRecommendations = { NewPipeResolver.recommendations(this) },
-                    onLoadArtistTracks = { url -> NewPipeResolver.artistTracks(this, url) },
+                    onLoadArtistTracks = { artist -> NewPipeResolver.artistTracks(this, artist) },
+                    onLoadArtistAlbums = { artist -> NewPipeResolver.artistAlbums(this, artist) },
+                    onLoadAlbumTracks = { url -> NewPipeResolver.albumTracks(this, url) },
                     onLoadShelf = { seed -> NewPipeResolver.shelf(this, seed) },
+                    onRelatedTracks = { track -> NewPipeResolver.relatedTracks(this, track) },
                     scGetId = { SoundCloudFix.currentId(this) },
                     onScSetManual = { id ->
                         withContext(Dispatchers.IO) { SoundCloudFix.setManual(this@MainActivity, id) }
@@ -59,6 +62,7 @@ class MainActivity : ComponentActivity() {
                     onResolveAudioUrl = { url -> Extractor.resolveAudioUrl(this, url) },
                     isCached = { url -> Extractor.isCached(url) },
                     onPrefetch = { url -> Extractor.prefetch(this, url) },
+                    onInvalidateCache = { url -> Extractor.invalidate(url) },
                     onFetchLyrics = { title, artist -> LyricsRepository.fetch(title, artist) },
                     onPlayResolved = ::playResolved,
                     onTogglePlayPause = ::togglePlayPause,
