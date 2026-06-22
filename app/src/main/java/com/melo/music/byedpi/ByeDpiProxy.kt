@@ -63,19 +63,16 @@ object ByeDpiProxy {
      */
     fun start(customArgs: String? = null): Boolean {
         if (running) {
-            Log.w(TAG, "Already running")
             return true
         }
 
         val cmdLine = customArgs ?: getCommandLine()
         if (cmdLine.isBlank()) {
-            Log.e(TAG, "No command line arguments")
             return false
         }
 
         val args = shellSplit(cmdLine)
         if (args.isEmpty()) {
-            Log.e(TAG, "Empty args after split")
             return false
         }
 
@@ -96,18 +93,13 @@ object ByeDpiProxy {
             finalArgs.addAll(listOf("-x", "1"))
         }
 
-        Log.i(TAG, "Starting with args: $finalArgs")
         val result = jniStartProxy(finalArgs.toTypedArray())
         running = result == 0
-        if (!running) {
-            Log.e(TAG, "Failed to start, result=$result")
-        }
         return running
     }
 
     fun stop() {
         if (!running) return
-        Log.i(TAG, "Stopping...")
         jniStopProxy()
         running = false
     }

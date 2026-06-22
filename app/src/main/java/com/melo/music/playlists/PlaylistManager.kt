@@ -14,6 +14,8 @@ data class Playlist(
     val id: String,
     val name: String,
     val tracks: List<TrackItem>,
+    /** Открытый плейлист виден другим пользователям. По умолчанию открыт. */
+    val isPublic: Boolean = true,
 ) {
     /** Обложка плейлиста — обложка первого трека. */
     val coverUrl: String? get() = tracks.firstOrNull()?.thumbnailUrl
@@ -45,6 +47,7 @@ object PlaylistManager {
                     id = obj.getString("id"),
                     name = obj.getString("name"),
                     tracks = parseTracks(obj.getJSONArray("tracks")),
+                    isPublic = obj.optBoolean("isPublic", true),
                 )
             }.toMutableList()
         }.getOrDefault(mutableListOf())
@@ -59,11 +62,26 @@ object PlaylistManager {
         )
         list.add(playlist)
         save(list)
+        com.melo.music.sync.LibrarySync.onPlaylistsChanged()
         return playlist
     }
 
     fun delete(id: String) {
         save(getAll().filterNot { it.id == id })
+        com.melo.music.sync.LibrarySync.onPlaylistsChanged()
+    }
+
+    /** Полная замена локального списка (используется облачным синком — без обратной выгрузки). */
+    fun replaceAll(list: List<Playlist>) = save(list)
+
+    /** Открыть/закрыть плейлист для других пользователей. */
+    fun setPublic(id: String, value: Boolean) {
+        val list = getAll()
+        val idx = list.indexOfFirst { it.id == id }
+        if (idx < 0) return
+        list[idx] = list[idx].copy(isPublic = value)
+        save(list)
+        com.melo.music.sync.LibrarySync.onPlaylistsChanged()
     }
 
     /** Добавляет трек в плейлист (без дублей). Возвращает true, если добавлен. */
@@ -75,6 +93,7 @@ object PlaylistManager {
         if (pl.tracks.any { it.url == track.url && kotlin.math.abs(it.speed - track.speed) < 0.01f }) return false
         list[idx] = pl.copy(tracks = pl.tracks + track)
         save(list)
+        com.melo.music.sync.LibrarySync.onPlaylistsChanged()
         // Заранее резолвим прямую ссылку → воспроизведение из плейлиста мгновенное.
         appContext?.let { ctx -> Extractor.prefetch(ctx, track.url) }
         return true
@@ -87,6 +106,7 @@ object PlaylistManager {
         val pl = list[idx]
         list[idx] = pl.copy(tracks = pl.tracks.filterNot { it.url == trackUrl })
         save(list)
+        com.melo.music.sync.LibrarySync.onPlaylistsChanged()
     }
 
     private fun save(list: List<Playlist>) {
@@ -97,6 +117,7 @@ object PlaylistManager {
                     put("id", pl.id)
                     put("name", pl.name)
                     put("tracks", serializeTracks(pl.tracks))
+                    put("isPublic", pl.isPublic)
                 },
             )
         }

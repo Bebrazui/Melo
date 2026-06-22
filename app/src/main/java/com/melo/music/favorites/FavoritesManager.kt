@@ -17,6 +17,7 @@ object FavoritesManager {
 
     private const val PREFS = "melo_favorites"
     private const val KEY_TRACKS = "liked_tracks"
+    private const val KEY_PUBLIC = "liked_public"
 
     private var prefs: SharedPreferences? = null
     private var appContext: Context? = null
@@ -24,6 +25,14 @@ object FavoritesManager {
     fun init(context: Context) {
         appContext = context.applicationContext
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    }
+
+    /** Открыты ли лайкнутые песни для других. По умолчанию открыты. */
+    fun isPublic(): Boolean = prefs?.getBoolean(KEY_PUBLIC, true) ?: true
+
+    fun setPublic(value: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_PUBLIC, value)?.apply()
+        com.melo.music.sync.LibrarySync.onFavoritesChanged()
     }
 
     fun getAll(): MutableList<TrackItem> {
@@ -58,15 +67,20 @@ object FavoritesManager {
         return if (idx >= 0) {
             list.removeAt(idx)
             save(list)
+            com.melo.music.sync.LibrarySync.onFavoritesChanged()
             false
         } else {
             list.add(item)
             save(list)
+            com.melo.music.sync.LibrarySync.onFavoritesChanged()
             // Заранее резолвим прямую ссылку → следующее воспроизведение мгновенное.
             appContext?.let { ctx -> Extractor.prefetch(ctx, item.url) }
             true
         }
     }
+
+    /** Полная замена локального списка (используется облачным синком — без обратной выгрузки). */
+    fun replaceAll(list: List<TrackItem>) = save(list)
 
     private fun save(list: List<TrackItem>) {
         val arr = JSONArray()

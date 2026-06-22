@@ -40,12 +40,23 @@ class MeloApp : Application(), ImageLoaderFactory {
         CrashHandler.install(this)
         FavoritesManager.init(this)
         PlaylistManager.init(this)
+        com.melo.music.auth.LoginGuard.init(this)
         HistoryManager.init(this)
         EqualizerManager.init(this)
         LyricsRepository.init(this)
         StreamCacheStore.init(this)
         com.melo.music.offline.OfflineManager.init(this)
+        com.melo.music.settings.AppSettings.init(this)
         Recommender.init(this)
+        // Карта музыки: бэкенд Appwrite + osmdroid.
+        com.melo.music.map.AppwriteService.init(this)
+        org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
+        Thread {
+            kotlinx.coroutines.runBlocking {
+                runCatching { com.melo.music.map.AppwriteService.ensureSession() }
+                runCatching { com.melo.music.auth.AuthManager.refresh() }
+            }
+        }.start()
         ByeDpiProxy.init(this)
         if (ByeDpiProxy.isEnabled() && ByeDpiProxy.getCommandLine().isNotBlank()) {
             Thread { ByeDpiProxy.start() }.start()

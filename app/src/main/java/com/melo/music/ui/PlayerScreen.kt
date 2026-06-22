@@ -9,15 +9,22 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
@@ -65,6 +72,7 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Home
@@ -77,6 +85,7 @@ import androidx.compose.material.icons.rounded.DownloadForOffline
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Settings
@@ -84,6 +93,9 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
@@ -135,14 +147,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.Color
@@ -204,6 +219,8 @@ fun PlayerScreen(
     onLoadAlbumTracks: suspend (String) -> List<TrackItem>,
     onLoadShelf: suspend (String) -> List<TrackItem>,
     onRelatedTracks: suspend (TrackItem) -> List<TrackItem> = { emptyList() },
+    onGoogleLogin: suspend () -> Result<Unit> = { Result.failure(Exception("n/a")) },
+    onSearchUsers: suspend (String) -> List<com.melo.music.profile.MeloProfile> = { emptyList() },
     scGetId: () -> String?,
     onScSetManual: suspend (String) -> Boolean,
     onScRefresh: suspend () -> String?,
@@ -276,6 +293,11 @@ fun PlayerScreen(
     var playlistOpen by remember { mutableStateOf<Playlist?>(null) }
     var searchMode by rememberSaveable { mutableStateOf(false) }
     var homeSettings by remember { mutableStateOf(false) }
+    // Экран входа: при первом запуске обязателен (не закрыть), из «Аккаунта» — закрываемый.
+    var authVisible by remember { mutableStateOf(!com.melo.music.settings.AppSettings.seenWelcome) }
+    var authDismissible by remember { mutableStateOf(false) }
+    var importOpen by remember { mutableStateOf(false) }
+    var libraryVersion by remember { mutableIntStateOf(0) }
     var showQueue by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf(HistoryManager.getAll()) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -315,6 +337,9 @@ fun PlayerScreen(
     var contextMenuTrack by remember { mutableStateOf<TrackItem?>(null) }
     // Цель сохранения slowed/sped up версии: (исходный трек, скорость).
     var speedVariantTarget by remember { mutableStateOf<Pair<TrackItem, Float>?>(null) }
+    // Поиск людей + открытый чужой профиль.
+    var userResults by remember { mutableStateOf<List<com.melo.music.profile.MeloProfile>>(emptyList()) }
+    var profileOpen by remember { mutableStateOf<com.melo.music.profile.MeloProfile?>(null) }
 
     val controller = playerProvider()
     val playback = rememberPlaybackState(controller)
@@ -326,6 +351,14 @@ fun PlayerScreen(
     fun setSpeed(value: Float) {
         speed = value
         playerProvider()?.playbackParameters = PlaybackParameters(value, value)
+        com.melo.music.playback.PlaybackService.playbackSpeed = value
+    }
+
+    // Применяем скорость/тон САМОГО трека при смене трека или переподключении плеера.
+    // После перезапуска создаётся новый плеер с дефолтными параметрами (1.0) —
+    // этот эффект восстанавливает сохранённую скорость slowed/sped up версий.
+    LaunchedEffect(nowPlaying?.url, nowPlaying?.speed, controller) {
+        if (controller != null) setSpeed(nowPlaying?.speed ?: 1f)
     }
 
     // Авто-перерезолв: плеер словил ошибку (протухшая/IP-битая ссылка) → чистим
@@ -419,6 +452,9 @@ fun PlayerScreen(
         searchMode = true
         ghostSuggestions = emptyList()
         ghostIndex = 0
+        // Параллельно ищем людей.
+        userResults = emptyList()
+        scope.launch { userResults = runCatching { onSearchUsers(q) }.getOrDefault(emptyList()) }
         scope.launch {
             listTitle = "Результаты: $q"
             listLoading = true
@@ -463,7 +499,7 @@ fun PlayerScreen(
             // Проверяем, что очередь/индекс не сменились, пока резолвили.
             if (resolved != null && playingIndex == fromIndex) {
                 com.melo.music.playback.PlaybackService.setNext(
-                    resolved.audioUrl, nextItem.title, nextIdx,
+                    resolved.audioUrl, nextItem.title, nextIdx, nextItem.speed,
                 )
             }
         }
@@ -473,8 +509,12 @@ fun PlayerScreen(
         if (index !in list.indices) return
         // Любой ручной выбор трека выходит из волны (волна сама зовёт с keepSea=true).
         if (!keepSea) seaActive = false
-        // Тот же трек уже играет — это пауза/продолжить, а не перезапуск.
-        if (list[index].url == nowPlaying?.url) {
+        // Тот же трек И та же скорость уже играют — это пауза/продолжить, а не перезапуск.
+        // (нормальная и slowed/sped up версии имеют одинаковый url, но разную speed).
+        val cur = nowPlaying
+        if (cur != null && list[index].url == cur.url &&
+            kotlin.math.abs(list[index].speed - cur.speed) < 0.01f
+        ) {
             playerProvider()?.let { if (it.isPlaying) it.pause() else it.play() }
             return
         }
@@ -671,31 +711,71 @@ fun PlayerScreen(
     }
 
     // Назад: закрыть плеер → закрыть артиста → выйти.
-    BackHandler(enabled = playerExpanded || artistOpen != null) {
+    BackHandler(enabled = playerExpanded || artistOpen != null || searchMode) {
         when {
             playerExpanded -> playerExpanded = false
             artistOpen != null -> artistOpen = null
+            searchMode -> {
+                searchMode = false
+                query = ""
+                ghostSuggestions = emptyList()
+                ghostIndex = 0
+            }
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    // Пятна тонируем в зелёный (≈#19261E), а не нейтрально-белый.
+    val ambientBg = MaterialTheme.colorScheme.background
+    val ambientLight = lerp(ambientBg, Color(0xFF3E6B4E), 0.22f)
+    val ambientDark = lerp(ambientBg, Color.Black, 0.32f)
+    val onBg = MaterialTheme.colorScheme.onBackground
+    // Плавающие над контентом плашки: лента скроллится под ними (без фоновой подложки).
+    val playerInset = if (nowPlaying != null) 96.dp else 0.dp
+    val searchInset = 84.dp
+    // Очень медленный дрейф пятен (один цикл ~70с, бесшовно через sin/cos).
+    val ambientPhase by rememberInfiniteTransition(label = "ambient").animateFloat(
+        initialValue = 0f,
+        targetValue = (2f * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(tween(70_000, easing = LinearEasing), RepeatMode.Restart),
+        label = "ambientPhase",
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(ambientBg)
+            // Анимированные пятна на самом заднем слое — под всем, включая плашку плеера.
+            .drawBehind {
+                val p = ambientPhase
+                fun spot(color: Color, cx: Float, cy: Float, r: Float) {
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(color, Color.Transparent),
+                            center = Offset(size.width * cx, size.height * cy),
+                            radius = size.minDimension * r,
+                        ),
+                    )
+                }
+                spot(ambientLight, 0.18f + 0.07f * kotlin.math.sin(p), 0.16f + 0.05f * kotlin.math.cos(p * 0.8f), 0.42f)
+                spot(ambientDark, 0.92f + 0.06f * kotlin.math.cos(p * 0.7f), 0.32f + 0.07f * kotlin.math.sin(p * 1.1f), 0.46f)
+                spot(ambientLight, 0.85f + 0.07f * kotlin.math.sin(p * 1.3f + 1f), 0.78f + 0.06f * kotlin.math.cos(p), 0.38f)
+                spot(ambientDark, 0.08f + 0.06f * kotlin.math.cos(p * 0.9f + 2f), 0.9f + 0.05f * kotlin.math.sin(p * 0.6f), 0.34f)
+                // Пятно у низа — чтобы за стеклянной плашкой плеера было что просвечивать.
+                spot(ambientLight, 0.5f + 0.05f * kotlin.math.sin(p * 0.5f), 0.99f, 0.45f)
+            },
+    ) {
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
+        contentColor = onBg,
         bottomBar = {
-            Column {
-                NowPlayingBar(
-                    item = nowPlaying,
-                    isPlaying = isPlaying,
-                    resolving = resolvingUrl != null,
-                    error = playerError,
-                    onTogglePlayPause = onTogglePlayPause,
-                    onClick = { playerExpanded = true },
-                )
-                MeloBottomNav(selected = selectedTab, onSelect = { selectedTab = it })
-            }
+            MeloBottomNav(selected = selectedTab, onSelect = { selectedTab = it })
         },
     ) { innerPadding ->
-        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        ) {
           AnimatedContent(
             targetState = selectedTab,
             transitionSpec = {
@@ -705,20 +785,7 @@ fun PlayerScreen(
           ) { tab ->
            Column(modifier = Modifier.fillMaxSize()) {
             when (tab) {
-                MeloTab.Home -> {
-                    SearchBar(
-                        query = query,
-                        onQueryChange = { query = it },
-                        onSearch = ::runSearch,
-                        onClear = { query = ""; searchMode = false; ghostSuggestions = emptyList(); ghostIndex = 0 },
-                        ghostSuggestion = ghostSuggestions.getOrNull(ghostIndex) ?: "",
-                        onGhostAccept = { accepted ->
-                            query = accepted
-                            ghostSuggestions = emptyList()
-                            ghostIndex = 0
-                            runSearch()
-                        },
-                    )
+                MeloTab.Home -> Box(modifier = Modifier.fillMaxSize()) {
                     if (searchMode) {
                         when {
                             listLoading && items.isEmpty() -> Box(
@@ -729,15 +796,42 @@ fun PlayerScreen(
                             listError != null && items.isEmpty() -> Text(
                                 text = "Ошибка: $listError",
                                 color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(20.dp),
+                                modifier = Modifier.padding(top = searchInset + 12.dp, start = 20.dp, end = 20.dp),
                             )
 
                             else -> LazyColumn(
                                 state = searchListState,
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                                contentPadding = PaddingValues(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    top = searchInset + 4.dp,
+                                    bottom = playerInset + 12.dp,
+                                ),
                                 verticalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
+                                if (userResults.isNotEmpty()) {
+                                    item(key = "people_header") {
+                                        Text(
+                                            "Люди",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    items(userResults, key = { "u_" + it.userId }) { p ->
+                                        com.melo.music.ui.UserRow(profile = p, onClick = { profileOpen = p })
+                                    }
+                                    item(key = "tracks_header") {
+                                        Text(
+                                            "Треки",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(top = 6.dp),
+                                        )
+                                    }
+                                }
                                 itemsIndexed(items, key = { _, it -> it.url }) { _, item ->
                                     if (item.kind == ItemKind.ARTIST) {
                                         ArtistCard(item = item, onClick = { artistOpen = item })
@@ -781,13 +875,42 @@ fun PlayerScreen(
                             onPlay = { list, index -> playAt(list, index) },
                             onTrackLongClick = { contextMenuTrack = it },
                             onMood = { seed -> query = seed; runSearch() },
-                            onSettings = { homeSettings = true },
+                            onOpenAccount = { selectedTab = MeloTab.Account },
                             onPrefetch = onPrefetch,
-                            onStartSea = { startSea(null) },
                             seaLoading = seaLoading,
+                            // Sea отражает своё состояние ТОЛЬКО когда играет именно волна.
+                            seaIsPlaying = seaActive && isPlaying,
+                            seaTitle = if (seaActive) nowPlaying?.title else null,
+                            seaArtist = if (seaActive) nowPlaying?.uploader else null,
+                            seaIsLiked = run { likedVersion; if (seaActive) nowPlaying?.let { isLiked(it) } ?: false else false },
+                            onSeaPlayPause = {
+                                if (seaActive) onTogglePlayPause() else startSea(null)
+                            },
+                            onSeaNext = {
+                                if (seaActive) playNext() else startSea(null)
+                            },
+                            onSeaLike = { if (seaActive) nowPlaying?.let { toggleLike(it) } },
                             onRelatedTracks = onRelatedTracks,
+                            topInset = searchInset,
+                            bottomInset = playerInset,
                         )
                     }
+
+                    // Поиск плавает над лентой (лента скроллится под ним).
+                    SearchBar(
+                        query = query,
+                        onQueryChange = { query = it },
+                        onSearch = ::runSearch,
+                        onClear = { query = ""; searchMode = false; ghostSuggestions = emptyList(); ghostIndex = 0 },
+                        ghostSuggestion = ghostSuggestions.getOrNull(ghostIndex) ?: "",
+                        onGhostAccept = { accepted ->
+                            query = accepted
+                            ghostSuggestions = emptyList()
+                            ghostIndex = 0
+                            runSearch()
+                        },
+                        modifier = Modifier.align(Alignment.TopCenter),
+                    )
                 }
 
                 MeloTab.Favorite -> {
@@ -805,7 +928,7 @@ fun PlayerScreen(
                     } else {
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = 12.dp),
+                            contentPadding = PaddingValues(bottom = 12.dp + playerInset),
                         ) {
                             item {
                                 FavoritesHeader(
@@ -832,13 +955,35 @@ fun PlayerScreen(
                     }
                 }
 
+                MeloTab.Map -> com.melo.music.map.MusicMapScreen(
+                    onSearch = onSearch,
+                    onPlay = { track -> playAt(listOf(track), 0) },
+                    onClose = { selectedTab = MeloTab.Home },
+                    bottomInset = playerInset,
+                )
+
                 MeloTab.Account -> AccountTab(
                     onOpenPlaylist = { playlistOpen = it },
                     onOpenSettings = { homeSettings = true },
+                    onOpenImport = { importOpen = true },
+                    onOpenLogin = { authDismissible = true; authVisible = true },
+                    refreshKey = libraryVersion,
+                    bottomInset = playerInset,
                 )
             }
            }
           }
+
+          // Плашка плеера плавает над контентом (лента скроллится под стеклом).
+          NowPlayingBar(
+              item = nowPlaying,
+              isPlaying = isPlaying,
+              resolving = resolvingUrl != null,
+              error = playerError,
+              onTogglePlayPause = onTogglePlayPause,
+              onClick = { playerExpanded = true },
+              modifier = Modifier.align(Alignment.BottomCenter),
+          )
         }
     }
 
@@ -915,6 +1060,7 @@ fun PlayerScreen(
                 PlaylistScreen(
                     playlist = pl,
                     nowPlayingUrl = nowPlaying?.url,
+                    nowPlayingSpeed = nowPlaying?.speed ?: 1f,
                     isPlaying = isPlaying,
                     resolvingUrl = resolvingUrl,
                     onPlay = { tracks, index -> playAt(tracks, index) },
@@ -953,6 +1099,48 @@ fun PlayerScreen(
             onScSetManual = onScSetManual,
             onScRefresh = onScRefresh,
             onBack = { homeSettings = false },
+        )
+    }
+
+    profileOpen?.let { p ->
+        ProfileScreen(
+            profile = p,
+            onPlay = { list, index -> playAt(list, index) },
+            onClose = { profileOpen = null },
+        )
+    }
+
+
+    if (authVisible) {
+        WelcomeScreen(
+            onLogin = { e, p -> com.melo.music.auth.AuthManager.login(e, p) },
+            onStartRegister = { e, p, n -> com.melo.music.auth.AuthManager.startEmailRegister(e, p, n) },
+            onConfirmCode = { uid, c -> com.melo.music.auth.AuthManager.confirmEmailCode(uid, c) },
+            onGoogle = { onGoogleLogin() },
+            onLocal = {
+                com.melo.music.settings.AppSettings.setSeenWelcome()
+                authVisible = false
+            },
+            onSuccess = {
+                com.melo.music.settings.AppSettings.setSeenWelcome()
+                authVisible = false
+            },
+            onClose = if (authDismissible) {
+                { authVisible = false }
+            } else {
+                null
+            },
+        )
+    }
+
+    AnimatedVisibility(
+        visible = importOpen,
+        enter = slideInHorizontally(tween(280)) { it } + fadeIn(),
+        exit = slideOutHorizontally(tween(240)) { it } + fadeOut(),
+    ) {
+        ImportScreen(
+            onBack = { importOpen = false },
+            onImported = { libraryVersion++ },
         )
     }
 
@@ -1190,6 +1378,7 @@ private fun QueueSheet(
 private enum class MeloTab(val label: String) {
     Home("Главная"),
     Favorite("Избранное"),
+    Map("Карта"),
     Account("Аккаунт"),
 }
 
@@ -1207,6 +1396,12 @@ private fun MeloBottomNav(selected: MeloTab, onSelect: (MeloTab) -> Unit) {
             onClick = { onSelect(MeloTab.Favorite) },
             icon = { Icon(Icons.Rounded.Favorite, contentDescription = null) },
             label = { Text(MeloTab.Favorite.label) },
+        )
+        NavigationBarItem(
+            selected = selected == MeloTab.Map,
+            onClick = { onSelect(MeloTab.Map) },
+            icon = { Icon(Icons.Rounded.Map, contentDescription = null) },
+            label = { Text(MeloTab.Map.label) },
         )
         NavigationBarItem(
             selected = selected == MeloTab.Account,
@@ -1249,30 +1444,79 @@ private fun Placeholder(
 private fun AccountTab(
     onOpenPlaylist: (Playlist) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenImport: () -> Unit,
+    onOpenLogin: () -> Unit,
+    refreshKey: Int,
+    bottomInset: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
-    var playlists by remember { mutableStateOf(PlaylistManager.getAll().toList()) }
+    val accountScope = rememberCoroutineScope()
+    var playlists by remember(refreshKey) { mutableStateOf(PlaylistManager.getAll().toList()) }
     var showCreate by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<Playlist?>(null) }
+    var menuTarget by remember { mutableStateOf<Playlist?>(null) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
+            .padding(start = 20.dp, end = 20.dp)
+            .padding(bottom = bottomInset),
     ) {
         // Шапка: заголовок + шестерёнка настроек справа.
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                "Аккаунт",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Аккаунт",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                com.melo.music.auth.AuthManager.email?.let { mail ->
+                    Text(
+                        mail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+            }
+            if (com.melo.music.auth.AuthManager.loggedIn) {
+                TextButton(onClick = { accountScope.launch { com.melo.music.auth.AuthManager.logout() } }) {
+                    Text("Выйти")
+                }
+            } else {
+                FilledTonalButton(
+                    onClick = onOpenLogin,
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                ) { Text("Войти") }
+            }
             IconButton(onClick = onOpenSettings) {
                 Icon(Icons.Rounded.Settings, contentDescription = "Настройки")
+            }
+        }
+
+        // Профиль (аватар, имя, описание) — для вошедших в аккаунт.
+        if (com.melo.music.auth.AuthManager.loggedIn) {
+            ProfileHeaderCard()
+            val uid = com.melo.music.auth.AuthManager.userId
+            val clipboard = LocalClipboardManager.current
+            if (uid != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "ID: $uid (тап — копировать)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { clipboard.setText(AnnotatedString(uid)) },
+                    )
+                }
             }
         }
 
@@ -1294,6 +1538,38 @@ private fun AccountTab(
                 Spacer(Modifier.width(6.dp))
                 Text("Создать")
             }
+        }
+
+        // Импорт плейлиста из других сервисов.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 14.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                .clickable(onClick = onOpenImport)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Rounded.CloudDownload,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Импорт плейлиста", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                Text(
+                    "Из YouTube Music или SoundCloud",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         if (playlists.isEmpty()) {
@@ -1344,7 +1620,7 @@ private fun AccountTab(
                         PlaylistCard(
                             playlist = pl,
                             onClick = { onOpenPlaylist(pl) },
-                            onLongClick = { deleteTarget = pl },
+                            onLongClick = { menuTarget = pl },
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -1390,6 +1666,52 @@ private fun AccountTab(
                     },
                     enabled = name.isNotBlank(),
                 ) { Text("Создать") }
+            }
+        }
+    }
+
+    menuTarget?.let { target ->
+        MeloDialog(onDismiss = { menuTarget = null }) {
+            Text(target.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
+            Spacer(Modifier.height(16.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable {
+                        PlaylistManager.setPublic(target.id, !target.isPublic)
+                        playlists = PlaylistManager.getAll().toList()
+                        menuTarget = null
+                    }
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    if (target.isPublic) Icons.Rounded.Lock else Icons.Rounded.Public,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.width(14.dp))
+                Column {
+                    Text(if (target.isPublic) "Сделать закрытым" else "Сделать открытым", fontWeight = FontWeight.Medium)
+                    Text(
+                        if (target.isPublic) "Сейчас виден другим" else "Сейчас скрыт",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable { deleteTarget = target; menuTarget = null }
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                Spacer(Modifier.width(14.dp))
+                Text("Удалить плейлист", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium)
             }
         }
     }
@@ -1469,6 +1791,20 @@ private fun PlaylistCard(
             ),
         )
 
+        // Бейдж «закрытый» в углу.
+        if (!playlist.isPublic) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(10.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .padding(6.dp),
+            ) {
+                Icon(Icons.Rounded.Lock, contentDescription = "Закрытый", tint = Color.White, modifier = Modifier.size(16.dp))
+            }
+        }
+
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -1512,6 +1848,7 @@ private fun SearchBar(
     onClear: () -> Unit = {},
     ghostSuggestion: String = "",
     onGhostAccept: (String) -> Unit = {},
+    modifier: Modifier = Modifier,
 ) {
     val ghostTail = remember(ghostSuggestion, query) {
         val q = query.trim()
@@ -1546,9 +1883,12 @@ private fun SearchBar(
     val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            // Плашка поля поиска (под ghost-текстом и прозрачным TextField).
+            .clip(RoundedCornerShape(28.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
     ) {
         // Ghost-текст: positioned behind TextField, aligned with text content area.
         if (displayGhost.isNotEmpty() && query.isNotBlank()) {
@@ -1582,7 +1922,9 @@ private fun SearchBar(
         TextField(
             value = query,
             onValueChange = { onQueryChange(it) },
-            placeholder = { Text("Поиск трека или исполнителя") },
+            placeholder = {
+                Text("Поиск трека или исполнителя", maxLines = 1, overflow = TextOverflow.Ellipsis)
+            },
             leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
@@ -1613,54 +1955,154 @@ private fun SearchBar(
 
 // ── Главная: лента с полками ──────────────────────────────────────────────────
 
-/** Карта запуска бесконечной персональной волны «Sea». */
+/** Лепестковая («cookie»/цветок) фигура из Material 3 expressive — N лепестков. */
+private class CookieShape(
+    private val petals: Int = 8,
+    private val amp: Float = 0.12f,
+) : androidx.compose.ui.graphics.Shape {
+    override fun createOutline(
+        size: androidx.compose.ui.geometry.Size,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        density: androidx.compose.ui.unit.Density,
+    ): androidx.compose.ui.graphics.Outline {
+        val path = androidx.compose.ui.graphics.Path()
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val rMax = minOf(cx, cy)
+        val base = rMax / (1f + amp)
+        val steps = petals * 24
+        val twoPi = (2.0 * Math.PI).toFloat()
+        for (i in 0..steps) {
+            val a = i.toFloat() / steps * twoPi
+            val r = base * (1f + amp * kotlin.math.cos(petals * a))
+            val x = cx + r * kotlin.math.cos(a)
+            val y = cy + r * kotlin.math.sin(a)
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        path.close()
+        return androidx.compose.ui.graphics.Outline.Generic(path)
+    }
+}
+
+/** Карта «Sea» в виде цветка (системные цвета): запуск/управление бесконечной волной. */
 @Composable
-private fun SeaCard(loading: Boolean, onClick: () -> Unit) {
+private fun SeaCard(
+    loading: Boolean,
+    playingTitle: String?,
+    playingArtist: String?,
+    isPlaying: Boolean,
+    isLiked: Boolean,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onLike: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val outerShape = remember { CookieShape(8, 0.11f) }
+    val btnShape = remember { CookieShape(8, 0.16f) }
+    val innerColor = lerp(cs.secondaryContainer, Color.Black, 0.22f)
+    val onColor = Color.White
+
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .background(
-                Brush.linearGradient(listOf(Color(0xFF7B4D6B), Color(0xFF422A3D))),
-            )
-            .clickable(enabled = !loading, onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 18.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "Sea",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Бесконечная волна под твой вкус",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.8f),
-                )
-            }
+        Box(
+            modifier = Modifier
+                .size(300.dp)
+                .clip(outerShape)
+                .background(cs.secondaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
             Box(
                 modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(Color.White.copy(alpha = 0.2f)),
+                    .size(232.dp)
+                    .clip(outerShape)
+                    .background(innerColor),
                 contentAlignment = Alignment.Center,
             ) {
-                if (loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(26.dp),
-                        strokeWidth = 2.5.dp,
-                        color = Color.White,
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "Sea",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = onColor,
                     )
-                } else {
-                    Icon(
-                        Icons.Rounded.PlayArrow,
-                        contentDescription = "Запустить волну",
-                        tint = Color.White,
-                        modifier = Modifier.size(32.dp),
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        // Лайк
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(btnShape)
+                                .background(cs.primaryContainer)
+                                .clickable(onClick = onLike),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                contentDescription = "Нравится",
+                                tint = cs.onPrimaryContainer,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        // Плей/пауза
+                        Box(
+                            modifier = Modifier
+                                .size(58.dp)
+                                .clip(btnShape)
+                                .background(cs.primary)
+                                .clickable(enabled = !loading, onClick = onPlayPause),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (loading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.5.dp,
+                                    color = cs.onPrimary,
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                    contentDescription = "Играть",
+                                    tint = cs.onPrimary,
+                                    modifier = Modifier.size(28.dp),
+                                )
+                            }
+                        }
+                        // Следующий
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(btnShape)
+                                .background(cs.primaryContainer)
+                                .clickable(onClick = onNext),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Rounded.SkipNext,
+                                contentDescription = "Дальше",
+                                tint = cs.onPrimaryContainer,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = playingTitle ?: "Бесконечная волна",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = onColor,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 24.dp),
+                    )
+                    Text(
+                        text = playingArtist ?: "под твой вкус",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = onColor.copy(alpha = 0.7f),
+                        maxLines = 1,
                     )
                 }
             }
@@ -1680,11 +2122,19 @@ private fun HomeFeed(
     onPlay: (List<TrackItem>, Int) -> Unit,
     onTrackLongClick: (TrackItem) -> Unit,
     onMood: (String) -> Unit,
-    onSettings: () -> Unit,
+    onOpenAccount: () -> Unit,
     onPrefetch: (String) -> Unit,
-    onStartSea: () -> Unit,
     seaLoading: Boolean,
+    seaIsPlaying: Boolean,
+    seaTitle: String?,
+    seaArtist: String?,
+    seaIsLiked: Boolean,
+    onSeaPlayPause: () -> Unit,
+    onSeaNext: () -> Unit,
+    onSeaLike: () -> Unit,
     onRelatedTracks: suspend (TrackItem) -> List<TrackItem>,
+    topInset: androidx.compose.ui.unit.Dp = 0.dp,
+    bottomInset: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
     val moods = remember {
         listOf(
@@ -1718,10 +2168,21 @@ private fun HomeFeed(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 16.dp),
+        contentPadding = PaddingValues(top = topInset, bottom = 16.dp + bottomInset),
     ) {
-        item { Greeting(onSettings) }
-        item { SeaCard(loading = seaLoading, onClick = onStartSea) }
+        item { Greeting(onOpenAccount) }
+        item {
+            SeaCard(
+                loading = seaLoading,
+                playingTitle = seaTitle,
+                playingArtist = seaArtist,
+                isPlaying = seaIsPlaying,
+                isLiked = seaIsLiked,
+                onPlayPause = onSeaPlayPause,
+                onNext = onSeaNext,
+                onLike = onSeaLike,
+            )
+        }
         item { MoodChips(moods, onMood) }
 
         if (history.isNotEmpty()) {
@@ -1834,7 +2295,7 @@ private fun HomeFeed(
 }
 
 @Composable
-private fun Greeting(onSettings: () -> Unit) {
+private fun Greeting(onOpenAccount: () -> Unit) {
     val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
     val greet = when (hour) {
         in 5..11 -> "Доброе утро"
@@ -1845,9 +2306,15 @@ private fun Greeting(onSettings: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, end = 12.dp, top = 20.dp, bottom = 8.dp),
+            .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Avatar(
+            com.melo.music.auth.AuthManager.avatarUrl,
+            44.dp,
+            Modifier.clickable(onClick = onOpenAccount),
+        )
+        Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(greet, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(
@@ -1855,9 +2322,6 @@ private fun Greeting(onSettings: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-        IconButton(onClick = onSettings) {
-            Icon(Icons.Rounded.Settings, contentDescription = "Настройки")
         }
     }
 }
@@ -2585,6 +3049,7 @@ private fun AlbumCard(
 private fun PlaylistScreen(
     playlist: Playlist,
     nowPlayingUrl: String?,
+    nowPlayingSpeed: Float,
     isPlaying: Boolean,
     resolvingUrl: String?,
     onPlay: (List<TrackItem>, Int) -> Unit,
@@ -2682,11 +3147,12 @@ private fun PlaylistScreen(
                     )
                 }
             } else {
-                itemsIndexed(tracks, key = { i, it -> "$i:${it.url}" }) { index, t ->
+                itemsIndexed(tracks, key = { i, it -> "$i:${it.url}@${it.speed}" }) { index, t ->
                     TrackCard(
                         item = t,
                         resolving = resolvingUrl == t.url,
-                        playing = nowPlayingUrl == t.url && isPlaying,
+                        playing = nowPlayingUrl == t.url &&
+                            kotlin.math.abs(nowPlayingSpeed - t.speed) < 0.01f && isPlaying,
                         onClick = { onPlay(tracks, index) },
                         onLongClick = { onTrackLongClick(t) },
                     )
@@ -2734,6 +3200,7 @@ private fun FavoritesHeader(
                 maxLines = 1,
             )
             Spacer(Modifier.height(14.dp))
+            var pub by remember { mutableStateOf(FavoritesManager.isPublic()) }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -2746,7 +3213,19 @@ private fun FavoritesHeader(
                 FilledTonalIconButton(onClick = onShuffle) {
                     Icon(Icons.Rounded.Shuffle, contentDescription = "Перемешать")
                 }
+                FilledTonalIconButton(onClick = { pub = !pub; FavoritesManager.setPublic(pub) }) {
+                    Icon(
+                        if (pub) Icons.Rounded.Public else Icons.Rounded.Lock,
+                        contentDescription = if (pub) "Открыто" else "Закрыто",
+                    )
+                }
             }
+            Text(
+                if (pub) "Лайки видны другим" else "Лайки скрыты",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
     }
 }
@@ -2785,6 +3264,7 @@ private fun sourceLabel(source: Source): String = when (source) {
     Source.BANDCAMP -> "Bandcamp"
     Source.DEEZER -> "Deezer"
     Source.TIDAL -> "Tidal"
+    Source.LOCAL -> "На устройстве"
 }
 
 @Composable
@@ -2818,6 +3298,12 @@ private fun SourceBadge(source: Source, modifier: Modifier = Modifier) {
             imageVector = Icons.Rounded.MusicNote,
             contentDescription = "Tidal",
             tint = Color(0xFF000000),
+            modifier = modifier,
+        )
+        Source.LOCAL -> Icon(
+            imageVector = Icons.Rounded.DownloadForOffline,
+            contentDescription = "На устройстве",
+            tint = Color(0xFF35C759),
             modifier = modifier,
         )
     }
@@ -2861,14 +3347,19 @@ private fun NowPlayingBar(
     error: String?,
     onTogglePlayPause: () -> Unit,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     if (item == null) return
     Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
+        // Полупрозрачное «стекло»: сквозь плашку мягко просвечивает контент под ней.
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
         shape = RoundedCornerShape(28.dp),
-        tonalElevation = 6.dp,
+        tonalElevation = 0.dp,
         shadowElevation = 8.dp,
-        modifier = Modifier
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+        ),
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 12.dp)
             .clickable(onClick = onClick),
@@ -3493,6 +3984,7 @@ private fun SyncedLyrics(
         horizontalAlignment = Alignment.CenterHorizontally,
         contentPadding = PaddingValues(vertical = 130.dp),
     ) {
+        val karaoke = com.melo.music.settings.AppSettings.karaoke
         itemsIndexed(lines) { i, line ->
             val active = i == activeIndex
             // Чем дальше строка от активной — тем сильнее размытие (активная чёткая).
@@ -3505,8 +3997,15 @@ private fun SyncedLyrics(
                 3 -> 6.dp
                 else -> 8.dp
             }
+            // Караоке: активная строка тускло-серая, слова загораются по времени.
+            val content = if (active && karaoke && line.text.isNotBlank()) {
+                val nextMs = lines.getOrNull(i + 1)?.timeMs ?: (line.timeMs + 4000L)
+                karaokeLine(line.text, line.timeMs, nextMs, positionMs, white, white.copy(alpha = 0.32f))
+            } else {
+                androidx.compose.ui.text.AnnotatedString(line.text.ifBlank { "♪" })
+            }
             Text(
-                text = line.text.ifBlank { "♪" },
+                text = content,
                 color = if (active) white else dim.copy(alpha = 0.45f),
                 fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                 style = if (active) MaterialTheme.typography.titleLarge
@@ -3518,6 +4017,34 @@ private fun SyncedLyrics(
                     .clickable { onSeek(line.timeMs) }
                     .padding(vertical = 7.dp, horizontal = 8.dp),
             )
+        }
+    }
+}
+
+/**
+ * Караоке-строка: время строки (до следующей) делим на число слов, слова до текущего
+ * момента — светлые (lit), остальные — приглушённые (unlit).
+ */
+private fun karaokeLine(
+    text: String,
+    startMs: Long,
+    nextMs: Long,
+    posMs: Long,
+    lit: Color,
+    unlit: Color,
+): androidx.compose.ui.text.AnnotatedString {
+    val words = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    if (words.isEmpty()) return androidx.compose.ui.text.AnnotatedString(text)
+    val dur = (nextMs - startMs).coerceAtLeast(1L)
+    val per = dur.toFloat() / words.size
+    val elapsed = (posMs - startMs).coerceAtLeast(0L)
+    val litCount = (elapsed / per).toInt()
+    return androidx.compose.ui.text.buildAnnotatedString {
+        words.forEachIndexed { idx, w ->
+            withStyle(androidx.compose.ui.text.SpanStyle(color = if (idx <= litCount) lit else unlit)) {
+                append(w)
+            }
+            if (idx < words.lastIndex) append(" ")
         }
     }
 }

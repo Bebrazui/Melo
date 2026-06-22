@@ -1,5 +1,6 @@
 package com.melo.music.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Waves
 import androidx.compose.material3.Button
@@ -51,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.melo.music.audio.EqualizerManager
+import com.melo.music.settings.AppSettings
 import com.melo.music.byedpi.ByeDpiProxy
 import kotlinx.coroutines.launch
 
@@ -62,15 +65,8 @@ fun SettingsScreen(
     onScRefresh: suspend () -> String?,
     onBack: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
-
-    var message by remember { mutableStateOf<String?>(null) }
-
-    // ByeDPI state
-    var byeDpiExpanded by remember { mutableStateOf(false) }
-    var byeDpiCmd by remember { mutableStateOf(ByeDpiProxy.getCommandLine()) }
-    var byeDpiRunning by remember { mutableStateOf(ByeDpiProxy.isRunning()) }
-
+    // Системный жест «назад» закрывает настройки (на главную).
+    BackHandler(onBack = onBack)
     Scaffold(
         topBar = {
             TopAppBar(
@@ -90,108 +86,7 @@ fun SettingsScreen(
                 .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
-            // ── Для разработчиков (ByeDPI) ──────────────────────────
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { byeDpiExpanded = !byeDpiExpanded }
-                    .padding(vertical = 12.dp),
-            ) {
-                Icon(
-                    imageVector = if (byeDpiExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "Для разработчиков",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (byeDpiRunning) {
-                    Spacer(Modifier.width(8.dp))
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                    ) {
-                        Text(
-                            "ON",
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-            }
-
-            AnimatedVisibility(
-                visible = byeDpiExpanded,
-                enter = expandVertically(),
-                exit = shrinkVertically(),
-            ) {
-                Column {
-                    Text(
-                        "ByeDPI — обход DPI. Вставь командную строку (как в CLI).",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedTextField(
-                        value = byeDpiCmd,
-                        onValueChange = {
-                            byeDpiCmd = it
-                            ByeDpiProxy.setCommandLine(it)
-                        },
-                        label = { Text("Командная строка ByeDPI") },
-                        placeholder = { Text("--disorder 1 --auto=torst --timeout 3") },
-                        singleLine = false,
-                        minLines = 3,
-                        modifier = Modifier.fillMaxWidth(),
-                        textStyle = MaterialTheme.typography.bodyMedium,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                scope.launch {
-                                    byeDpiRunning = ByeDpiProxy.start(byeDpiCmd)
-                                    message = if (byeDpiRunning) "ByeDPI запущен ✓" else "Ошибка запуска"
-                                }
-                            },
-                            enabled = !byeDpiRunning && byeDpiCmd.isNotBlank(),
-                        ) { Text("Старт") }
-                        OutlinedButton(
-                            onClick = {
-                                ByeDpiProxy.stop()
-                                byeDpiRunning = false
-                                message = "ByeDPI остановлен"
-                            },
-                            enabled = byeDpiRunning,
-                        ) { Text("Стоп") }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Примеры:\n" +
-                            "  --disorder 1\n" +
-                            "  --fake -1 --ttl 8\n" +
-                            "  --split 1+s --disorder 3+s\n" +
-                            "  --auto=torst --timeout 3 --tlsrec 1+s",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    HorizontalDivider()
-                    Spacer(Modifier.height(12.dp))
-                }
-            }
-
-            message?.let {
-                Text(it, style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(12.dp))
-            }
+            Spacer(Modifier.height(8.dp))
 
             // ── Эквалайзер ───────────────────────────────────────────
             EqualizerSection()
@@ -202,6 +97,37 @@ fun SettingsScreen(
 
             // ── Усиление + реверберация ──────────────────────────────
             GainReverbSection()
+
+            Spacer(Modifier.height(20.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(16.dp))
+
+            // ── Текст песни ──────────────────────────────────────────
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Icon(
+                    imageVector = Icons.Rounded.Lyrics,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Караоке-подсветка",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        "Слова в строке загораются по времени",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                androidx.compose.material3.Switch(
+                    checked = AppSettings.karaoke,
+                    onCheckedChange = { AppSettings.updateKaraoke(it) },
+                )
+            }
 
             Spacer(Modifier.height(24.dp))
         }

@@ -22,7 +22,7 @@ data class ResolvedTrack(
 )
 
 /** Источник трека (для индикатора в UI). */
-enum class Source { YOUTUBE_MUSIC, SOUNDCLOUD, BANDCAMP, DEEZER, TIDAL }
+enum class Source { YOUTUBE_MUSIC, SOUNDCLOUD, BANDCAMP, DEEZER, TIDAL, LOCAL }
 
 /** Тип элемента списка: трек, исполнитель/канал или альбом/плейлист. */
 enum class ItemKind { TRACK, ARTIST, ALBUM }

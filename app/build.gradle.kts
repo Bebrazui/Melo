@@ -21,8 +21,8 @@ android {
         applicationId = "com.melo.music"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -127,6 +127,17 @@ dependencies {
     // Обложки треков
     implementation(libs.coil.compose)
     implementation(libs.androidx.palette)
+
+    // Карта музыки
+    implementation(libs.appwrite)
+    implementation(libs.osmdroid.android)
+    implementation(libs.play.services.location)
+
+    // Нативный вход Google
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.googleid)
+    implementation(libs.play.services.auth)
 
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 }

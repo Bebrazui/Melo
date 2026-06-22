@@ -115,6 +115,16 @@ object LyricsRepository {
         result
     }
 
+    /** Кладёт локальный .lrc (или обычный текст) в кэш под ключ трека. */
+    fun putLocal(context: Context, title: String, artist: String?, raw: String) {
+        if (prefs == null) init(context)
+        val key = cacheKey(title, artist)
+        val synced = parseLrc(raw).takeIf { it.isNotEmpty() }
+        val lyrics = Lyrics(synced, if (synced == null) raw else null)
+        memCache.put(key, lyrics)
+        saveToDisk(key, lyrics)
+    }
+
     private fun cacheKey(title: String, artist: String?): String =
         "${artist.orEmpty().lowercase()}|${title.lowercase()}".trim()
 

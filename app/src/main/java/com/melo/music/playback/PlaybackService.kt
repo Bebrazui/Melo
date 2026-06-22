@@ -52,20 +52,26 @@ class PlaybackService : MediaSessionService() {
         @Volatile var nextUrl: String? = null
         @Volatile var nextTitle: String? = null
         @Volatile var nextIndexPending: Int = -1
+        @Volatile var nextSpeed: Float = 1f
+
+        /** Текущая скорость/тон (1.0 = оригинал). Чтобы сервис применял её сам. */
+        @Volatile var playbackSpeed: Float = 1f
 
         /** Вызывается, когда кроссфейд переключил на следующий трек. */
         var onCrossfadeAdvance: ((index: Int) -> Unit)? = null
 
-        fun setNext(url: String?, title: String?, index: Int) {
+        fun setNext(url: String?, title: String?, index: Int, speed: Float = 1f) {
             nextUrl = url
             nextTitle = title
             nextIndexPending = index
+            nextSpeed = speed
         }
 
         fun clearNext() {
             nextUrl = null
             nextTitle = null
             nextIndexPending = -1
+            nextSpeed = 1f
         }
 
         fun setQueue(list: List<TrackItem>, index: Int) {
@@ -241,6 +247,7 @@ class PlaybackService : MediaSessionService() {
         val url = nextUrl ?: return
         val title = nextTitle
         val advanceIndex = nextIndexPending
+        val speed = nextSpeed
         crossfading = true
         clearNext()
 
@@ -253,6 +260,9 @@ class PlaybackService : MediaSessionService() {
                 .setMediaMetadata(MediaMetadata.Builder().setTitle(title ?: "").build())
                 .build(),
         )
+        // Скорость/тон следующего трека применяем на уровне сервиса — работает и в фоне.
+        toP.playbackParameters = androidx.media3.common.PlaybackParameters(speed, speed)
+        playbackSpeed = speed
         toP.volume = 0f
         toP.prepare()
         toP.play()

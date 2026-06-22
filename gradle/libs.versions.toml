@@ -13,6 +13,12 @@ okhttp = "4.12.0"
 desugar = "2.1.2"
 coil = "2.7.0"
 palette = "1.0.0"
+appwrite = "7.0.0"
+osmdroid = "6.1.20"
+playServicesLocation = "21.3.0"
+credentials = "1.3.0"
+googleid = "1.1.1"
+playServicesAuth = "21.2.0"
 
 [libraries]
 androidx-palette = { group = "androidx.palette", name = "palette-ktx", version.ref = "palette" }
@@ -44,6 +50,17 @@ newpipe-extractor = { group = "com.github.TeamNewPipe", name = "NewPipeExtractor
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+
+# Карта музыки: Appwrite (бэкенд) + osmdroid (OSM) + геолокация
+appwrite = { group = "io.appwrite", name = "sdk-for-android", version.ref = "appwrite" }
+osmdroid-android = { group = "org.osmdroid", name = "osmdroid-android", version.ref = "osmdroid" }
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
+
+# Нативный вход Google (без браузера) — Credential Manager
+androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
+androidx-credentials-play-services = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
+googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
+play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

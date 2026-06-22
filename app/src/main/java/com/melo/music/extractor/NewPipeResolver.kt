@@ -351,6 +351,32 @@ object NewPipeResolver {
             }.getOrDefault(emptyList())
         }
 
+    /** Плейлист по ссылке: имя + играбельные треки (для импорта). */
+    suspend fun importPlaylist(context: Context, url: String): Pair<String, List<TrackItem>> =
+        withContext(Dispatchers.IO) {
+            ensureInit(context)
+            if (isSoundCloud(url)) SoundCloudFix.ensure(context)
+            val source = when {
+                isSoundCloud(url) -> Source.SOUNDCLOUD
+                isBandcamp(url) -> Source.BANDCAMP
+                else -> Source.YOUTUBE_MUSIC
+            }
+            val info = org.schabi.newpipe.extractor.playlist.PlaylistInfo
+                .getInfo(serviceFor(url), url)
+            val tracks = info.relatedItems
+                .filterIsInstance<StreamInfoItem>()
+                .map { it.toTrackItem(source) }
+            (info.name ?: "Импорт") to tracks
+        }
+
+    /** Лучшее совпадение по тексту (для матчинга импортируемых треков). */
+    suspend fun searchOne(context: Context, query: String): TrackItem? =
+        withContext(Dispatchers.IO) {
+            ensureInit(context)
+            runCatching { searchYouTube(query) }.getOrDefault(emptyList())
+                .firstOrNull { it.kind == ItemKind.TRACK }
+        }
+
     /** Совпадает ли исполнитель трека с именем артиста (с учётом " - Topic"). */
     private fun artistMatches(uploader: String?, name: String): Boolean {
         val u = uploader?.lowercase()?.removeSuffix(" - topic")?.trim() ?: return false

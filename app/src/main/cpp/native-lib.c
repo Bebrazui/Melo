@@ -8,8 +8,9 @@
 #include <android/log.h>
 
 #define LOG_TAG "ByeDPI"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+// Логи заглушены (no-op) — движок работает, в logcat ничего не пишет.
+#define LOGI(...) ((void)0)
+#define LOGE(...) ((void)0)
 
 extern int server_fd;
 
