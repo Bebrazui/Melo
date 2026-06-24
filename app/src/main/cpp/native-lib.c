@@ -6,6 +6,18 @@
 #include <getopt.h>
 #include <sys/socket.h>
 #include <android/log.h>
+#include <dlfcn.h>
+
+// Отключаем fdsan: ByeDPI при остановке делает двойной close() fd, из-за чего
+// fdsan роняет процесс (SIGABRT) при рестарте прокси. dlsym — безопасно на API<29.
+JNIEXPORT void JNICALL
+Java_com_melo_music_byedpi_ByeDpiProxy_jniDisableFdsan(JNIEnv *env, jobject thiz) {
+    typedef int (*set_level_t)(int);
+    set_level_t set_level = (set_level_t) dlsym(RTLD_DEFAULT, "android_fdsan_set_error_level");
+    if (set_level) {
+        set_level(0); // ANDROID_FDSAN_ERROR_LEVEL_DISABLED
+    }
+}
 
 #define LOG_TAG "ByeDPI"
 // Логи заглушены (no-op) — движок работает, в logcat ничего не пишет.

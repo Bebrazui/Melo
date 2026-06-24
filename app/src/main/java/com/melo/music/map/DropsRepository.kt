@@ -53,7 +53,7 @@ object DropsRepository {
                 Query.limit(200),
             ),
         )
-        res.documents.mapNotNull { toDrop(it.id, it.data) }
+        res.documents.mapNotNull { toDrop(it.id, it.data) }.filterNot { MapModeration.isHidden(it.id) }
     }
 
     /** Свежие пины со всей карты — для глобального поиска песен по карте. */
@@ -63,7 +63,41 @@ object DropsRepository {
             collectionId = AppwriteService.COLLECTION_DROPS,
             queries = listOf(Query.orderDesc("\$createdAt"), Query.limit(limit)),
         )
-        res.documents.mapNotNull { toDrop(it.id, it.data) }
+        res.documents.mapNotNull { toDrop(it.id, it.data) }.filterNot { MapModeration.isHidden(it.id) }
+    }
+
+    /** Пожаловаться на пин: создаёт запись в reports и локально скрывает его. */
+    suspend fun report(drop: MapDrop, reason: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val uid = AppwriteService.userId ?: AppwriteService.ensureSession() ?: error("Нет сессии")
+            AppwriteService.databases.createDocument(
+                databaseId = AppwriteService.DATABASE_ID,
+                collectionId = AppwriteService.COLLECTION_REPORTS,
+                documentId = ID.unique(),
+                data = mapOf(
+                    "reporterId" to uid,
+                    "targetType" to "drop",
+                    "targetId" to drop.id,
+                    "reason" to reason,
+                    "title" to drop.title,
+                    "sourceUrl" to drop.sourceUrl,
+                ),
+                permissions = listOf(Permission.update(Role.user(uid)), Permission.delete(Role.user(uid))),
+            )
+            MapModeration.hide(drop.id)
+        }
+    }
+
+    /** Удалить свой пин. */
+    suspend fun delete(dropId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            AppwriteService.databases.deleteDocument(
+                databaseId = AppwriteService.DATABASE_ID,
+                collectionId = AppwriteService.COLLECTION_DROPS,
+                documentId = dropId,
+            )
+            MapModeration.hide(dropId)
+        }
     }
 
     private fun toDrop(id: String, d: Map<String, Any>): MapDrop? = runCatching {

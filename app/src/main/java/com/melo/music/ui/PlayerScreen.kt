@@ -9,6 +9,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -198,6 +199,7 @@ import com.melo.music.recommend.SkipTracker
 import com.melo.music.recommend.TasteProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.rememberUpdatedState
@@ -771,6 +773,7 @@ fun PlayerScreen(
             MeloBottomNav(selected = selectedTab, onSelect = { selectedTab = it })
         },
     ) { innerPadding ->
+      Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -955,12 +958,8 @@ fun PlayerScreen(
                     }
                 }
 
-                MeloTab.Map -> com.melo.music.map.MusicMapScreen(
-                    onSearch = onSearch,
-                    onPlay = { track -> playAt(listOf(track), 0) },
-                    onClose = { selectedTab = MeloTab.Home },
-                    bottomInset = playerInset,
-                )
+                // Карта рисуется отдельным слоем во весь экран (под статус-баром).
+                MeloTab.Map -> Box(modifier = Modifier.fillMaxSize())
 
                 MeloTab.Account -> AccountTab(
                     onOpenPlaylist = { playlistOpen = it },
@@ -985,6 +984,28 @@ fun PlayerScreen(
               modifier = Modifier.align(Alignment.BottomCenter),
           )
         }
+
+        // Карта — отдельный слой во весь экран (рисуется под статус-баром).
+        if (selectedTab == MeloTab.Map) {
+            com.melo.music.map.MusicMapScreen(
+                onSearch = onSearch,
+                onPlay = { track -> playAt(listOf(track), 0) },
+                onClose = { selectedTab = MeloTab.Home },
+                topInset = innerPadding.calculateTopPadding(),
+                bottomInset = innerPadding.calculateBottomPadding() + playerInset,
+                nowPlayingBar = {
+                    NowPlayingBar(
+                        item = nowPlaying,
+                        isPlaying = isPlaying,
+                        resolving = resolvingUrl != null,
+                        error = playerError,
+                        onTogglePlayPause = onTogglePlayPause,
+                        onClick = { playerExpanded = true },
+                    )
+                },
+            )
+        }
+      }
     }
 
         val current = nowPlaying
@@ -2002,24 +2023,43 @@ private fun SeaCard(
     val innerColor = lerp(cs.secondaryContainer, Color.Black, 0.22f)
     val onColor = Color.White
 
+    // Лепестки медленно крутятся при воспроизведении (на паузе замирают, без рывка).
+    val rotOuter = remember { Animatable(0f) }
+    val rotInner = remember { Animatable(0f) }
+    LaunchedEffect(isPlaying) {
+        if (!isPlaying) return@LaunchedEffect
+        launch { while (isActive) { rotOuter.animateTo(rotOuter.value + 360f, tween(28000, easing = LinearEasing)) } }
+        launch { while (isActive) { rotInner.animateTo(rotInner.value - 360f, tween(19000, easing = LinearEasing)) } }
+    }
+    // Лёгкая пульсация лепестков.
+    val pulse = rememberInfiniteTransition(label = "seaPulse")
+    val pOuter by pulse.animateFloat(1f, 1.04f, infiniteRepeatable(tween(2200, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "po")
+    val pInner by pulse.animateFloat(1.03f, 0.98f, infiniteRepeatable(tween(1700, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "pi")
+    val sOuter = if (isPlaying) pOuter else 1f
+    val sInner = if (isPlaying) pInner else 1f
+
     Box(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
+        // Внешний лепесток (вращается в одну сторону).
         Box(
             modifier = Modifier
                 .size(300.dp)
+                .graphicsLayer { rotationZ = rotOuter.value; scaleX = sOuter; scaleY = sOuter }
                 .clip(outerShape)
                 .background(cs.secondaryContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(232.dp)
-                    .clip(outerShape)
-                    .background(innerColor),
-                contentAlignment = Alignment.Center,
-            ) {
+        )
+        // Внутренний лепесток (вращается в другую сторону, чуть быстрее).
+        Box(
+            modifier = Modifier
+                .size(232.dp)
+                .graphicsLayer { rotationZ = rotInner.value; scaleX = sInner; scaleY = sInner }
+                .clip(outerShape)
+                .background(innerColor),
+        )
+        // Контент поверх — не вращается.
+        Box(modifier = Modifier.width(232.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         "Sea",
@@ -2095,17 +2135,21 @@ private fun SeaCard(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = onColor,
-                        maxLines = 1,
-                        modifier = Modifier.padding(horizontal = 24.dp),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 18.dp),
                     )
                     Text(
                         text = playingArtist ?: "под твой вкус",
                         style = MaterialTheme.typography.bodyMedium,
                         color = onColor.copy(alpha = 0.7f),
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 18.dp),
                     )
                 }
-            }
         }
     }
 }

@@ -1,15 +1,13 @@
 package com.melo.music.extractor
 
 import com.melo.music.byedpi.ByeDpiProxy
+import com.melo.music.net.MeloNet
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
-import java.net.InetSocketAddress
-import java.net.Proxy
-import java.net.ProxySelector
 import java.net.URI
 
 /**
@@ -22,16 +20,8 @@ class OkHttpDownloader(
 
     private val dynamicProxyClient: OkHttpClient by lazy {
         client.newBuilder()
-            .proxySelector(object : ProxySelector() {
-                override fun select(uri: URI): List<Proxy> {
-                    return if (ByeDpiProxy.isEnabled() && ByeDpiProxy.isRunning()) {
-                        listOf(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", ByeDpiProxy.DEFAULT_PORT)))
-                    } else {
-                        listOf(Proxy.NO_PROXY)
-                    }
-                }
-                override fun connectFailed(uri: URI, sa: java.net.SocketAddress, ioe: java.io.IOException) {}
-            })
+            .proxySelector(MeloNet.byedpiSelector)
+            .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
             .build()
     }
 
@@ -64,13 +54,28 @@ class OkHttpDownloader(
             client
         }
 
-        val response = activeClient.newCall(requestBuilder.build()).execute()
+        val host = runCatching { URI(url).host }.getOrNull() ?: url
+        val sc = host.contains("soundcloud") || host.contains("sndcdn")
+        val proxied = ByeDpiProxy.shouldRoute()
+        val started = System.currentTimeMillis()
+        val response = try {
+            activeClient.newCall(requestBuilder.build()).execute()
+        } catch (e: Exception) {
+            if (sc || LOG_ALL) {
+                android.util.Log.e("MeloNet", "$httpMethod $host FAILED proxy=$proxied: ${e.javaClass.simpleName}: ${e.message}")
+            }
+            throw e
+        }
         if (response.code == 429) {
             response.close()
             throw ReCaptchaException("reCaptcha Challenge requested", url)
         }
 
         val body = response.body?.string()
+        val ms = System.currentTimeMillis() - started
+        if (sc || LOG_ALL) {
+            android.util.Log.e("MeloNet", "$httpMethod $host -> ${response.code} ${body?.length ?: 0}b ${ms}ms proxy=$proxied")
+        }
         val latestUrl = response.request.url.toString()
         return Response(
             response.code,
@@ -82,6 +87,8 @@ class OkHttpDownloader(
     }
 
     private companion object {
+        // Поставь true, чтобы видеть ВСЕ запросы NewPipe (не только SoundCloud).
+        const val LOG_ALL = false
         const val USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0"
     }

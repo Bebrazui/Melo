@@ -88,11 +88,22 @@ object NewPipeResolver {
         val info = StreamInfo.getInfo(serviceFor(url), url)
         val t2 = android.os.SystemClock.elapsedRealtime()
         val candidates = info.audioStreams.filter { it.content.isNotBlank() }
-        // Предпочитаем прогрессивный поток (проще для ExoPlayer), иначе любой (HLS).
-        val audio = candidates.filter { it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP }
-            .maxByOrNull { it.averageBitrate }
-            ?: candidates.maxByOrNull { it.averageBitrate }
-            ?: throw IllegalStateException("NewPipe не нашёл аудио-потоков")
+        val audio = if (isSoundCloud(url)) {
+            // SoundCloud: прогрессив (cf-media) и aac_160k (Go+) отдают 403 для анонима.
+            // Берём бесплатный HLS < 160 кбит/с (mp3 128 / opus).
+            val hls = candidates.filter { it.deliveryMethod == DeliveryMethod.HLS }
+            hls.forEach {
+                android.util.Log.e("MeloSC", "hls br=${it.averageBitrate} url=${it.content.take(60)}")
+            }
+            hls.filter { it.averageBitrate in 1 until 160 }.maxByOrNull { it.averageBitrate }
+                ?: hls.filter { it.averageBitrate <= 0 }.firstOrNull()
+                ?: hls.minByOrNull { it.averageBitrate }
+                ?: candidates.maxByOrNull { it.averageBitrate }
+        } else {
+            // YouTube/Bandcamp: прогрессив проще для ExoPlayer.
+            candidates.filter { it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP }.maxByOrNull { it.averageBitrate }
+                ?: candidates.maxByOrNull { it.averageBitrate }
+        } ?: throw IllegalStateException("NewPipe не нашёл аудио-потоков")
         val t3 = android.os.SystemClock.elapsedRealtime()
         val source = when {
             isSoundCloud(url) -> Source.SOUNDCLOUD

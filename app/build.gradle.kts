@@ -123,6 +123,7 @@ dependencies {
     // NewPipe Extractor — YouTube
     implementation(libs.newpipe.extractor)
     implementation(libs.okhttp)
+    implementation(libs.okhttp.dnsoverhttps)
 
     // Обложки треков
     implementation(libs.coil.compose)

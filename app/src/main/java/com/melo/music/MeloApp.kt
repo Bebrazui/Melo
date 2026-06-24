@@ -50,6 +50,7 @@ class MeloApp : Application(), ImageLoaderFactory {
         Recommender.init(this)
         // Карта музыки: бэкенд Appwrite + osmdroid.
         com.melo.music.map.AppwriteService.init(this)
+        com.melo.music.map.MapModeration.init(this)
         org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
         Thread {
             kotlinx.coroutines.runBlocking {
@@ -66,7 +67,12 @@ class MeloApp : Application(), ImageLoaderFactory {
             runCatching { NewPipeResolver.ensureInit(this) }
             // Добываем SoundCloud client_id с рабочих хостов (минуя soundcloud.com).
             runCatching { SoundCloudFix.ensure(this) }
+            // Прогреваем SC-медиахосты: ByeDPI заранее подберёт стратегию, иначе
+            // первый трек ~15с ловит source error пока подбор идёт на лету.
+            runCatching { SoundCloudFix.warmUp() }
         }.start()
+        // Авто-тюнер SC-стратегий отключён: победитель ([2]) зашит в ByeDpiProxy.DEFAULT_CMD.
+        // SoundCloudFix.tuneThroughput(...) остаётся для ручной перепроверки при необходимости.
     }
 
     /**
@@ -84,6 +90,10 @@ class MeloApp : Application(), ImageLoaderFactory {
             .dispatcher(dispatcher)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
+            // ByeDPI + системный DNS (DoH давал недостижимые IP для sndcdn).
+            // HTTP/1.1: десинк ByeDPI ломает HTTP/2 (обложки виснут).
+            .proxySelector(com.melo.music.net.MeloNet.byedpiSelector)
+            .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
                     .header(
@@ -92,20 +102,18 @@ class MeloApp : Application(), ImageLoaderFactory {
                             "Gecko/20100101 Firefox/91.0",
                     )
                     .build()
-                chain.proceed(request)
-            }
-        if (ByeDpiProxy.isEnabled()) {
-            clientBuilder.proxySelector(object : ProxySelector() {
-                override fun select(uri: URI): List<Proxy> {
-                    return if (ByeDpiProxy.isRunning()) {
-                        listOf(ByeDpiProxy.getProxy())
-                    } else {
-                        listOf(Proxy.NO_PROXY)
+                val host = request.url.host
+                try {
+                    val resp = chain.proceed(request)
+                    if (host.contains("sndcdn") || host.contains("bcbits") || host.contains("soundcloud")) {
+                        android.util.Log.e("MeloImg", "$host -> ${resp.code}")
                     }
+                    resp
+                } catch (e: Exception) {
+                    android.util.Log.e("MeloImg", "$host FAILED: ${e.javaClass.simpleName}: ${e.message}")
+                    throw e
                 }
-                override fun connectFailed(uri: URI, sa: SocketAddress, ioe: IOException) {}
-            })
-        }
+            }
         val client = clientBuilder.build()
         return ImageLoader.Builder(this)
             .okHttpClient(client)

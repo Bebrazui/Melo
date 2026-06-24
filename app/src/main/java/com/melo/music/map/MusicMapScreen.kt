@@ -41,7 +41,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -51,7 +50,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -137,6 +138,7 @@ fun MusicMapScreen(
     onSearch: (String) -> Flow<List<TrackItem>>,
     onPlay: (TrackItem) -> Unit,
     onClose: () -> Unit,
+    topInset: androidx.compose.ui.unit.Dp = 0.dp,
     bottomInset: androidx.compose.ui.unit.Dp = 0.dp,
     nowPlayingBar: @Composable () -> Unit = {},
 ) {
@@ -151,6 +153,8 @@ fun MusicMapScreen(
     var captionFor by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var pickerOpen by remember { mutableStateOf(false) }
     var pendingTrack by remember { mutableStateOf<TrackItem?>(null) }
+    var reportDrop by remember { mutableStateOf<MapDrop?>(null) }
+    var confirmDeleteDrop by remember { mutableStateOf<MapDrop?>(null) }
     var mapQuery by remember { mutableStateOf("") }
     var recentCache by remember { mutableStateOf<List<MapDrop>>(emptyList()) }
     var searchHits by remember { mutableStateOf<List<MapDrop>>(emptyList()) }
@@ -303,7 +307,7 @@ fun MusicMapScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(Color(0xF20B1610), Color(0xCC0B1610), Color(0x000B1610))))
-                .padding(start = 6.dp, end = 14.dp, top = 36.dp, bottom = 16.dp),
+                .padding(start = 6.dp, end = 14.dp, top = topInset + 8.dp, bottom = 16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp)) {
                 Surface(
@@ -393,7 +397,6 @@ fun MusicMapScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .navigationBarsPadding()
                 .padding(bottom = bottomInset),
         ) {
             AnimatedVisibility(
@@ -438,6 +441,20 @@ fun MusicMapScreen(
                                 Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text("Слушать", fontWeight = FontWeight.SemiBold)
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                TextButton(onClick = { reportDrop = d }) {
+                                    Icon(Icons.Rounded.Flag, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White.copy(alpha = 0.6f))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Пожаловаться", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+                                }
+                                if (d.ownerId == AppwriteService.userId) {
+                                    TextButton(onClick = { confirmDeleteDrop = d }) {
+                                        Icon(Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White.copy(alpha = 0.6f))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Удалить", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
                             }
                         }
                     }
@@ -494,6 +511,12 @@ fun MusicMapScreen(
                             shape = RoundedCornerShape(16.dp),
                             modifier = Modifier.fillMaxWidth(),
                         )
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            "Размещая трек, вы подтверждаете, что не нарушаете авторские права. Музыка берётся из открытых источников и принадлежит правообладателям.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.5f),
+                        )
                         Spacer(Modifier.height(16.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             TextButton(onClick = { captionFor = null }) { Text("Отмена") }
@@ -508,6 +531,68 @@ fun MusicMapScreen(
                                         .onFailure { status = "Ошибка: ${it.message}" }
                                 }
                             }) { Text("Оставить") }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Жалоба на пин.
+        reportDrop?.let { d ->
+            Dialog(onDismissRequest = { reportDrop = null }) {
+                Surface(shape = RoundedCornerShape(24.dp), color = GLASS) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text("Пожаловаться", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                        Spacer(Modifier.height(6.dp))
+                        Text("Что не так с этим пином?", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                        Spacer(Modifier.height(12.dp))
+                        listOf("Нарушает авторские права", "Спам или реклама", "Оскорбительный контент", "Другое").forEach { reason ->
+                            Text(
+                                reason,
+                                color = Color.White,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        reportDrop = null
+                                        selected = null
+                                        status = "Отправляю жалобу…"
+                                        scope.launch {
+                                            DropsRepository.report(d, reason)
+                                                .onSuccess { status = "Жалоба отправлена, пин скрыт"; reload() }
+                                                .onFailure { status = "Не удалось отправить жалобу" }
+                                        }
+                                    }
+                                    .padding(vertical = 12.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Подтверждение удаления своего пина.
+        confirmDeleteDrop?.let { d ->
+            Dialog(onDismissRequest = { confirmDeleteDrop = null }) {
+                Surface(shape = RoundedCornerShape(24.dp), color = GLASS) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text("Удалить пин?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                        Spacer(Modifier.height(8.dp))
+                        Text("«${d.title}» исчезнет с карты.", color = Color.White.copy(alpha = 0.7f))
+                        Spacer(Modifier.height(18.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = { confirmDeleteDrop = null }) { Text("Отмена") }
+                            Spacer(Modifier.width(8.dp))
+                            Button(onClick = {
+                                confirmDeleteDrop = null
+                                selected = null
+                                status = "Удаляю…"
+                                scope.launch {
+                                    DropsRepository.delete(d.id)
+                                        .onSuccess { status = "Удалено"; reload() }
+                                        .onFailure { status = "Не удалось удалить" }
+                                }
+                            }) { Text("Удалить") }
                         }
                     }
                 }

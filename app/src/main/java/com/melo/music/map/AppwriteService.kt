@@ -20,6 +20,8 @@ object AppwriteService {
     // Облачная библиотека (синк плейлистов/избранного по аккаунту). Кастомные ID.
     const val COLLECTION_PLAYLISTS = "playlists"
     const val COLLECTION_FAVORITES = "favorites"
+    // Жалобы на пины карты (модерация UGC).
+    const val COLLECTION_REPORTS = "reports"
     // Публичные профили пользователей + хранилище аватарок.
     const val COLLECTION_PROFILES = "profiles"
     const val BUCKET_AVATARS = "avatars"

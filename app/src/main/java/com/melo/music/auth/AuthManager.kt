@@ -114,10 +114,21 @@ object AuthManager {
     ): Result<Unit> = runCatching {
         android.util.Log.e("MeloAuth", "got idToken len=${idToken.length}, calling function $GOOGLE_FUNCTION_ID")
         val functions = Functions(AppwriteService.client)
-        val exec = functions.createExecution(
-            functionId = GOOGLE_FUNCTION_ID,
-            body = JSONObject().put("idToken", idToken).toString(),
-        )
+        val exec = try {
+            kotlinx.coroutines.withTimeout(35_000) {
+                functions.createExecution(
+                    functionId = GOOGLE_FUNCTION_ID,
+                    body = JSONObject().put("idToken", idToken).toString(),
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MeloAuth", "createExecution FAIL: ${e.javaClass.simpleName}: ${e.message}")
+            throw if (e is kotlinx.coroutines.TimeoutCancellationException) {
+                Exception("Сервер входа не отвечает. Проверьте соединение/VPN и повторите.")
+            } else {
+                e
+            }
+        }
         android.util.Log.e(
             "MeloAuth",
             "exec status=${exec.status} code=${exec.responseStatusCode} " +

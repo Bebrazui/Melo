@@ -129,6 +129,25 @@ fun SettingsScreen(
                 )
             }
 
+            Spacer(Modifier.height(20.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(16.dp))
+
+            // ── ВРЕМЕННО: подбор стратегии ByeDPI под SoundCloud ─────
+            androidx.compose.material3.Button(
+                onClick = { Thread { com.melo.music.extractor.SoundCloudFix.tuneHosts() }.start() },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("🔧 Подобрать стратегию SoundCloud (тест)")
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Временно. Выключи VPN. Перебирает стратегии ByeDPI и ищет рабочую для обложек/потока. " +
+                    "Результаты в logcat (тег MeloTune, строки со ★). Может разок вылететь — просто открой заново.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
             Spacer(Modifier.height(24.dp))
         }
     }

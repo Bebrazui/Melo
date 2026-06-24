@@ -48,6 +48,7 @@ youtubedl-ffmpeg = { group = "io.github.junkfood02.youtubedl-android", name = "f
 # NewPipe Extractor — экстракция YouTube без yt-dlp
 newpipe-extractor = { group = "com.github.TeamNewPipe", name = "NewPipeExtractor", version.ref = "newpipe" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-dnsoverhttps = { group = "com.squareup.okhttp3", name = "okhttp-dnsoverhttps", version.ref = "okhttp" }
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 

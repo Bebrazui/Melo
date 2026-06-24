@@ -102,18 +102,29 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        // Аудио через ByeDPI (когда включён и запущен), иначе напрямую.
+        // Аудио через ByeDPI + системный DNS. HTTP/1.1 — десинк ломает HTTP/2-потоки.
+        // Длинные таймауты + переиспользование соединений: десинк капризен на НОВЫХ
+        // коннектах, поэтому держим установленные дольше и гоняем по ним все сегменты.
         val okClient = OkHttpClient.Builder()
-            .proxySelector(object : ProxySelector() {
-                override fun select(uri: URI): List<Proxy> {
-                    return if (ByeDpiProxy.isEnabled() && ByeDpiProxy.isRunning()) {
-                        listOf(ByeDpiProxy.getProxy())
-                    } else {
-                        listOf(Proxy.NO_PROXY)
-                    }
+            .proxySelector(com.melo.music.net.MeloNet.byedpiSelector)
+            .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
+            .connectTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .connectionPool(okhttp3.ConnectionPool(12, 5, java.util.concurrent.TimeUnit.MINUTES))
+            .addInterceptor { chain ->
+                val req = chain.request()
+                val host = req.url.host
+                try {
+                    val resp = chain.proceed(req)
+                    val tag = if (resp.code !in 200..299) req.url.toString().take(180) else host
+                    android.util.Log.e("MeloPlay", "${resp.code} <- $tag")
+                    resp
+                } catch (e: Exception) {
+                    android.util.Log.e("MeloPlay", "$host FAILED: ${e.javaClass.simpleName}: ${e.message}")
+                    throw e
                 }
-                override fun connectFailed(uri: URI, sa: SocketAddress, ioe: IOException) {}
-            })
+            }
             .build()
         val httpFactory = OkHttpDataSource.Factory(okClient)
             .setUserAgent(
@@ -123,9 +134,20 @@ class PlaybackService : MediaSessionService() {
         // DefaultDataSource: локальные офлайн-файлы (content://, file://) играем напрямую,
         // сетевые ссылки уходят в httpFactory (через ByeDPI).
         val dsFactory = androidx.media3.datasource.DefaultDataSource.Factory(this, httpFactory)
+        // Холодный коннект через ByeDPI (auto-режим подбирает стратегию) может упасть
+        // первые пару попыток. Быстрые тихие ретраи вместо "source error": больше
+        // попыток и короткая пауза — за это время ByeDPI прогревается и сегмент грузится.
+        val loadErrorPolicy = object : androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy() {
+            override fun getMinimumLoadableRetryCount(dataType: Int): Int = 8
+            override fun getRetryDelayMsFor(
+                info: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo,
+            ): Long = minOf(info.errorCount * 500L, 2_000L)
+        }
         // Важно: у каждого плеера СВОЙ LoadControl (общий требует общий поток).
         fun buildPlayer() = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dsFactory))
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(dsFactory).setLoadErrorHandlingPolicy(loadErrorPolicy),
+            )
             .setLoadControl(
                 DefaultLoadControl.Builder()
                     .setBufferDurationsMs(15_000, 50_000, 500, 1_000)
