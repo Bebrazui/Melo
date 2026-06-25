@@ -20,6 +20,7 @@ import com.melo.music.playlists.PlaylistManager
 import com.melo.music.recommend.Recommender
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
+import okhttp3.ResponseBody.Companion.toResponseBody
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Proxy
@@ -35,6 +36,10 @@ import java.util.concurrent.TimeUnit
  * Позже здесь же инициализируем Hilt-граф и Room.
  */
 class MeloApp : Application(), ImageLoaderFactory {
+
+    /** Лимит одновременных запросов обложек SoundCloud (i1-i4): при шторме ByeDPI рвёт коннекты. */
+    private val scImgSemaphore = java.util.concurrent.Semaphore(4)
+
     override fun onCreate() {
         super.onCreate()
         CrashHandler.install(this)
@@ -71,8 +76,6 @@ class MeloApp : Application(), ImageLoaderFactory {
             // первый трек ~15с ловит source error пока подбор идёт на лету.
             runCatching { SoundCloudFix.warmUp() }
         }.start()
-        // Авто-тюнер SC-стратегий отключён: победитель ([2]) зашит в ByeDpiProxy.DEFAULT_CMD.
-        // SoundCloudFix.tuneThroughput(...) остаётся для ручной перепроверки при необходимости.
     }
 
     /**
@@ -95,23 +98,50 @@ class MeloApp : Application(), ImageLoaderFactory {
             .proxySelector(com.melo.music.net.MeloNet.byedpiSelector)
             .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
             .addInterceptor { chain ->
-                val request = chain.request().newBuilder()
-                    .header(
-                        "User-Agent",
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) " +
-                            "Gecko/20100101 Firefox/91.0",
-                    )
-                    .build()
-                val host = request.url.host
+                val host = chain.request().url.host
+                val sc = host.contains("sndcdn") || host.contains("soundcloud")
+                // SoundCloud-обложки t500x500 (~73КБ) захлёбываются на ByeDPI; t200x200
+                // (~10КБ) пролезает надёжно и для мелких превью списка более чем хватает.
+                val origUrl = chain.request().url.toString()
+                val url = if (sc) {
+                    origUrl.replace(Regex("-(?:large|t\\d+x\\d+|original)\\.(jpg|jpeg|png)"), "-t200x200.$1")
+                } else {
+                    origUrl
+                }
+                val request = chain.request().newBuilder().url(url).header(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
+                ).build()
+                if (!sc) return@addInterceptor chain.proceed(request)
+                // SoundCloud-обложки: ограничиваем параллельность + повторяем при reset
+                // (Socket closed падает за ~100мс на свежем коннекте, повтор дёшев).
+                // Coil сам не ретраит — без этого упавшая обложка остаётся серой.
+                scImgSemaphore.acquire()
                 try {
-                    val resp = chain.proceed(request)
-                    if (host.contains("sndcdn") || host.contains("bcbits") || host.contains("soundcloud")) {
-                        android.util.Log.e("MeloImg", "$host -> ${resp.code}")
+                    var last: Exception? = null
+                    repeat(4) {
+                        try {
+                            val resp = chain
+                                .withConnectTimeout(5, TimeUnit.SECONDS)
+                                .withReadTimeout(4, TimeUnit.SECONDS)
+                                .proceed(request)
+                            if (resp.code in 400..499) return@addInterceptor resp
+                            if (!resp.isSuccessful) { resp.close(); last = java.io.IOException("HTTP ${resp.code}"); return@repeat }
+                            // Читаем ВСЁ тело здесь — под таймаут+ретрай (иначе Coil
+                            // дочитывает тело при декоде и ловит таймаут через ByeDPI).
+                            val ct = resp.body?.contentType()
+                            val bytes = resp.body!!.bytes()
+                            return@addInterceptor resp.newBuilder()
+                                .body(bytes.toResponseBody(ct))
+                                .build()
+                        } catch (e: Exception) {
+                            last = e
+                        }
                     }
-                    resp
-                } catch (e: Exception) {
-                    android.util.Log.e("MeloImg", "$host FAILED: ${e.javaClass.simpleName}: ${e.message}")
-                    throw e
+                    android.util.Log.e("MeloImg", "FAILx4 ${last?.javaClass?.simpleName} ${request.url}")
+                    throw last ?: java.io.IOException("img fail")
+                } finally {
+                    scImgSemaphore.release()
                 }
             }
         val client = clientBuilder.build()

@@ -134,14 +134,21 @@ class PlaybackService : MediaSessionService() {
         // DefaultDataSource: локальные офлайн-файлы (content://, file://) играем напрямую,
         // сетевые ссылки уходят в httpFactory (через ByeDPI).
         val dsFactory = androidx.media3.datasource.DefaultDataSource.Factory(this, httpFactory)
-        // Холодный коннект через ByeDPI (auto-режим подбирает стратегию) может упасть
-        // первые пару попыток. Быстрые тихие ретраи вместо "source error": больше
-        // попыток и короткая пауза — за это время ByeDPI прогревается и сегмент грузится.
+        // 4xx (403/401/404) = протухшая/невалидная ссылка — НЕ транзиентно: не долбим,
+        // сразу отдаём ошибку вверх → UI инвалидирует кэш и пере-резолвит свежую ссылку.
+        // Транзиентные сетевые сбои (таймаут/RST) повторяем пару раз с короткой паузой.
         val loadErrorPolicy = object : androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy() {
-            override fun getMinimumLoadableRetryCount(dataType: Int): Int = 8
             override fun getRetryDelayMsFor(
                 info: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo,
-            ): Long = minOf(info.errorCount * 500L, 2_000L)
+            ): Long {
+                val ex = info.exception
+                if (ex is androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException &&
+                    ex.responseCode in 400..499
+                ) {
+                    return androidx.media3.common.C.TIME_UNSET // не повторять — пусть пере-резолвит
+                }
+                return minOf(info.errorCount * 500L, 2_000L)
+            }
         }
         // Важно: у каждого плеера СВОЙ LoadControl (общий требует общий поток).
         fun buildPlayer() = ExoPlayer.Builder(this)

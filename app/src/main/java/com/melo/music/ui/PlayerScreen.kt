@@ -396,9 +396,9 @@ fun PlayerScreen(
                 // distinctBy: YouTube иногда отдаёт один трек дважды → дубль ключа в LazyColumn.
                 items = result.distinctBy { it.url }
                 listError = null
-                // Фоновая предзагрузка видимых рекомендаций (очередь, по одному):
-                // к моменту тапа трек уже в кэше → мгновенно.
-                items.take(8).forEach { onPrefetch(it.url) }
+                // Фоновая предзагрузка ПЕРВЫХ рекомендаций (очередь, по одному воркеру):
+                // к моменту тапа трек уже в кэше. Не больше 3 — иначе шторм резолвов.
+                items.take(3).forEach { onPrefetch(it.url) }
             }
             .onFailure { listError = it.message }
         listLoading = false
@@ -467,8 +467,9 @@ fun PlayerScreen(
                 .catch { listError = it.message }
                 .collect { partial ->
                     items = partial.distinctBy { it.url }
-                    // Агрессивный prefetch: все треки из частичной выдачи (YT + SC + Bandcamp)
-                    partial.filter { it.kind == ItemKind.TRACK }
+                    // Префетчим только ПЕРВЫЕ треки выдачи — не весь список (был шторм
+                    // на 15-30 SoundCloud-резолвов, прокси захлёбывался → таймауты).
+                    partial.filter { it.kind == ItemKind.TRACK }.take(3)
                         .forEach { onPrefetch(it.url) }
                 }
             listLoading = false
@@ -920,7 +921,7 @@ fun PlayerScreen(
                     val likedList = remember(likedVersion) { getLiked() }
                     // Прогреваем первые треки → первый тап мгновенный даже после перезапуска.
                     LaunchedEffect(likedVersion) {
-                        likedList.take(6).forEach { onPrefetch(it.url) }
+                        likedList.take(3).forEach { onPrefetch(it.url) }
                     }
                     if (likedList.isEmpty()) {
                         Placeholder(

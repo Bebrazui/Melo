@@ -61,6 +61,7 @@ object SoundCloudFix {
         if (!ByeDpiProxy.isEnabled()) return
         awaitProxy()
         val hosts = listOf(
+            "https://api-v2.soundcloud.com/",   // путь резолва (getInfo) — греем первым, чтобы не было 12с
             "https://cf-hls-media.sndcdn.com/",
             "https://cf-media.sndcdn.com/",
             "https://playback.media-streaming.soundcloud.cloud/",
@@ -299,6 +300,62 @@ object SoundCloudFix {
         "-f1+nme -t6 -As -Qr -s1:6+sm -a1 -As -s5:12+sm -a1 -As -d3 -q7 -r6 -Mh",
         "-s1 -q2 -a3 -Y -q1 -s1+s -L1 -o2 -At,r -f-2 -n www.ya.ru",
     )
+
+    /** Подбор стратегии для обложек i1.sndcdn.com (отдельный хост, свой DPI). 2xx = ОК. VPN OFF. */
+    fun tuneCovers(context: Context) {
+        val tag = "MeloTune"
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val cid = cachedId ?: prefs.getString(KEY_ID, null) ?: run { android.util.Log.e(tag, "нет client_id"); return }
+        runCatching { ByeDpiProxy.restart("-Kt -f1+s -t2 -r1+s") }; Thread.sleep(800)
+        val search = httpGet(client, "https://api-v2.soundcloud.com/search/tracks?q=lofi&limit=20&client_id=$cid")
+        val art = runCatching {
+            val coll = org.json.JSONObject(search!!).getJSONArray("collection")
+            var u: String? = null
+            for (i in 0 until coll.length()) {
+                val a = coll.optJSONObject(i)?.optString("artwork_url")
+                if (!a.isNullOrBlank() && a.contains("sndcdn")) { u = a; break }
+            }
+            u
+        }.getOrNull() ?: run { android.util.Log.e(tag, "нет artwork_url"); ByeDpiProxy.restart(ByeDpiProxy.DEFAULT_CMD); return }
+        val host = art.substringAfter("://").substringBefore("/")
+        android.util.Log.e(tag, "=== COVER tuning (полное ТЕЛО), host=$host url=$art (VPN OFF) ===")
+        val strategies = listOf(
+            "-Kt -r1+s -An",
+            "-Kt -r2+s -An",
+            "-Kt -r3+s -An",
+            "-Kt -o1+s -An",
+            "-Kt -o2+s -An",
+            "-Kt -s1+s -An",
+            "-Kt -d1+s -An",
+            "-Kt -q1+s -An",
+            "-Kt,h -d1 -s1+s -s3+s -s6+s -s9+s -a1 -An",
+            "-Kt -f1+s -t5 -o1+s -An",
+            "-Kt -f1+s -t2 -r1+s -An",
+            "-f-200 -s2 -s5+hm -t6 -Qr -An",
+            "-f-200 -s2 -s5+hm -t6 -Qr -n wb.ru -An",
+            "-Kth -Qorig -n www.google.com -f-1 -t5 -o1 -s1+s -s2+s -s5+s -d3+s -An",
+        )
+        var found: String? = null
+        for ((i, s) in strategies.withIndex()) {
+            val ok = runCatching { ByeDpiProxy.restart(s) }.getOrDefault(false)
+            Thread.sleep(500)
+            val res = if (!ok) "byedpi FAIL" else runCatching {
+                client.connectionPool.evictAll()
+                val t0 = System.currentTimeMillis()
+                client.newCall(Request.Builder().url(art).header("User-Agent", UA).build())
+                    .execute().use { resp ->
+                        if (resp.code !in 200..206) return@use "HTTP ${resp.code}"
+                        val n = resp.body?.bytes()?.size ?: 0  // ЧИТАЕМ ВСЁ ТЕЛО
+                        "OK ${n / 1024}KB ${System.currentTimeMillis() - t0}ms"
+                    }
+            }.getOrElse { "${it.javaClass.simpleName}" }
+            android.util.Log.e(tag, "[$i] $s -> $res")
+            if (res.startsWith("OK") && found == null) { found = s; android.util.Log.e(tag, "★ COVER ТЕЛО OK: $s ($res)") }
+        }
+        if (found == null) android.util.Log.e(tag, "обложки: тело не доставила ни одна")
+        runCatching { ByeDpiProxy.restart(ByeDpiProxy.DEFAULT_CMD) }
+        android.util.Log.e(tag, "=== COVER DONE ===")
+    }
 
     /**
      * Тестер: по одной прогоняет SC-стратегии добровольцев и качает живой

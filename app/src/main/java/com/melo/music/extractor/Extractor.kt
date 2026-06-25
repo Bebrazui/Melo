@@ -67,13 +67,13 @@ object Extractor {
     private val inFlight = ConcurrentHashMap<String, Deferred<ResolvedTrack>>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** Очередь фонового prefetch: несколько воркеров для параллельного резолва. */
+    /** Очередь фонового prefetch: 1 воркер — prefetch не должен мешать тапу пользователя. */
     @Volatile
     private var appCtx: Context? = null
     private val prefetchQueue = Channel<String>(Channel.UNLIMITED)
 
     init {
-        repeat(4) { worker ->
+        repeat(1) { worker ->
             scope.launch {
                 for (url in prefetchQueue) {
                     val ctx = appCtx ?: continue

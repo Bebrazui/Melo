@@ -47,9 +47,23 @@ object NewPipeResolver {
     fun ensureInit(context: Context) {
         if (initialized) return
         val cacheDir = File(context.applicationContext.cacheDir, "newpipe_http")
-        val builder = OkHttpClient.Builder()
+        // Через ОДИН ByeDPI-прокси нельзя гнать лавину запросов: при шторме (prefetch
+        // множества SoundCloud-треков, каждый = 6-8 запросов к api-v2) прокси
+        // захлёбывается и нужный треку запрос ловит таймаут ~12с. Жёстко ограничиваем
+        // одновременные запросы (особенно на хост) — тогда всё отвечает за ~150мс.
+        val dispatcher = okhttp3.Dispatcher().apply {
+            maxRequests = 8
+            maxRequestsPerHost = 4
+        }
+        val client = OkHttpClient.Builder()
             .cache(Cache(cacheDir, 64L * 1024 * 1024))
-        val client = builder.build()
+            .dispatcher(dispatcher)
+            // База под YouTube (base.js крупный). SoundCloud-зависания лечит
+            // ScRetryInterceptor в OkHttpDownloader (короткий таймаут + повтор).
+            .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
         // Локаль и страна устройства → региональные результаты (RU → русские песни).
         val locale = Locale.getDefault()
         val localization = Localization(

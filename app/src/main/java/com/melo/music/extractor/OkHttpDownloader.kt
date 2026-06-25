@@ -22,7 +22,40 @@ class OkHttpDownloader(
         client.newBuilder()
             .proxySelector(MeloNet.byedpiSelector)
             .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
+            .addInterceptor(ScRetryInterceptor)
             .build()
+    }
+
+    /**
+     * Через ByeDPI отдельные коннекты к SoundCloud иногда «немеют» — TLS встаёт,
+     * запрос уходит, ответа нет → read timeout ~10с убивает резолв (а соседние
+     * запросы летят за <1с). Для SC-хостов: короткий таймаут (4с) + до 3 попыток;
+     * каждый повтор берёт СВЕЖИЙ коннект, который обычно отвечает мгновенно.
+     */
+    private object ScRetryInterceptor : okhttp3.Interceptor {
+        override fun intercept(chain: okhttp3.Interceptor.Chain): okhttp3.Response {
+            val req = chain.request()
+            val host = req.url.host
+            if (!(host.contains("soundcloud") || host.contains("sndcdn"))) {
+                return chain.proceed(req)
+            }
+            // Connection: close — не оставляем коннект в пуле. Переиспользованные
+            // keep-alive соединения через ByeDPI «немеют»; свежее рукопожатие ByeDPI
+            // обходит надёжно. Каждый запрос = свежий коннект.
+            val fresh = req.newBuilder().header("Connection", "close").build()
+            var last: java.io.IOException? = null
+            repeat(3) {
+                try {
+                    return chain
+                        .withConnectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+                        .withReadTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+                        .proceed(fresh)
+                } catch (e: java.io.IOException) {
+                    last = e
+                }
+            }
+            throw last ?: java.io.IOException("SC retry failed")
+        }
     }
 
     override fun execute(request: Request): Response {
