@@ -39,6 +39,29 @@ object AuthManager {
 
     private fun account() = Account(AppwriteService.client)
 
+    // Кэш своего профиля на диске: показываем мгновенно при старте, не ждём сервер.
+    private var prefs: android.content.SharedPreferences? = null
+
+    fun init(context: android.content.Context) {
+        val p = context.applicationContext.getSharedPreferences("melo_self", android.content.Context.MODE_PRIVATE)
+        prefs = p
+        email = p.getString("email", null)
+        name = p.getString("name", null)
+        avatarUrl = p.getString("avatar", null)
+        bio = p.getString("bio", null)
+        isDeveloper = p.getBoolean("dev", false)
+        isVerified = p.getBoolean("verified", false)
+    }
+
+    private fun cacheSelf() {
+        prefs?.edit()?.apply {
+            putString("email", email); putString("name", name)
+            putString("avatar", avatarUrl); putString("bio", bio)
+            putBoolean("dev", isDeveloper); putBoolean("verified", isVerified)
+            apply()
+        }
+    }
+
     private suspend fun loadProfile(uid: String) {
         val p = ProfilesRepository.get(uid)
         avatarUrl = p?.avatarUrl
@@ -46,6 +69,7 @@ object AuthManager {
         isDeveloper = p?.isDeveloper ?: false
         isVerified = p?.isVerified ?: false
         if (!p?.name.isNullOrBlank()) name = p?.name
+        cacheSelf()
     }
 
     /** Сохранить профиль (имя, аватар, описание) текущего пользователя. */
@@ -55,6 +79,7 @@ object AuthManager {
         name = newName.trim().ifBlank { "Пользователь Melo" }
         avatarUrl = newAvatarUrl
         bio = newBio?.trim()?.ifBlank { null }
+        cacheSelf()
     }
 
     /** Удаляет текущую (обычно анонимную) сессию — иначе новый вход запрещён. */
@@ -64,7 +89,10 @@ object AuthManager {
 
     /** Подтянуть текущего пользователя (у анонима email пустой). */
     suspend fun refresh() {
-        val u = runCatching { account().get() }.getOrNull()
+        val result = runCatching { account().get() }
+        // Сервер недоступен (офлайн/DPI) — оставляем закэшированный профиль, не разлогиниваем.
+        if (result.isFailure) return
+        val u = result.getOrNull()
         email = u?.email?.ifBlank { null }
         name = u?.name?.ifBlank { null }
         avatarUrl = null
@@ -74,6 +102,8 @@ object AuthManager {
         if (loggedIn && u != null) {
             runCatching { ProfilesRepository.ensureDefault(u.id, u.name, null) }
             runCatching { loadProfile(u.id) }
+        } else {
+            cacheSelf()
         }
         // Включаем/выключаем облачную синхронизацию библиотеки по статусу входа.
         com.melo.music.sync.LibrarySync.onAuthChanged(loggedIn)
@@ -112,7 +142,7 @@ object AuthManager {
         photoUrl: String? = null,
         displayName: String? = null,
     ): Result<Unit> = runCatching {
-        android.util.Log.e("MeloAuth", "got idToken len=${idToken.length}, calling function $GOOGLE_FUNCTION_ID")
+        // android.util.Log.e("MeloAuth", "got idToken len=${idToken.length}, calling function $GOOGLE_FUNCTION_ID")
         val functions = Functions(AppwriteService.client)
         val exec = try {
             kotlinx.coroutines.withTimeout(35_000) {
@@ -122,18 +152,18 @@ object AuthManager {
                 )
             }
         } catch (e: Exception) {
-            android.util.Log.e("MeloAuth", "createExecution FAIL: ${e.javaClass.simpleName}: ${e.message}")
+            // android.util.Log.e("MeloAuth", "createExecution FAIL: ${e.javaClass.simpleName}: ${e.message}")
             throw if (e is kotlinx.coroutines.TimeoutCancellationException) {
                 Exception("Сервер входа не отвечает. Проверьте соединение/VPN и повторите.")
             } else {
                 e
             }
         }
-        android.util.Log.e(
-            "MeloAuth",
-            "exec status=${exec.status} code=${exec.responseStatusCode} " +
-                "bodyLen=${exec.responseBody.length} errors=${exec.errors.take(300)} body=${exec.responseBody.take(300)}",
-        )
+        // android.util.Log.e(
+        //     "MeloAuth",
+        //     "exec status=${exec.status} code=${exec.responseStatusCode} " +
+        //         "bodyLen=${exec.responseBody.length} errors=${exec.errors.take(300)} body=${exec.responseBody.take(300)}",
+        // )
         val resp = JSONObject(exec.responseBody.ifBlank { "{}" })
         if (!resp.optBoolean("ok")) error(resp.optString("error", "Ошибка функции (status=${exec.status})"))
         clearSession()
@@ -144,7 +174,7 @@ object AuthManager {
             runCatching { ProfilesRepository.ensureDefault(uid, displayName, photoUrl) }
             runCatching { loadProfile(uid) }
         }
-        android.util.Log.e("MeloAuth", "google login OK, email=$email")
+        // android.util.Log.e("MeloAuth", "google login OK, email=$email")
     }
 
     /** Выход → возвращаемся в анонимную сессию (карта и т.п. продолжают работать). */

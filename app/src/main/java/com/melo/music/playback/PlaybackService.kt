@@ -82,6 +82,27 @@ class PlaybackService : MediaSessionService() {
         /** Команда сервису: отменить текущий кроссфейд (при ручном переключении). */
         var cancelCrossfadeCmd: (() -> Unit)? = null
         fun cancelCrossfade() = cancelCrossfadeCmd?.invoke()
+
+        // ── Таймер сна ──────────────────────────────────────────────────────
+        /** Момент засыпания (elapsedRealtime, мс). 0 = таймер выключен. */
+        @Volatile var sleepEndAt: Long = 0L
+            private set
+        /** Режим «до конца трека»: пауза по окончании текущего трека. */
+        @Volatile var sleepEndOfTrack: Boolean = false
+            private set
+        /** Длительность плавного затухания перед паузой (мс). */
+        const val SLEEP_FADE_MS = 8_000L
+
+        fun setSleepTimerMinutes(minutes: Int) {
+            sleepEndOfTrack = false
+            sleepEndAt = if (minutes > 0) android.os.SystemClock.elapsedRealtime() + minutes * 60_000L else 0L
+        }
+        fun setSleepEndOfTrack() { sleepEndOfTrack = true; sleepEndAt = 0L }
+        fun cancelSleepTimer() { sleepEndAt = 0L; sleepEndOfTrack = false }
+        fun sleepActive(): Boolean = sleepEndAt > 0L || sleepEndOfTrack
+        /** Остаток до засыпания (мс), 0 если по минутам не задан. */
+        fun sleepRemainingMs(): Long =
+            if (sleepEndAt > 0L) (sleepEndAt - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L) else 0L
     }
 
     private var mediaSession: MediaSession? = null
@@ -118,10 +139,10 @@ class PlaybackService : MediaSessionService() {
                 try {
                     val resp = chain.proceed(req)
                     val tag = if (resp.code !in 200..299) req.url.toString().take(180) else host
-                    android.util.Log.e("MeloPlay", "${resp.code} <- $tag")
+                    // android.util.Log.e("MeloPlay", "${resp.code} <- $tag")
                     resp
                 } catch (e: Exception) {
-                    android.util.Log.e("MeloPlay", "$host FAILED: ${e.javaClass.simpleName}: ${e.message}")
+                    // android.util.Log.e("MeloPlay", "$host FAILED: ${e.javaClass.simpleName}: ${e.message}")
                     throw e
                 }
             }
@@ -241,9 +262,18 @@ class PlaybackService : MediaSessionService() {
     }
 
     private val endListener = object : Player.Listener {
+        override fun onIsPlayingChanged(playing: Boolean) {
+            com.melo.music.widget.WidgetUpdater.setPlaying(applicationContext, playing)
+        }
         override fun onPlaybackStateChanged(state: Int) {
             if (state == Player.STATE_ENDED && !crossfading) {
-                Log.d("MeloService", "STATE_ENDED (no crossfade)")
+                // Таймер сна «до конца трека»: останавливаемся, а не идём дальше.
+                if (sleepEndOfTrack) {
+                    sleepEndOfTrack = false
+                    active.pause()
+                    return
+                }
+                // Log.d("MeloService", "STATE_ENDED (no crossfade)")
                 onTrackEnded?.invoke()
             }
         }
@@ -256,8 +286,22 @@ class PlaybackService : MediaSessionService() {
                 val p = active
                 val dur = p.duration
                 val pos = p.currentPosition
+                // Таймер сна по минутам: плавно гасим в конце и ставим паузу.
+                if (sleepEndAt > 0L && p.isPlaying) {
+                    val remain = sleepEndAt - android.os.SystemClock.elapsedRealtime()
+                    when {
+                        remain <= 0L -> {
+                            p.pause()
+                            p.volume = 1f
+                            sleepEndAt = 0L
+                        }
+                        remain <= SLEEP_FADE_MS -> p.volume = (remain.toFloat() / SLEEP_FADE_MS).coerceIn(0.05f, 1f)
+                    }
+                }
                 if (!crossfading &&
                     crossfadeMs > 0 &&
+                    !sleepEndOfTrack &&
+                    sleepEndAt == 0L &&
                     nextUrl != null &&
                     p.isPlaying &&
                     dur > 0 &&

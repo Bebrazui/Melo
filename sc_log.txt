@@ -1,0 +1,380 @@
+﻿--------- beginning of main
+06-23 13:08:26.910 E/MeloSC  (31065): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:08:29.993 E/MeloSC  (31065): GET https://m.soundcloud.com/ → SocketException: SOCKS: Host unreachable
+06-23 13:08:30.361 E/MeloSC  (31065): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:08:33.448 E/MeloSC  (31065): GET https://m.soundcloud.com/ → SocketException: SOCKS: Host unreachable
+06-23 13:08:33.596 E/MeloSC  (31065): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:08:36.679 E/MeloSC  (31065): GET https://m.soundcloud.com/ → SocketException: SOCKS: Host unreachable
+06-23 13:08:36.860 E/MeloSC  (31065): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:08:37.132 E/MeloSC  (31065): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:08:37.132 E/MeloSC  (31065): не удалось добыть валидный client_id
+06-23 13:08:37.132 E/MeloSC  (31065): byedpi running=true (ждали 0мс)
+06-23 13:08:37.243 E/MeloSC  (31065): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:08:40.327 E/MeloSC  (31065): GET https://m.soundcloud.com/ → SocketException: SOCKS: Host unreachable
+06-23 13:08:40.506 E/MeloSC  (31065): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:08:40.753 E/MeloSC  (31065): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:08:40.869 E/MeloSC  (31065): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:08:43.945 E/MeloSC  (31065): GET https://m.soundcloud.com/ → SocketException: SOCKS: Host unreachable
+06-23 13:08:53.950 E/MeloSC  (31065): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:08:57.033 E/MeloSC  (31065): GET https://m.soundcloud.com/ → SocketException: SOCKS: Host unreachable
+06-23 13:08:57.393 E/MeloSC  (31065): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:08:57.648 E/MeloSC  (31065): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:08:57.762 E/MeloSC  (31065): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:00.841 E/MeloSC  (31065): GET https://m.soundcloud.com/ → SocketException: SOCKS: Host unreachable
+06-23 13:09:01.033 E/MeloSC  (31065): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:04.102 E/MeloSC  (31065): GET https://m.soundcloud.com/ → SocketException: SOCKS: Host unreachable
+06-23 13:09:04.216 E/MeloSC  (31065): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:06.055 E/MeloSC  (31642): byedpi running=true (ждали 0мс)
+06-23 13:09:06.542 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:09.609 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: SOCKS: Host unreachable
+06-23 13:09:09.782 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:10.120 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:10.234 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:10.487 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:10.665 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:10.932 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:20.937 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:09:21.180 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:31.182 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:09:31.447 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:31.800 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:32.044 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:32.156 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:32.401 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:32.402 E/MeloSC  (31642): не удалось добыть валидный client_id
+06-23 13:09:32.402 E/MeloSC  (31642): byedpi running=true (ждали 0мс)
+06-23 13:09:32.585 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:32.844 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:32.958 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:33.215 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:33.332 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:33.579 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:33.756 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:34.002 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:44.006 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:09:44.257 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:54.261 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:09:54.520 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:54.890 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:55.142 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:55.259 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:55.508 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:55.508 E/MeloSC  (31642): не удалось добыть валидный client_id
+06-23 13:09:55.509 E/MeloSC  (31642): byedpi running=true (ждали 0мс)
+06-23 13:09:55.689 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:55.843 E/MeloNet (31642): GET soundcloud.com FAILED proxy=true: SocketException: Connection reset
+06-23 13:09:55.943 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:56.128 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:56.396 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:56.512 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:56.767 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:09:56.953 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:09:57.208 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:10:07.213 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:10:07.465 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:10:17.470 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:10:17.848 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:10:18.444 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:10:18.696 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:10:18.814 E/MeloSC  (31642): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:10:19.067 E/MeloSC  (31642): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:10:19.067 E/MeloSC  (31642): не удалось добыть валидный client_id
+06-23 13:10:19.363 E/MeloNet (31642): GET soundcloud.com FAILED proxy=true: SocketException: Connection reset
+06-23 13:15:18.087 E/MeloSC  ( 1597): byedpi running=true (ждали 0мс)
+06-23 13:15:18.392 E/MeloSC  ( 1597): probe soundcloud.com    = SocketException: Connection reset
+06-23 13:15:18.650 E/MeloSC  ( 1597): probe api-v2            = SocketException: Connection reset
+06-23 13:15:19.480 E/MeloSC  ( 1597): probe a-v2.sndcdn.com   = HTTP 403
+06-23 13:15:19.972 E/MeloSC  ( 1597): probe assets.web.sc     = HTTP 403
+06-23 13:15:20.300 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:20.614 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:15:20.722 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:15:21.032 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:21.324 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:21.631 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:15:21.807 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:15:22.062 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:22.364 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:22.653 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:15:22.766 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:15:23.010 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:23.311 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:23.598 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:15:23.706 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:15:23.949 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:24.270 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:24.601 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:15:34.606 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:15:34.857 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:35.146 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:35.458 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:15:45.461 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:15:45.891 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:46.220 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:46.515 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:15:46.867 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:15:47.179 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:47.477 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:47.807 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:15:47.939 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:15:48.224 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:48.224 E/MeloSC  ( 1597): не удалось добыть валидный client_id
+06-23 13:15:48.225 E/MeloSC  ( 1597): byedpi running=true (ждали 0мс)
+06-23 13:15:48.563 E/MeloSC  ( 1597): probe soundcloud.com    = SocketException: Connection reset
+06-23 13:15:48.838 E/MeloSC  ( 1597): probe api-v2            = SocketException: Connection reset
+06-23 13:15:49.412 E/MeloSC  ( 1597): probe a-v2.sndcdn.com   = HTTP 403
+06-23 13:15:49.525 E/MeloSC  ( 1597): probe assets.web.sc     = HTTP 403
+06-23 13:15:49.828 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:50.125 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:15:50.302 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:15:50.576 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:50.882 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:51.192 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:15:51.305 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:15:51.564 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:51.875 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:52.191 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:15:52.371 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:15:52.631 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:52.960 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:15:53.275 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:16:03.280 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:16:03.544 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:16:03.877 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:16:04.189 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:16:14.193 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:16:14.450 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:16:14.841 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:16:16.183 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:16:16.539 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:16:16.787 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:16:17.089 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:16:17.389 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:16:17.503 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:16:17.765 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:16:18.060 E/MeloSC  ( 1597): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:16:18.374 E/MeloSC  ( 1597): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:16:18.551 E/MeloSC  ( 1597): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:16:18.801 E/MeloSC  ( 1597): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:16:18.802 E/MeloSC  ( 1597): не удалось добыть валидный client_id
+06-23 13:16:19.114 E/MeloNet ( 1597): GET soundcloud.com FAILED proxy=true: SocketException: Connection reset
+06-23 13:22:53.844 E/MeloSC  ( 6699): probe api-v2            = SocketException: Connection reset
+06-23 13:22:54.539 E/MeloSC  ( 6699): probe a-v2.sndcdn.com   = HTTP 403
+06-23 13:22:54.883 E/MeloSC  ( 6699): probe assets.web.sc     = HTTP 403
+06-23 13:22:55.166 E/MeloSC  ( 6699): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:22:55.465 E/MeloSC  ( 6699): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:22:55.580 E/MeloSC  ( 6699): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:22:56.054 E/MeloSC  ( 6699): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:22:56.392 E/MeloSC  ( 6699): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:22:56.689 E/MeloSC  ( 6699): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:22:56.866 E/MeloSC  ( 6699): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:22:59.947 E/MeloSC  ( 6699): GET https://m.soundcloud.com/ → SocketException: SOCKS: Host unreachable
+06-23 13:23:00.247 E/MeloSC  ( 6699): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:23:00.545 E/MeloSC  ( 6699): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:23:00.725 E/MeloSC  ( 6699): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:23:03.815 E/MeloSC  ( 6699): GET https://m.soundcloud.com/ → SocketException: SOCKS: Host unreachable
+06-23 13:23:04.121 E/MeloSC  ( 6699): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:23:04.430 E/MeloSC  ( 6699): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:23:04.544 E/MeloSC  ( 6699): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:23:07.625 E/MeloSC  ( 6699): GET https://m.soundcloud.com/ → SocketException: SOCKS: Host unreachable
+06-23 13:23:07.968 E/MeloSC  ( 6699): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:23:08.274 E/MeloSC  ( 6699): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:23:18.279 E/MeloSC  ( 6699): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:23:18.583 E/MeloSC  ( 6699): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:23:18.889 E/MeloSC  ( 6699): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:23:19.191 E/MeloSC  ( 6699): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:25:26.982 E/MeloSC  ( 8626): byedpi running=true (ждали 0мс)
+06-23 13:25:26.983 E/MeloSC  ( 8626): === РЕЖИМ: VPN/direct (vpn=true, byedpi=true) ===
+06-23 13:25:29.168 E/MeloSC  ( 8626): probe soundcloud.com    = HTTP 200
+06-23 13:25:30.606 E/MeloSC  ( 8626): probe api-v2            = HTTP 401
+06-23 13:25:32.220 E/MeloSC  ( 8626): probe a-v2.sndcdn.com   = HTTP 403
+06-23 13:25:33.737 E/MeloSC  ( 8626): probe assets.web.sc     = HTTP 403
+06-23 13:25:33.963 E/MeloSC  ( 8626): попытка 0: https://soundcloud.com/ → HTML 63510 символов
+06-23 13:25:33.965 E/MeloSC  ( 8626): https://soundcloud.com/ → бандлов: 9
+06-23 13:25:34.748 E/MeloSC  ( 8626): client_id из https://a-v2.sndcdn.com/assets/54-a6ee4e8a.js
+06-23 13:25:35.077 E/MeloSC  ( 8626): client_id добыт и валиден: LTLMr3WicbciHhGBXyyqhGr6OXXAnY0g
+06-23 13:25:37.169 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 46095b 2090ms proxy=true
+06-23 13:25:38.806 E/MeloNet ( 8626): GET api-widget.soundcloud.com -> 200 4356b 1591ms proxy=true
+06-23 13:25:38.808 E/MeloNet ( 8626): GET api-widget.soundcloud.com -> 200 5106b 1570ms proxy=true
+06-23 13:25:38.887 E/MeloNet ( 8626): GET api-widget.soundcloud.com -> 200 4360b 1650ms proxy=true
+06-23 13:25:38.909 E/MeloNet ( 8626): GET api-widget.soundcloud.com -> 200 4340b 1702ms proxy=true
+06-23 13:25:39.996 E/MeloNet ( 8626): GET w.soundcloud.com -> 200 2405b 1087ms proxy=true
+06-23 13:25:39.997 E/MeloNet ( 8626): GET w.soundcloud.com -> 200 2410b 1109ms proxy=true
+06-23 13:25:40.001 E/MeloNet ( 8626): GET w.soundcloud.com -> 200 2403b 1193ms proxy=true
+06-23 13:25:40.006 E/MeloNet ( 8626): GET w.soundcloud.com -> 200 2403b 1198ms proxy=true
+06-23 13:25:40.500 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 4340b 476ms proxy=true
+06-23 13:25:40.503 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 4336b 476ms proxy=true
+06-23 13:25:40.505 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 4320b 479ms proxy=true
+06-23 13:25:40.508 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 5086b 482ms proxy=true
+06-23 13:25:40.681 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 849b 180ms proxy=true
+06-23 13:25:40.684 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 849b 180ms proxy=true
+06-23 13:25:40.686 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 849b 177ms proxy=true
+06-23 13:25:40.688 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 849b 183ms proxy=true
+06-23 13:25:40.886 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 848b 202ms proxy=true
+06-23 13:25:40.889 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 848b 203ms proxy=true
+06-23 13:25:40.891 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 848b 203ms proxy=true
+06-23 13:25:40.893 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 848b 208ms proxy=true
+06-23 13:25:41.064 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 404 2b 177ms proxy=true
+06-23 13:25:41.066 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 404 2b 175ms proxy=true
+06-23 13:25:41.069 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 404 2b 180ms proxy=true
+06-23 13:25:41.070 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 404 2b 177ms proxy=true
+06-23 13:25:41.276 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 697b 211ms proxy=true
+06-23 13:25:41.276 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 697b 205ms proxy=true
+06-23 13:25:41.279 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 697b 212ms proxy=true
+06-23 13:25:41.284 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 697b 214ms proxy=true
+06-23 13:25:41.459 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 634b 182ms proxy=true
+06-23 13:25:41.461 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 634b 181ms proxy=true
+06-23 13:25:41.464 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 634b 187ms proxy=true
+06-23 13:25:41.465 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 634b 180ms proxy=true
+06-23 13:25:41.718 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 35809b 252ms proxy=true
+06-23 13:25:41.735 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 37029b 273ms proxy=true
+06-23 13:25:41.742 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 38524b 277ms proxy=true
+06-23 13:25:41.768 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 38243b 307ms proxy=true
+06-23 13:25:41.930 E/MeloNet ( 8626): GET api-widget.soundcloud.com -> 200 4371b 198ms proxy=true
+06-23 13:25:42.450 E/MeloNet ( 8626): GET api-widget.soundcloud.com -> 200 4433b 708ms proxy=true
+06-23 13:25:42.451 E/MeloNet ( 8626): GET api-widget.soundcloud.com -> 200 4344b 671ms proxy=true
+06-23 13:25:42.458 E/MeloNet ( 8626): GET w.soundcloud.com -> 200 2419b 528ms proxy=true
+06-23 13:25:42.462 E/MeloNet ( 8626): GET api-widget.soundcloud.com -> 200 4384b 709ms proxy=true
+06-23 13:25:42.644 E/MeloNet ( 8626): GET w.soundcloud.com -> 200 2400b 193ms proxy=true
+06-23 13:25:42.647 E/MeloNet ( 8626): GET w.soundcloud.com -> 200 2420b 196ms proxy=true
+06-23 13:25:42.669 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 4351b 208ms proxy=true
+06-23 13:25:42.753 E/MeloNet ( 8626): GET w.soundcloud.com -> 200 2418b 291ms proxy=true
+06-23 13:25:42.846 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 4324b 199ms proxy=true
+06-23 13:25:42.849 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 849b 180ms proxy=true
+06-23 13:25:43.021 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 849b 174ms proxy=true
+06-23 13:25:43.024 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 848b 175ms proxy=true
+06-23 13:25:43.201 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 404 2b 176ms proxy=true
+06-23 13:25:43.213 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 848b 191ms proxy=true
+06-23 13:25:43.402 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 697b 199ms proxy=true
+06-23 13:25:43.412 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 404 2b 198ms proxy=true
+06-23 13:25:43.515 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 4413b 865ms proxy=true
+06-23 13:25:43.516 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 4364b 758ms proxy=true
+06-23 13:25:43.579 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 634b 176ms proxy=true
+06-23 13:25:43.590 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 697b 177ms proxy=true
+06-23 13:25:43.692 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 849b 175ms proxy=true
+06-23 13:25:43.694 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 849b 177ms proxy=true
+06-23 13:25:43.784 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 634b 193ms proxy=true
+06-23 13:25:43.870 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 36976b 289ms proxy=true
+06-23 13:25:43.909 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 848b 217ms proxy=true
+06-23 13:25:43.915 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 848b 221ms proxy=true
+06-23 13:25:44.060 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 36571b 274ms proxy=true
+06-23 13:25:44.083 E/MeloNet ( 8626): GET api-widget.soundcloud.com -> 200 5237b 200ms proxy=true
+06-23 13:25:44.084 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 404 2b 174ms proxy=true
+06-23 13:25:44.088 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 404 2b 172ms proxy=true
+06-23 13:25:44.267 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 697b 182ms proxy=true
+06-23 13:25:44.272 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 697b 183ms proxy=true
+06-23 13:25:44.274 E/MeloNet ( 8626): GET w.soundcloud.com -> 200 2441b 190ms proxy=true
+06-23 13:25:44.275 E/MeloNet ( 8626): GET api-widget.soundcloud.com -> 200 5095b 198ms proxy=true
+06-23 13:25:44.469 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 634b 196ms proxy=true
+06-23 13:25:44.471 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 634b 203ms proxy=true
+06-23 13:25:44.483 E/MeloNet ( 8626): GET w.soundcloud.com -> 200 2447b 208ms proxy=true
+06-23 13:25:44.497 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 5217b 220ms proxy=true
+06-23 13:25:44.679 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 849b 181ms proxy=true
+06-23 13:25:44.685 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 5075b 199ms proxy=true
+06-23 13:25:44.747 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 37929b 273ms proxy=true
+06-23 13:25:44.761 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 36848b 290ms proxy=true
+06-23 13:25:44.876 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 848b 196ms proxy=true
+06-23 13:25:44.878 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 849b 192ms proxy=true
+06-23 13:25:45.053 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 404 2b 176ms proxy=true
+06-23 13:25:45.058 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 848b 178ms proxy=true
+06-23 13:25:45.237 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 697b 183ms proxy=true
+06-23 13:25:45.243 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 404 2b 185ms proxy=true
+06-23 13:25:45.419 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 634b 181ms proxy=true
+06-23 13:25:45.429 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 697b 185ms proxy=true
+06-23 13:25:45.618 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 634b 188ms proxy=true
+06-23 13:25:45.902 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 38207b 482ms proxy=true
+06-23 13:25:46.012 E/MeloNet ( 8626): GET api-v2.soundcloud.com -> 200 37995b 393ms proxy=true
+06-23 13:32:29.065 E/MeloSC  (13690): byedpi running=true (ждали 0мс)
+06-23 13:32:29.071 E/MeloSC  (13690): === РЕЖИМ: VPN/direct (vpn=true, byedpi=true) ===
+06-23 13:32:29.868 E/MeloSC  (13690): probe soundcloud.com    = HTTP 200
+06-23 13:32:30.653 E/MeloSC  (13690): probe api-v2            = HTTP 401
+06-23 13:32:31.850 E/MeloSC  (13690): probe a-v2.sndcdn.com   = HTTP 403
+06-23 13:32:34.112 E/MeloSC  (13690): probe assets.web.sc     = HTTP 403
+06-23 13:32:34.440 E/MeloSC  (13690): сохранённый client_id валиден
+06-23 13:32:49.411 E/MeloSC  (15050): byedpi running=true (ждали 0мс)
+06-23 13:32:49.417 E/MeloSC  (15050): === РЕЖИМ: VPN/direct (vpn=true, byedpi=true) ===
+06-23 13:32:50.788 E/MeloSC  (15050): probe soundcloud.com    = HTTP 200
+06-23 13:32:51.997 E/MeloSC  (15050): probe api-v2            = HTTP 401
+06-23 13:32:53.410 E/MeloSC  (15050): probe a-v2.sndcdn.com   = HTTP 403
+06-23 13:32:54.506 E/MeloSC  (15050): probe assets.web.sc     = HTTP 403
+06-23 13:32:54.793 E/MeloSC  (15050): сохранённый client_id валиден
+06-23 13:33:59.671 E/MeloSC  (18119): byedpi running=true (ждали 0мс)
+06-23 13:33:59.673 E/MeloSC  (18119): === РЕЖИМ: ByeDPI (vpn=false, byedpi=true) ===
+06-23 13:34:00.051 E/MeloSC  (18119): probe soundcloud.com    = SocketException: Connection reset
+06-23 13:34:00.389 E/MeloSC  (18119): probe api-v2            = SocketException: Connection reset
+06-23 13:34:01.118 E/MeloSC  (18119): probe a-v2.sndcdn.com   = HTTP 403
+06-23 13:34:01.651 E/MeloSC  (18119): probe assets.web.sc     = HTTP 403
+06-23 13:34:01.893 E/MeloSC  (18119): сохранённый client_id протух — добываем заново
+06-23 13:34:02.285 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:02.596 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:34:02.708 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:34:03.093 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:03.391 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:03.716 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:34:03.887 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:34:04.188 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:04.531 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:04.857 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:34:05.041 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:34:05.427 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:05.764 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:06.061 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:34:06.239 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:34:06.499 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:06.814 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:07.129 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:34:17.133 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:34:17.381 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:17.669 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:17.997 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:34:28.001 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:34:28.285 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:28.596 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:28.888 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:34:29.223 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:34:29.463 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:29.756 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:30.055 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:34:30.242 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:34:30.521 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:30.522 E/MeloSC  (18119): не удалось добыть валидный client_id
+06-23 13:34:30.522 E/MeloSC  (18119): byedpi running=true (ждали 0мс)
+06-23 13:34:30.523 E/MeloSC  (18119): === РЕЖИМ: ByeDPI (vpn=false, byedpi=true) ===
+06-23 13:34:30.832 E/MeloSC  (18119): probe soundcloud.com    = SocketException: Connection reset
+06-23 13:34:31.120 E/MeloSC  (18119): probe api-v2            = SocketException: Connection reset
+06-23 13:34:31.568 E/MeloSC  (18119): probe a-v2.sndcdn.com   = HTTP 403
+06-23 13:34:31.739 E/MeloSC  (18119): probe assets.web.sc     = HTTP 403
+06-23 13:34:31.987 E/MeloSC  (18119): сохранённый client_id протух — добываем заново
+06-23 13:34:32.282 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:32.576 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:34:32.697 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:34:32.942 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:33.244 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:33.543 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:34:33.732 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:34:33.991 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:34.306 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:34.637 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:34:34.802 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:34:35.130 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:35.435 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:35.741 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:34:45.743 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:34:45.988 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:46.361 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:46.654 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:34:56.656 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → SocketTimeoutException: timeout
+06-23 13:34:56.908 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:57.318 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:57.609 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:34:57.960 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:34:58.205 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:58.525 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:58.831 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:34:58.946 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:34:59.213 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:59.544 E/MeloSC  (18119): GET https://soundcloud.com/ → SocketException: Connection reset
+06-23 13:34:59.848 E/MeloSC  (18119): GET https://soundcloud.com/discover → SocketException: Connection reset
+06-23 13:35:00.031 E/MeloSC  (18119): GET https://assets.web.soundcloud.cloud/ → HTTP 403
+06-23 13:35:00.275 E/MeloSC  (18119): GET https://m.soundcloud.com/ → SocketException: Connection reset
+06-23 13:35:00.276 E/MeloSC  (18119): не удалось добыть валидный client_id
+06-23 13:35:00.575 E/MeloNet (18119): GET soundcloud.com FAILED proxy=true: SocketException: Connection reset

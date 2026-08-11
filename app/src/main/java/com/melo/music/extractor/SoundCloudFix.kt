@@ -48,7 +48,7 @@ object SoundCloudFix {
             Thread.sleep(250)
             waited++
         }
-        android.util.Log.e("MeloSC", "byedpi running=${ByeDpiProxy.isRunning()} (ждали ${waited * 250}мс)")
+        // android.util.Log.e("MeloSC", "byedpi running=${ByeDpiProxy.isRunning()} (ждали ${waited * 250}мс)")
     }
 
     /**
@@ -74,11 +74,11 @@ object SoundCloudFix {
                     client.newCall(Request.Builder().url(h).header("User-Agent", UA).build())
                         .execute().use { it.code }
                 }.getOrElse { it.javaClass.simpleName }
-                android.util.Log.e("MeloSC", "warmup $h -> $r")
+                // android.util.Log.e("MeloSC", "warmup $h -> $r")
             }.also { it.start() }
         }
         threads.forEach { runCatching { it.join(20_000) } }
-        android.util.Log.e("MeloSC", "warmup done")
+        // android.util.Log.e("MeloSC", "warmup done")
     }
 
     private val ID_RE = Regex("client_id\\s*[:=]\\s*\"([0-9a-zA-Z]{20,40})\"")
@@ -132,13 +132,13 @@ object SoundCloudFix {
         awaitProxy()
         val id = discover()
         if (id != null) {
-            android.util.Log.e("MeloSC", "client_id добыт: $id")
+            // android.util.Log.e("MeloSC", "client_id добыт: $id")
             cachedId = id
             prefs.edit().putString(KEY_ID, id).apply()
             inject(id)
             return id
         }
-        android.util.Log.e("MeloSC", "не удалось добыть client_id (повтор не раньше чем через 5 мин)")
+        // android.util.Log.e("MeloSC", "не удалось добыть client_id (повтор не раньше чем через 5 мин)")
         return null
     }
 
@@ -199,18 +199,18 @@ object SoundCloudFix {
             "-f1+s -t3", "-f1+s -t5 -o1+s", "-f1+s -t2 -r1+s",
         )
         val strategies = bases.flatMap { b -> descs.map { d -> "$b $d -An" } }
-        android.util.Log.e("MeloTune", "=== START host tuning: ${strategies.size} стратегий (VPN OFF!) ===")
-        android.util.Log.e("MeloTune", "hosts: i1 / cf-media / a-v2 / api-v2  (число=ok, иначе ошибка)")
+        // android.util.Log.e("MeloTune", "=== START host tuning: ${strategies.size} стратегий (VPN OFF!) ===")
+        // android.util.Log.e("MeloTune", "hosts: i1 / cf-media / a-v2 / api-v2  (число=ok, иначе ошибка)")
         for ((i, args) in strategies.withIndex()) {
             val ok = runCatching { ByeDpiProxy.restart(args) }.getOrDefault(false)
             Thread.sleep(500)
-            if (!ok) { android.util.Log.e("MeloTune", "[$i] START FAILED: $args"); continue }
+            if (!ok) { /* android.util.Log.e("MeloTune", "[$i] START FAILED: $args") */ continue }
             val res = hosts.joinToString("  ") { probeCode("https://$it/") }
             val hit = res.split("  ").take(2).all { it.toIntOrNull() != null } // i1 и cf-media оба числовые
-            android.util.Log.e("MeloTune", "[$i]${if (hit) " ★" else ""} $args -> $res")
+            // android.util.Log.e("MeloTune", "[$i]${if (hit) " ★" else ""} $args -> $res")
         }
         runCatching { ByeDpiProxy.restart(ByeDpiProxy.DEFAULT_CMD) }
-        android.util.Log.e("MeloTune", "=== DONE (★ = i1 и cf-media пробились) ===")
+        // android.util.Log.e("MeloTune", "=== DONE (★ = i1 и cf-media пробились) ===")
     }
 
     fun diagnose() {
@@ -219,11 +219,11 @@ object SoundCloudFix {
             ByeDpiProxy.isVpnActive() -> "VPN/direct"
             else -> "direct"
         }
-        android.util.Log.e("MeloSC", "=== РЕЖИМ: $mode (vpn=${ByeDpiProxy.isVpnActive()}, byedpi=${ByeDpiProxy.isRunning()}) ===")
-        android.util.Log.e("MeloSC", "probe soundcloud.com    = ${probe("https://soundcloud.com/")}")
-        android.util.Log.e("MeloSC", "probe api-v2            = ${probe("https://api-v2.soundcloud.com/")}")
-        android.util.Log.e("MeloSC", "probe a-v2.sndcdn.com   = ${probe("https://a-v2.sndcdn.com/")}")
-        android.util.Log.e("MeloSC", "probe assets.web.sc     = ${probe("https://assets.web.soundcloud.cloud/")}")
+        // android.util.Log.e("MeloSC", "=== РЕЖИМ: $mode (vpn=${ByeDpiProxy.isVpnActive()}, byedpi=${ByeDpiProxy.isRunning()}) ===")
+        // android.util.Log.e("MeloSC", "probe soundcloud.com    = ${probe("https://soundcloud.com/")}")
+        // android.util.Log.e("MeloSC", "probe api-v2            = ${probe("https://api-v2.soundcloud.com/")}")
+        // android.util.Log.e("MeloSC", "probe a-v2.sndcdn.com   = ${probe("https://a-v2.sndcdn.com/")}")
+        // android.util.Log.e("MeloSC", "probe assets.web.sc     = ${probe("https://assets.web.soundcloud.cloud/")}")
     }
 
     private const val OK_BYTES = 256 * 1024L // успех: реально прокачали ≥256 КБ
@@ -305,7 +305,7 @@ object SoundCloudFix {
     fun tuneCovers(context: Context) {
         val tag = "MeloTune"
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val cid = cachedId ?: prefs.getString(KEY_ID, null) ?: run { android.util.Log.e(tag, "нет client_id"); return }
+        val cid = cachedId ?: prefs.getString(KEY_ID, null) ?: run { /* android.util.Log.e(tag, "нет client_id") */ return }
         runCatching { ByeDpiProxy.restart("-Kt -f1+s -t2 -r1+s") }; Thread.sleep(800)
         val search = httpGet(client, "https://api-v2.soundcloud.com/search/tracks?q=lofi&limit=20&client_id=$cid")
         val art = runCatching {
@@ -316,9 +316,9 @@ object SoundCloudFix {
                 if (!a.isNullOrBlank() && a.contains("sndcdn")) { u = a; break }
             }
             u
-        }.getOrNull() ?: run { android.util.Log.e(tag, "нет artwork_url"); ByeDpiProxy.restart(ByeDpiProxy.DEFAULT_CMD); return }
+        }.getOrNull() ?: run { /* android.util.Log.e(tag, "нет artwork_url") */ ByeDpiProxy.restart(ByeDpiProxy.DEFAULT_CMD); return }
         val host = art.substringAfter("://").substringBefore("/")
-        android.util.Log.e(tag, "=== COVER tuning (полное ТЕЛО), host=$host url=$art (VPN OFF) ===")
+        // android.util.Log.e(tag, "=== COVER tuning (полное ТЕЛО), host=$host url=$art (VPN OFF) ===")
         val strategies = listOf(
             "-Kt -r1+s -An",
             "-Kt -r2+s -An",
@@ -349,12 +349,12 @@ object SoundCloudFix {
                         "OK ${n / 1024}KB ${System.currentTimeMillis() - t0}ms"
                     }
             }.getOrElse { "${it.javaClass.simpleName}" }
-            android.util.Log.e(tag, "[$i] $s -> $res")
-            if (res.startsWith("OK") && found == null) { found = s; android.util.Log.e(tag, "★ COVER ТЕЛО OK: $s ($res)") }
+            // android.util.Log.e(tag, "[$i] $s -> $res")
+            if (res.startsWith("OK") && found == null) { found = s; /* android.util.Log.e(tag, "★ COVER ТЕЛО OK: $s ($res)") */ }
         }
-        if (found == null) android.util.Log.e(tag, "обложки: тело не доставила ни одна")
+        if (found == null) /* android.util.Log.e(tag, "обложки: тело не доставила ни одна") */
         runCatching { ByeDpiProxy.restart(ByeDpiProxy.DEFAULT_CMD) }
-        android.util.Log.e(tag, "=== COVER DONE ===")
+        // android.util.Log.e(tag, "=== COVER DONE ===")
     }
 
     /**
@@ -365,13 +365,13 @@ object SoundCloudFix {
         val tag = "MeloTune"
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val cid = cachedId ?: prefs.getString(KEY_ID, null)
-        if (cid == null) { android.util.Log.e(tag, "нет client_id — пропуск"); return }
+        if (cid == null) { /* android.util.Log.e(tag, "нет client_id — пропуск") */ return }
 
         var segs = resolveSegments(cid)
-        if (segs.isEmpty()) { android.util.Log.e(tag, "не удалось резолвить сегменты"); ByeDpiProxy.restart(ByeDpiProxy.DEFAULT_CMD); return }
+        if (segs.isEmpty()) { /* android.util.Log.e(tag, "не удалось резолвить сегменты") */ ByeDpiProxy.restart(ByeDpiProxy.DEFAULT_CMD); return }
         val segHost = segs.first().substringAfter("://").substringBefore("/")
         val strategies = scStrategies()
-        android.util.Log.e(tag, "=== SC-СТРАТЕГИИ (добровольцы): ${strategies.size}, сегментов=${segs.size}, хост=$segHost (VPN OFF) ===")
+        // android.util.Log.e(tag, "=== SC-СТРАТЕГИИ (добровольцы): ${strategies.size}, сегментов=${segs.size}, хост=$segHost (VPN OFF) ===")
 
         var found: String? = null
         for ((idx, s) in strategies.withIndex()) {
@@ -380,33 +380,33 @@ object SoundCloudFix {
             val ok = runCatching { ByeDpiProxy.restart(s) }.getOrDefault(false)
             Thread.sleep(600)
             val res = if (!ok) "byedpi FAIL" else measureSegments(segs, 12)
-            android.util.Log.e(tag, "[$idx] $s -> $res")
+            // android.util.Log.e(tag, "[$idx] $s -> $res")
             if (res.startsWith("OK") && found == null) {
                 found = s
-                android.util.Log.e(tag, "★★★ РАБОЧАЯ СТРАТЕГИЯ: $s ($res) ★★★")
+                // android.util.Log.e(tag, "★★★ РАБОЧАЯ СТРАТЕГИЯ: $s ($res) ★★★")
             }
         }
-        if (found == null) android.util.Log.e(tag, "из ${strategies.size} рабочих не нашлось")
+        if (found == null) /* android.util.Log.e(tag, "из ${strategies.size} рабочих не нашлось") */
         runCatching { ByeDpiProxy.restart(ByeDpiProxy.DEFAULT_CMD) }
-        android.util.Log.e(tag, "=== DONE ===")
+        // android.util.Log.e(tag, "=== DONE ===")
     }
 
     private fun discover(): String? {
         repeat(2) { attempt ->
             for (src in HTML_SOURCES) {
                 val html = httpGet(client, src) ?: continue
-                android.util.Log.e("MeloSC", "попытка $attempt: $src → HTML ${html.length} символов")
+                // android.util.Log.e("MeloSC", "попытка $attempt: $src → HTML ${html.length} символов")
 
                 ID_RE.find(html)?.let {
-                    android.util.Log.e("MeloSC", "client_id прямо в HTML $src")
+                    // android.util.Log.e("MeloSC", "client_id прямо в HTML $src")
                     return it.groupValues[1]
                 }
                 val assets = ASSET_RE.findAll(html).map { it.value }.distinct().toList()
-                android.util.Log.e("MeloSC", "$src → бандлов: ${assets.size}")
+                // android.util.Log.e("MeloSC", "$src → бандлов: ${assets.size}")
                 for (asset in assets.reversed()) {
                     val js = httpGet(client, asset) ?: continue
                     ID_RE.find(js)?.let {
-                        android.util.Log.e("MeloSC", "client_id из $asset")
+                        // android.util.Log.e("MeloSC", "client_id из $asset")
                         return it.groupValues[1]
                     }
                 }
@@ -428,11 +428,11 @@ object SoundCloudFix {
             if (resp.isSuccessful) {
                 resp.body?.string()
             } else {
-                android.util.Log.e("MeloSC", "GET $url → HTTP ${resp.code}")
+                // android.util.Log.e("MeloSC", "GET $url → HTTP ${resp.code}")
                 null
             }
         }
-    }.onFailure { android.util.Log.e("MeloSC", "GET $url → ${it.javaClass.simpleName}: ${it.message}") }
+    }.onFailure { /* android.util.Log.e("MeloSC", "GET $url → ${it.javaClass.simpleName}: ${it.message}") */ }
         .getOrNull()
 
     private fun inject(id: String) {
@@ -443,6 +443,6 @@ object SoundCloudFix {
             val field = cls.getDeclaredField("clientId")
             field.isAccessible = true
             field.set(null, id)
-        }.onFailure { android.util.Log.e("MeloSC", "inject failed: $it") }
+        }.onFailure { /* android.util.Log.e("MeloSC", "inject failed: $it") */ }
     }
 }

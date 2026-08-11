@@ -95,7 +95,7 @@ class OkHttpDownloader(
             activeClient.newCall(requestBuilder.build()).execute()
         } catch (e: Exception) {
             if (sc || LOG_ALL) {
-                android.util.Log.e("MeloNet", "$httpMethod $host FAILED proxy=$proxied: ${e.javaClass.simpleName}: ${e.message}")
+                // android.util.Log.e("MeloNet", "$httpMethod $host FAILED proxy=$proxied: ${e.javaClass.simpleName}: ${e.message}")
             }
             throw e
         }
@@ -107,7 +107,7 @@ class OkHttpDownloader(
         val body = response.body?.string()
         val ms = System.currentTimeMillis() - started
         if (sc || LOG_ALL) {
-            android.util.Log.e("MeloNet", "$httpMethod $host -> ${response.code} ${body?.length ?: 0}b ${ms}ms proxy=$proxied")
+            // android.util.Log.e("MeloNet", "$httpMethod $host -> ${response.code} ${body?.length ?: 0}b ${ms}ms proxy=$proxied")
         }
         val latestUrl = response.request.url.toString()
         return Response(

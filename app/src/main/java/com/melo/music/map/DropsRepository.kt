@@ -37,10 +37,23 @@ data class MapDrop(
 
 object DropsRepository {
 
-    /** Пины в видимой области карты (bounding box). */
+    // Короткий кэш ответов карты в памяти: пины меняются нечасто, а карту открывают/
+    // двигают часто → не дёргаем сервер на каждое движение. По истечении TTL — обновляем.
+    private const val CACHE_TTL_MS = 90_000L
+    private val areaCache = java.util.concurrent.ConcurrentHashMap<String, Pair<List<MapDrop>, Long>>()
+    @Volatile private var recentCache: Pair<List<MapDrop>, Long>? = null
+
+    private fun fresh(stamp: Long): Boolean = System.currentTimeMillis() - stamp < CACHE_TTL_MS
+
+    /** Сбросить кэш карты (после создания/удаления своего пина). */
+    fun invalidate() { areaCache.clear(); recentCache = null }
+
+    /** Пины в видимой области карты (bounding box). Кэш по округлённой рамке. */
     suspend fun listInArea(
         minLat: Double, maxLat: Double, minLng: Double, maxLng: Double,
     ): List<MapDrop> = withContext(Dispatchers.IO) {
+        val key = "%.2f,%.2f,%.2f,%.2f".format(minLat, maxLat, minLng, maxLng)
+        areaCache[key]?.takeIf { fresh(it.second) }?.let { return@withContext it.first }
         val res = AppwriteService.databases.listDocuments(
             databaseId = AppwriteService.DATABASE_ID,
             collectionId = AppwriteService.COLLECTION_DROPS,
@@ -54,16 +67,19 @@ object DropsRepository {
             ),
         )
         res.documents.mapNotNull { toDrop(it.id, it.data) }.filterNot { MapModeration.isHidden(it.id) }
+            .also { areaCache[key] = it to System.currentTimeMillis() }
     }
 
     /** Свежие пины со всей карты — для глобального поиска песен по карте. */
     suspend fun recent(limit: Int = 300): List<MapDrop> = withContext(Dispatchers.IO) {
+        recentCache?.takeIf { fresh(it.second) }?.let { return@withContext it.first }
         val res = AppwriteService.databases.listDocuments(
             databaseId = AppwriteService.DATABASE_ID,
             collectionId = AppwriteService.COLLECTION_DROPS,
             queries = listOf(Query.orderDesc("\$createdAt"), Query.limit(limit)),
         )
         res.documents.mapNotNull { toDrop(it.id, it.data) }.filterNot { MapModeration.isHidden(it.id) }
+            .also { recentCache = it to System.currentTimeMillis() }
     }
 
     /** Пожаловаться на пин: создаёт запись в reports и локально скрывает его. */
@@ -85,6 +101,7 @@ object DropsRepository {
                 permissions = listOf(Permission.update(Role.user(uid)), Permission.delete(Role.user(uid))),
             )
             MapModeration.hide(drop.id)
+            invalidate()
         }
     }
 
@@ -97,6 +114,7 @@ object DropsRepository {
                 documentId = dropId,
             )
             MapModeration.hide(dropId)
+            invalidate()
         }
     }
 
@@ -149,6 +167,6 @@ object DropsRepository {
             id = doc.id, lat = lat, lng = lng, title = track.title,
             artist = track.uploader, thumbnailUrl = track.thumbnailUrl,
             sourceUrl = track.url, source = track.source, caption = caption, ownerId = uid,
-        )
+        ).also { invalidate() }
     }
 }

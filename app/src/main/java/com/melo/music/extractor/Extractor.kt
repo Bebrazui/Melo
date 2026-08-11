@@ -78,7 +78,7 @@ object Extractor {
                 for (url in prefetchQueue) {
                     val ctx = appCtx ?: continue
                     if (!isCached(url)) {
-                        android.util.Log.e("MeloPerf", "prefetch[$worker] resolve $url")
+                        // android.util.Log.e("MeloPerf", "prefetch[$worker] resolve $url")
                         runCatching { resolveAudioUrl(ctx, url) }
                     }
                 }
@@ -126,7 +126,7 @@ object Extractor {
     suspend fun resolveAudioUrl(context: Context, url: String): ResolvedTrack {
         // 0) Офлайн: скачанный трек играем прямо с диска, без сети.
         com.melo.music.offline.OfflineManager.localUri(url)?.let { local ->
-            android.util.Log.e("MeloPerf", "OFFLINE HIT $url")
+            // android.util.Log.e("MeloPerf", "OFFLINE HIT $url")
             return ResolvedTrack(
                 title = com.melo.music.offline.OfflineManager.titleFor(url) ?: url,
                 audioUrl = local,
@@ -134,19 +134,19 @@ object Extractor {
         }
         // 1) Память.
         streamCache.get(url)?.let {
-            android.util.Log.e("MeloPerf", "CACHE HIT (mem) $url")
+            // android.util.Log.e("MeloPerf", "CACHE HIT (mem) $url")
             return it
         }
         // 2) Диск — мгновенно, если ссылка ещё не протухла.
         StreamCacheStore.get(url)?.let {
-            android.util.Log.e("MeloPerf", "CACHE HIT (disk) $url")
+            // android.util.Log.e("MeloPerf", "CACHE HIT (disk) $url")
             streamCache.put(url, it)
             return it
         }
         val app = context.applicationContext
         // Дедуп: если этот URL уже резолвится — ждём тот же результат.
         val deferred = inFlight.getOrPut(url) {
-            android.util.Log.e("MeloPerf", "CACHE MISS → resolve $url")
+            // android.util.Log.e("MeloPerf", "CACHE MISS → resolve $url")
             scope.async {
                 try {
                     // YouTube и SoundCloud — через NewPipe, остальное — через yt-dlp.

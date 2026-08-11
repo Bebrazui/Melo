@@ -51,6 +51,8 @@ const val PRIVACY_URL = "https://bebrazui.github.io/privacy-melo/privacy"
 /**
  * Экран приветствия/входа: email+пароль, Google, Telegram (скоро), «продолжить локально».
  * Один и тот же экран для первого запуска и для входа из вкладки «Аккаунт».
+ *
+ * @param showGoogle показывать кнопку «Войти через Google». В RuStore — false.
  */
 @Composable
 fun WelcomeScreen(
@@ -61,6 +63,7 @@ fun WelcomeScreen(
     onLocal: () -> Unit,
     onSuccess: () -> Unit,
     onClose: (() -> Unit)? = null,
+    showGoogle: Boolean = true,
 ) {
     onClose?.let { BackHandler(onBack = it) }
     val scope = rememberCoroutineScope()
@@ -247,33 +250,41 @@ fun WelcomeScreen(
             }
 
             Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = 0.12f)))
-                Text("  или  ", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodySmall)
-                Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = 0.12f)))
-            }
-            Spacer(Modifier.height(14.dp))
 
-            OutlinedButton(
-                onClick = {
-                    if (busy) return@OutlinedButton
-                    busy = true; error = null
-                    scope.launch {
-                        val r = onGoogle()
-                        busy = false
-                        r.onSuccess { onSuccess() }.onFailure { error = it.message ?: "Google: не удалось" }
-                    }
-                },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Icon(Icons.Rounded.Cloud, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(10.dp))
-                Text("Войти через Google")
-            }
+            if (showGoogle) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = 0.12f)))
+                    Text(
+                        "  или  ",
+                        color = Color.White.copy(alpha = 0.4f),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = 0.12f)))
+                }
+                Spacer(Modifier.height(14.dp))
 
-            Spacer(Modifier.height(22.dp))
+                OutlinedButton(
+                    onClick = {
+                        if (busy) return@OutlinedButton
+                        busy = true; error = null
+                        scope.launch {
+                            val r = onGoogle()
+                            busy = false
+                            r.onSuccess { onSuccess() }
+                                .onFailure { error = it.message ?: "Google: не удалось" }
+                        }
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Icon(Icons.Rounded.Cloud, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text("Войти через Google")
+                }
+
+                Spacer(Modifier.height(22.dp))
+            }
             TextButton(onClick = onLocal, enabled = !busy) {
                 Text("Продолжить локально", color = Color.White.copy(alpha = 0.55f))
             }

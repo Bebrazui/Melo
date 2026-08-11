@@ -1,7 +1,9 @@
 package com.melo.music.settings
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -12,6 +14,7 @@ object AppSettings {
     private const val PREFS = "melo_settings"
     private const val KEY_KARAOKE = "karaoke_lyrics"
     private const val KEY_SEEN_WELCOME = "seen_welcome"
+    private const val KEY_LAUNCHER_ICON = "launcher_icon"
 
     private var prefs: SharedPreferences? = null
 
@@ -23,10 +26,15 @@ object AppSettings {
     var seenWelcome by mutableStateOf(false)
         private set
 
+    /** Текущий id иконки лаунчера (ключ из [IconPreset]). */
+    var launcherIcon by mutableStateOf(IconPreset.DEFAULT.id)
+        private set
+
     fun init(context: Context) {
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         karaoke = prefs?.getBoolean(KEY_KARAOKE, false) ?: false
         seenWelcome = prefs?.getBoolean(KEY_SEEN_WELCOME, false) ?: false
+        launcherIcon = prefs?.getString(KEY_LAUNCHER_ICON, IconPreset.DEFAULT.id) ?: IconPreset.DEFAULT.id
     }
 
     fun setSeenWelcome() {
@@ -38,4 +46,61 @@ object AppSettings {
         karaoke = value
         prefs?.edit()?.putBoolean(KEY_KARAOKE, value)?.apply()
     }
+
+    /**
+     * Переключить иконку лаунчера.
+     * Вызывать из [Context], напр. из Activity.
+     */
+    fun switchIcon(context: Context, presetId: String) {
+        val pm = context.packageManager
+        val pkg = context.packageName
+
+        // Отключаем основную activity (убираем из лаунчера).
+        pm.setComponentEnabledSetting(
+            ComponentName(pkg, "$pkg.MainActivity"),
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP,
+        )
+
+        // Отключаем ВСЕ алиасы.
+        for (alias in IconPreset.entries) {
+            if (alias == IconPreset.DEFAULT) continue
+            pm.setComponentEnabledSetting(
+                ComponentName(pkg, "$pkg.${alias.componentName}"),
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP,
+            )
+        }
+
+        // Включаем выбранный алиас (или основную activity для DEFAULT).
+        if (presetId == IconPreset.DEFAULT.id) {
+            pm.setComponentEnabledSetting(
+                ComponentName(pkg, "$pkg.MainActivity"),
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                PackageManager.DONT_KILL_APP,
+            )
+        } else {
+            val selected = IconPreset.entries.first { it.id == presetId }
+            pm.setComponentEnabledSetting(
+                ComponentName(pkg, "$pkg.${selected.componentName}"),
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                PackageManager.DONT_KILL_APP,
+            )
+        }
+
+        launcherIcon = presetId
+        prefs?.edit()?.putString(KEY_LAUNCHER_ICON, presetId)?.apply()
+    }
+}
+
+/** Набор встроенных иконок лаунчера. */
+enum class IconPreset(
+    val id: String,
+    val label: String,
+    val componentName: String,
+) {
+    DEFAULT("default", "Стандартная", "MainActivity"),
+    THORNS("thorns", "Колючка", "LauncherAliasThorns"),
+    INVERTED("inverted", "Инвертированный", "LauncherAliasInverted"),
+    IOS6("ios6", "iOS 6", "LauncherAliasIos6"),
 }

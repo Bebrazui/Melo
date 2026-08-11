@@ -36,6 +36,16 @@ android {
         }
     }
 
+    flavorDimensions += "store"
+    productFlavors {
+        create("google") {
+            dimension = "store"
+        }
+        create("ruStore") {
+            dimension = "store"
+        }
+    }
+
     signingConfigs {
         create("release") {
             if (keystorePropertiesFile.exists()) {
@@ -74,6 +84,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -92,6 +103,8 @@ android {
             version = "3.22.1"
         }
     }
+
+    ndkVersion = "27.0.12077973"
 }
 
 dependencies {
@@ -134,11 +147,11 @@ dependencies {
     implementation(libs.osmdroid.android)
     implementation(libs.play.services.location)
 
-    // Нативный вход Google
-    implementation(libs.androidx.credentials)
-    implementation(libs.androidx.credentials.play.services)
-    implementation(libs.googleid)
-    implementation(libs.play.services.auth)
+    // Нативный вход Google (только flavor google)
+    "googleImplementation"(libs.androidx.credentials)
+    "googleImplementation"(libs.androidx.credentials.play.services)
+    "googleImplementation"(libs.googleid)
+    "googleImplementation"(libs.play.services.auth)
 
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 }

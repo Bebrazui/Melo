@@ -46,6 +46,7 @@ class MeloApp : Application(), ImageLoaderFactory {
         FavoritesManager.init(this)
         PlaylistManager.init(this)
         com.melo.music.auth.LoginGuard.init(this)
+        com.melo.music.auth.AuthManager.init(this)
         HistoryManager.init(this)
         EqualizerManager.init(this)
         LyricsRepository.init(this)
@@ -138,7 +139,7 @@ class MeloApp : Application(), ImageLoaderFactory {
                             last = e
                         }
                     }
-                    android.util.Log.e("MeloImg", "FAILx4 ${last?.javaClass?.simpleName} ${request.url}")
+                    // android.util.Log.e("MeloImg", "FAILx4 ${last?.javaClass?.simpleName} ${request.url}")
                     throw last ?: java.io.IOException("img fail")
                 } finally {
                     scImgSemaphore.release()

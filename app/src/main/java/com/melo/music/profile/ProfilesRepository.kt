@@ -29,7 +29,21 @@ object ProfilesRepository {
 
     private const val DEFAULT_NAME = "Пользователь Melo"
 
-    suspend fun get(userId: String): MeloProfile? = withContext(Dispatchers.IO) {
+    // Кэш профилей в памяти: профиль меняется редко, а читается часто (ленты, бейджи,
+    // экраны профилей) → не дёргаем сервер по кругу. TTL небольшой, чтобы видеть правки.
+    private const val CACHE_TTL_MS = 10 * 60 * 1000L
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Pair<MeloProfile, Long>>()
+
+    private fun cached(userId: String): MeloProfile? =
+        cache[userId]?.takeIf { System.currentTimeMillis() - it.second < CACHE_TTL_MS }?.first
+
+    private fun putCache(p: MeloProfile) { cache[p.userId] = p to System.currentTimeMillis() }
+
+    /** Инвалидация (после правки своего профиля). */
+    fun invalidate(userId: String) { cache.remove(userId) }
+
+    suspend fun get(userId: String, forceRefresh: Boolean = false): MeloProfile? = withContext(Dispatchers.IO) {
+        if (!forceRefresh) cached(userId)?.let { return@withContext it }
         runCatching {
             val doc = AppwriteService.databases.getDocument(
                 databaseId = AppwriteService.DATABASE_ID,
@@ -37,7 +51,7 @@ object ProfilesRepository {
                 documentId = userId,
             )
             doc.data.toProfile(userId)
-        }.getOrNull()
+        }.getOrNull()?.also { putCache(it) }
     }
 
     /** Создаёт профиль, только если его ещё нет (не затирает кастомные данные). */
@@ -75,7 +89,13 @@ object ProfilesRepository {
                     ),
                 )
             }
-            MeloProfile(userId, name, avatarUrl?.ifBlank { null }, bio?.ifBlank { null })
+            // Бейджи (dev/verified) живут отдельно — сохраняем их из кэша, не затираем.
+            val badges = cached(userId)
+            MeloProfile(
+                userId, name, avatarUrl?.ifBlank { null }, bio?.ifBlank { null },
+                isDeveloper = badges?.isDeveloper ?: false,
+                isVerified = badges?.isVerified ?: false,
+            ).also { putCache(it) }
         }
 
     suspend fun search(query: String, limit: Int = 20): List<MeloProfile> = withContext(Dispatchers.IO) {

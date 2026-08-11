@@ -85,6 +85,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DownloadForOffline
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.MusicNote
@@ -235,6 +236,7 @@ fun PlayerScreen(
     onTogglePlayPause: () -> Unit,
     playerProvider: () -> MediaController?,
     audioSessionIdProvider: () -> Int = { 0 },
+    showGoogle: Boolean = true,
 ) {
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -348,6 +350,18 @@ fun PlayerScreen(
     val isPlaying = playback.isPlaying
     val playerError = playback.error
 
+    // Виджет на главном экране: отражает текущий трек и состояние.
+    val widgetCtx = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(nowPlaying?.url, isPlaying) {
+        com.melo.music.widget.WidgetUpdater.setNowPlaying(
+            widgetCtx,
+            title = nowPlaying?.title,
+            artist = nowPlaying?.uploader,
+            coverUrl = nowPlaying?.thumbnailUrl,
+            isPlaying = isPlaying,
+        )
+    }
+
     // Скорость + тон воспроизведения (slowed / original / sped up). pitch = speed → меняется тон.
     var speed by rememberSaveable { mutableFloatStateOf(1f) }
     fun setSpeed(value: Float) {
@@ -377,7 +391,7 @@ fun PlayerScreen(
         recoverUrl = item.url
         recoverAt = now
         val resumePos = ctrl.currentPosition.coerceAtLeast(0L)
-        android.util.Log.e("MeloPerf", "PLAYER ERROR → re-resolve ${item.url}")
+        // android.util.Log.e("MeloPerf", "PLAYER ERROR → re-resolve ${item.url}")
         onInvalidateCache(item.url)
         val resolved = runCatching { onResolveAudioUrl(item.url) }.getOrNull() ?: return@LaunchedEffect
         if (nowPlaying?.url == item.url) {
@@ -546,10 +560,10 @@ fun PlayerScreen(
             resolvingUrl = item.url
             runCatching { onResolveAudioUrl(item.url) }
                 .onSuccess {
-                    android.util.Log.e(
-                        "MeloPerf",
-                        "TAP→resolved ${android.os.SystemClock.elapsedRealtime() - tStart}ms",
-                    )
+                    // android.util.Log.e(
+                    //     "MeloPerf",
+                    //     "TAP→resolved ${android.os.SystemClock.elapsedRealtime() - tStart}ms",
+                    // )
                     // Если пользователь уже переключился — не играть старый трек.
                     if (resolvingUrl == item.url) {
                         onPlayResolved(it)
@@ -1152,6 +1166,7 @@ fun PlayerScreen(
             } else {
                 null
             },
+            showGoogle = showGoogle,
         )
     }
 
@@ -3354,6 +3369,67 @@ private fun SourceBadge(source: Source, modifier: Modifier = Modifier) {
     }
 }
 
+/** Таймер сна: кнопка с выпадающим меню (15/30/45/60 мин, до конца трека, выкл). */
+@Composable
+private fun SleepTimerControl(white: Color, accent: Color) {
+    var menuOpen by remember { mutableStateOf(false) }
+    var active by remember { mutableStateOf(com.melo.music.playback.PlaybackService.sleepActive()) }
+    var remaining by remember { mutableLongStateOf(com.melo.music.playback.PlaybackService.sleepRemainingMs()) }
+    var endOfTrack by remember { mutableStateOf(com.melo.music.playback.PlaybackService.sleepEndOfTrack) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            active = com.melo.music.playback.PlaybackService.sleepActive()
+            remaining = com.melo.music.playback.PlaybackService.sleepRemainingMs()
+            endOfTrack = com.melo.music.playback.PlaybackService.sleepEndOfTrack
+            delay(1000)
+        }
+    }
+    val label = when {
+        endOfTrack -> "До конца трека"
+        remaining > 0 -> "Сон через ${(remaining / 60000) + 1} мин"
+        else -> "Таймер сна"
+    }
+    Box {
+        TextButton(onClick = { menuOpen = true }) {
+            Icon(
+                Icons.Rounded.Bedtime,
+                contentDescription = "Таймер сна",
+                tint = if (active) accent else white.copy(alpha = 0.85f),
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(label, color = if (active) accent else white.copy(alpha = 0.85f), style = MaterialTheme.typography.labelLarge)
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            listOf(15, 30, 45, 60).forEach { m ->
+                DropdownMenuItem(
+                    text = { Text("$m минут") },
+                    onClick = {
+                        com.melo.music.playback.PlaybackService.setSleepTimerMinutes(m)
+                        active = true; menuOpen = false
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("До конца трека") },
+                onClick = {
+                    com.melo.music.playback.PlaybackService.setSleepEndOfTrack()
+                    active = true; menuOpen = false
+                },
+            )
+            if (active) {
+                DropdownMenuItem(
+                    text = { Text("Выключить таймер") },
+                    onClick = {
+                        com.melo.music.playback.PlaybackService.cancelSleepTimer()
+                        active = false; menuOpen = false
+                    },
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun Artwork(url: String?, modifier: Modifier = Modifier) {
     if (url != null) {
@@ -3914,6 +3990,9 @@ private fun FullPlayer(
                     )
                 }
             }
+
+            Spacer(Modifier.height(6.dp))
+            SleepTimerControl(white = white, accent = accent)
 
             error?.let {
                 Spacer(Modifier.height(12.dp))

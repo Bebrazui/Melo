@@ -107,7 +107,7 @@ object NewPipeResolver {
             // Берём бесплатный HLS < 160 кбит/с (mp3 128 / opus).
             val hls = candidates.filter { it.deliveryMethod == DeliveryMethod.HLS }
             hls.forEach {
-                android.util.Log.e("MeloSC", "hls br=${it.averageBitrate} url=${it.content.take(60)}")
+                // android.util.Log.e("MeloSC", "hls br=${it.averageBitrate} url=${it.content.take(60)}")
             }
             hls.filter { it.averageBitrate in 1 until 160 }.maxByOrNull { it.averageBitrate }
                 ?: hls.filter { it.averageBitrate <= 0 }.firstOrNull()
@@ -124,10 +124,10 @@ object NewPipeResolver {
             isBandcamp(url) -> Source.BANDCAMP
             else -> Source.YOUTUBE_MUSIC
         }
-        android.util.Log.e(
-            "MeloPerf",
-            "resolve init=${t1 - t0}ms getInfo=${t2 - t1}ms pick=${t3 - t2}ms TOTAL=${t3 - t0}ms",
-        )
+        // android.util.Log.e(
+        //     "MeloPerf",
+        //     "resolve init=${t1 - t0}ms getInfo=${t2 - t1}ms pick=${t3 - t2}ms TOTAL=${t3 - t0}ms",
+        // )
 
         val author = info.uploaderName?.takeIf { it.isNotBlank() }
         ResolvedTrack(
@@ -189,10 +189,10 @@ object NewPipeResolver {
 
         suspend fun emitAll(tag: String, source: Source, block: suspend () -> List<TrackItem>) {
             val part = runCatching { block() }
-                .onFailure { android.util.Log.e("MeloSearch", "$tag failed: $it", it) }
+                .onFailure { /* android.util.Log.e("MeloSearch", "$tag failed: $it", it) */ }
                 .getOrDefault(emptyList())
                 .take(15)
-            android.util.Log.e("MeloSearch", "$tag → ${part.size} items")
+            // android.util.Log.e("MeloSearch", "$tag → ${part.size} items")
             if (part.isEmpty()) return
             mutex.withLock {
                 allItems.addAll(part)

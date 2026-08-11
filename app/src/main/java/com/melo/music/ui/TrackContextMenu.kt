@@ -395,7 +395,7 @@ private fun downloadTrack(context: Context, item: TrackItem) {
 
         notifyDone(context, notifId, label, ok = true, error = null)
     } catch (e: Exception) {
-        android.util.Log.e("MeloDownload", "Download failed", e)
+        // android.util.Log.e("MeloDownload", "Download failed", e)
         notifyDone(context, notifId, label, ok = false, error = e.message ?: e.javaClass.simpleName)
     }
 }

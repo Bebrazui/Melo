@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//d/android-tools/**)",
+      "Bash(java -version)",
+      "Bash(gradle -version)"
+    ]
+  }
+}

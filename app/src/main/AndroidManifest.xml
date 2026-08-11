@@ -29,6 +29,52 @@
             </intent-filter>
         </activity>
 
+        <!-- ═══ Альтернативные иконки лаунчера (включаются через настройки) ═══ -->
+        <activity-alias
+            android:name=".LauncherAliasThorns"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_thorns"
+            android:roundIcon="@mipmap/ic_launcher_thorns"
+            android:targetActivity=".MainActivity"
+            android:taskAffinity=""
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherAliasInverted"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_inverted"
+            android:roundIcon="@mipmap/ic_launcher_inverted"
+            android:targetActivity=".MainActivity"
+            android:taskAffinity=""
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherAliasIos6"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_ios6"
+            android:roundIcon="@mipmap/ic_launcher_ios6"
+            android:targetActivity=".MainActivity"
+            android:taskAffinity=""
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
         <service
             android:name=".playback.PlaybackService"
             android:exported="true"
@@ -37,6 +83,21 @@
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
         </service>
+
+        <!-- Виджет «сейчас играет» на главном экране -->
+        <receiver
+            android:name=".widget.MeloWidget"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.melo.music.widget.TOGGLE" />
+                <action android:name="com.melo.music.widget.NEXT" />
+                <action android:name="com.melo.music.widget.PREV" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/melo_widget_info" />
+        </receiver>
 
         <!-- OAuth callback Appwrite (Google и т.п.) -->
         <activity
