@@ -19,6 +19,7 @@ import org.schabi.newpipe.extractor.channel.tabs.ChannelTabInfo
 import org.schabi.newpipe.extractor.channel.tabs.ChannelTabs
 import org.schabi.newpipe.extractor.localization.ContentCountry
 import org.schabi.newpipe.extractor.localization.Localization
+import org.schabi.newpipe.extractor.playlist.PlaylistInfoItem
 import org.schabi.newpipe.extractor.search.SearchInfo
 import org.schabi.newpipe.extractor.stream.DeliveryMethod
 import org.schabi.newpipe.extractor.stream.StreamInfo
@@ -216,7 +217,7 @@ object NewPipeResolver {
         }
     }
 
-    /** YouTube Music: песни (music_songs) + исполнители (music_artists). */
+    /** YouTube Music: песни (music_songs) + исполнители (music_artists) + альбомы (music_albums). */
     private fun searchYouTube(query: String): List<TrackItem> {
         val service = ServiceList.YouTube
         val songs = SearchInfo.getInfo(
@@ -232,8 +233,16 @@ object NewPipeResolver {
             ).relatedItems.filterIsInstance<ChannelInfoItem>().map { it.toArtistItem(Source.YOUTUBE_MUSIC) }
         }.getOrDefault(emptyList())
 
-        // Исполнителей вперёд (и немного), чтобы пережили обрезку списка.
-        return artists.take(3) + songs
+        // Альбомы/релизы — тоже отдельный фильтр выдачи YouTube Music.
+        val albums = runCatching {
+            SearchInfo.getInfo(
+                service,
+                service.searchQHFactory.fromQuery(query, listOf("music_albums"), ""),
+            ).relatedItems.filterIsInstance<PlaylistInfoItem>().map { it.toAlbumItem(Source.YOUTUBE_MUSIC) }
+        }.getOrDefault(emptyList())
+
+        // Исполнителей и альбомов вперёд (и немного), чтобы пережили обрезку списка.
+        return artists.take(3) + albums.take(3) + songs
     }
 
     /**
@@ -507,5 +516,16 @@ object NewPipeResolver {
             ?: thumbnails.firstOrNull()?.url,
         source = source,
         kind = ItemKind.ARTIST,
+    )
+
+    private fun PlaylistInfoItem.toAlbumItem(source: Source) = TrackItem(
+        title = name,
+        uploader = uploaderName?.takeIf { it.isNotBlank() },
+        url = url,
+        durationSeconds = 0,
+        thumbnailUrl = thumbnails.maxByOrNull { it.height }?.url
+            ?: thumbnails.firstOrNull()?.url,
+        source = source,
+        kind = ItemKind.ALBUM,
     )
 }
