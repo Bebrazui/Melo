@@ -142,6 +142,9 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.androidx.palette)
 
+    // Smooth corners (squircle) в стиле PixelPlayer
+    implementation(libs.smooth.corner.rect)
+
     // Карта музыки
     implementation(libs.appwrite)
     implementation(libs.osmdroid.android)

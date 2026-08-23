@@ -32,6 +32,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -125,6 +126,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ripple
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -189,6 +191,9 @@ import com.melo.music.lyrics.LrcLine
 import com.melo.music.lyrics.Lyrics
 import com.melo.music.playlists.Playlist
 import com.melo.music.playlists.PlaylistManager
+import com.melo.music.ui.theme.Motion
+import com.melo.music.ui.theme.ShapeCache
+import com.melo.music.ui.theme.pressScale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
@@ -798,7 +803,18 @@ fun PlayerScreen(
           AnimatedContent(
             targetState = selectedTab,
             transitionSpec = {
-                fadeIn(tween(180)) togetherWith fadeOut(tween(140))
+                // Направленное переключение табов в стиле PixelPlayer:
+                // slide + fade, emphasized-easing, fade — половина длительности.
+                val forward = targetState.ordinal >= initialState.ordinal
+                val slideSpec = tween<IntOffset>(Motion.TAB_TRANSITION_MS, easing = Motion.EmphasizedEasing)
+                val fadeSpec = tween<Float>(Motion.TAB_FADE_MS)
+                if (forward) {
+                    (slideInHorizontally(slideSpec) { it / 4 } + fadeIn(fadeSpec)) togetherWith
+                        (slideOutHorizontally(slideSpec) { -it / 6 } + fadeOut(fadeSpec))
+                } else {
+                    (slideInHorizontally(slideSpec) { -it / 4 } + fadeIn(fadeSpec)) togetherWith
+                        (slideOutHorizontally(slideSpec) { it / 6 } + fadeOut(fadeSpec))
+                }
             },
             label = "tabs",
           ) { tab ->
@@ -993,8 +1009,14 @@ fun PlayerScreen(
         val current = nowPlaying
         AnimatedVisibility(
             visible = playerExpanded && current != null,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            enter = slideInVertically(
+                animationSpec = tween(Motion.TRANSITION_MS, easing = Motion.EmphasizedDecelerate),
+                initialOffsetY = { it },
+            ) + fadeIn(tween(Motion.FADE_MS)),
+            exit = slideOutVertically(
+                animationSpec = tween(300, easing = Motion.EmphasizedAccelerate),
+                targetOffsetY = { it },
+            ) + fadeOut(tween(180)),
         ) {
             val item = current ?: nowPlaying
             if (item != null) {
@@ -1030,8 +1052,14 @@ fun PlayerScreen(
 
         AnimatedVisibility(
             visible = artistOpen != null,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            enter = slideInVertically(
+                animationSpec = tween(Motion.TRANSITION_MS, easing = Motion.EmphasizedDecelerate),
+                initialOffsetY = { it },
+            ) + fadeIn(tween(Motion.FADE_MS)),
+            exit = slideOutVertically(
+                animationSpec = tween(300, easing = Motion.EmphasizedAccelerate),
+                targetOffsetY = { it },
+            ) + fadeOut(tween(180)),
         ) {
             artistOpen?.let { artist ->
                 ArtistScreen(
@@ -1056,8 +1084,14 @@ fun PlayerScreen(
 
         AnimatedVisibility(
             visible = playlistOpen != null,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            enter = slideInVertically(
+                animationSpec = tween(Motion.TRANSITION_MS, easing = Motion.EmphasizedDecelerate),
+                initialOffsetY = { it },
+            ) + fadeIn(tween(Motion.FADE_MS)),
+            exit = slideOutVertically(
+                animationSpec = tween(300, easing = Motion.EmphasizedAccelerate),
+                targetOffsetY = { it },
+            ) + fadeOut(tween(180)),
         ) {
             playlistOpen?.let { pl ->
                 PlaylistScreen(
@@ -2416,7 +2450,7 @@ private fun QuickPickGrid(
             Row(
                 modifier = Modifier
                     .width(264.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(ShapeCache.smooth12)
                     .combinedClickable(
                         onClick = { onPlay(grid, grid.indexOf(t)) },
                         onLongClick = { onLongClick(t) },
@@ -2427,7 +2461,7 @@ private fun QuickPickGrid(
             ) {
                 Artwork(
                     url = t.thumbnailUrl,
-                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
+                    modifier = Modifier.size(48.dp).clip(ShapeCache.smooth8),
                 )
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -2505,13 +2539,20 @@ private fun ShelfCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
+    val pressSource = remember { MutableInteractionSource() }
     Column(
         modifier = Modifier
             .width(150.dp)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .pressScale(pressedScale = 0.95f, interactionSource = pressSource)
+            .combinedClickable(
+                interactionSource = pressSource,
+                indication = ripple(),
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
     ) {
         Box(
-            modifier = Modifier.size(150.dp).clip(RoundedCornerShape(16.dp)),
+            modifier = Modifier.size(150.dp).clip(ShapeCache.smooth16),
             contentAlignment = Alignment.Center,
         ) {
             Artwork(url = item.thumbnailUrl, modifier = Modifier.fillMaxSize())
@@ -2576,8 +2617,9 @@ private fun TrackCard(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
+    val pressSource = remember { MutableInteractionSource() }
     ElevatedCard(
-        shape = RoundedCornerShape(24.dp),
+        shape = ShapeCache.smooth20,
         colors = if (containerColor != null) {
             androidx.compose.material3.CardDefaults.elevatedCardColors(
                 containerColor = containerColor,
@@ -2588,7 +2630,10 @@ private fun TrackCard(
         },
         modifier = Modifier
             .fillMaxWidth()
+            .pressScale(interactionSource = pressSource)
             .combinedClickable(
+                interactionSource = pressSource,
+                indication = ripple(),
                 onClick = onClick,
                 onLongClick = onLongClick,
             ),
@@ -2601,7 +2646,7 @@ private fun TrackCard(
                 url = item.thumbnailUrl,
                 modifier = Modifier
                     .size(56.dp)
-                    .clip(if (item.kind == ItemKind.ARTIST) CircleShape else RoundedCornerShape(16.dp)),
+                    .clip(if (item.kind == ItemKind.ARTIST) CircleShape else ShapeCache.smooth12),
             )
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -2671,13 +2716,19 @@ private fun TrackCard(
 
 @Composable
 private fun ArtistCard(item: TrackItem, onClick: () -> Unit) {
+    val pressSource = remember { MutableInteractionSource() }
     Surface(
-        shape = RoundedCornerShape(24.dp),
+        shape = ShapeCache.smooth20,
         color = MaterialTheme.colorScheme.secondaryContainer,
         tonalElevation = 2.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .pressScale(interactionSource = pressSource)
+            .clickable(
+                interactionSource = pressSource,
+                indication = ripple(),
+                onClick = onClick,
+            ),
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -2750,7 +2801,11 @@ private fun SearchResultsScreen(
         if (users.isNotEmpty()) {
             item(key = "people_header") { SectionTitle("Люди") }
             items(users, key = { "u_" + it.userId }) { p ->
-                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Box(
+                    modifier = Modifier
+                        .animateItem(fadeInSpec = tween(160), fadeOutSpec = tween(120), placementSpec = tween(200))
+                        .padding(horizontal = 16.dp),
+                ) {
                     com.melo.music.ui.UserRow(profile = p, onClick = { onOpenUser(p) })
                 }
             }
@@ -2804,7 +2859,11 @@ private fun SearchResultsScreen(
         if (albums.isNotEmpty()) {
             item(key = "albums_header") { SectionTitle("Альбомы и синглы") }
             itemsIndexed(albums.take(8), key = { _, a -> "al_" + a.url }) { _, a ->
-                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) {
+                Box(
+                    modifier = Modifier
+                        .animateItem(fadeInSpec = tween(160), fadeOutSpec = tween(120), placementSpec = tween(200))
+                        .padding(horizontal = 16.dp, vertical = 5.dp),
+                ) {
                     SearchAlbumCard(
                         album = a,
                         nowPlayingUrl = nowPlayingUrl,
@@ -2835,7 +2894,11 @@ private fun SearchResultsScreen(
             if (tail.isNotEmpty()) {
                 item(key = "tail_header") { SectionTitle("Ещё") }
                 itemsIndexed(tail, key = { _, t -> "t_" + t.url }) { _, t ->
-                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .animateItem(fadeInSpec = tween(160), fadeOutSpec = tween(120), placementSpec = tween(200))
+                            .padding(horizontal = 16.dp, vertical = 5.dp),
+                    ) {
                         TrackCard(
                             item = t,
                             resolving = resolvingUrl == t.url,
@@ -2870,12 +2933,19 @@ private fun TopResultCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
+    val pressSource = remember { MutableInteractionSource() }
     ElevatedCard(
-        shape = RoundedCornerShape(24.dp),
+        shape = ShapeCache.smooth24,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .pressScale(pressedScale = 0.97f, interactionSource = pressSource)
+            .combinedClickable(
+                interactionSource = pressSource,
+                indication = ripple(),
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
     ) {
         Box {
             Artwork(
@@ -2983,7 +3053,7 @@ private fun SearchAlbumCard(
     val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "searchAlbumChev")
 
     ElevatedCard(
-        shape = RoundedCornerShape(24.dp),
+        shape = ShapeCache.smooth20,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column {
@@ -2997,7 +3067,7 @@ private fun SearchAlbumCard(
                     .padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Artwork(album.thumbnailUrl, Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)))
+                Artwork(album.thumbnailUrl, Modifier.size(56.dp).clip(ShapeCache.smooth12))
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -3048,36 +3118,36 @@ private fun SearchAlbumCard(
                                         onLongClick = { onTrackLongClick(t) },
                                     )
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Artwork(t.thumbnailUrl, Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)))
-                                Spacer(Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        t.title,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        fontWeight = if (nowPlayingUrl == t.url) FontWeight.Bold else FontWeight.Normal,
-                                    )
-                                    t.uploader?.let {
-                                        Text(
-                                            it,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                        )
-                                    }
-                                }
-                                if (resolvingUrl == t.url) {
-                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                } else if (nowPlayingUrl == t.url && isPlaying) {
-                                    Icon(
-                                        Icons.Rounded.MusicNote, contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                            }
+                                 verticalAlignment = Alignment.CenterVertically,
+                             ) {
+                                 Artwork(t.thumbnailUrl, Modifier.size(40.dp).clip(ShapeCache.smooth8))
+                                 Spacer(Modifier.width(12.dp))
+                                 Column(modifier = Modifier.weight(1f)) {
+                                     Text(
+                                         t.title,
+                                         style = MaterialTheme.typography.bodyLarge,
+                                         maxLines = 1,
+                                         overflow = TextOverflow.Ellipsis,
+                                         fontWeight = if (nowPlayingUrl == t.url) FontWeight.Bold else FontWeight.Normal,
+                                     )
+                                     t.uploader?.let {
+                                         Text(
+                                             it,
+                                             style = MaterialTheme.typography.bodySmall,
+                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                             maxLines = 1,
+                                         )
+                                     }
+                                 }
+                                 if (resolvingUrl == t.url) {
+                                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                 } else if (nowPlayingUrl == t.url && isPlaying) {
+                                     Icon(
+                                         Icons.Rounded.MusicNote, contentDescription = null,
+                                         tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp),
+                                     )
+                                 }
+                             }
                         }
                     }
                 }
@@ -3085,13 +3155,18 @@ private fun SearchAlbumCard(
         }
     }
 }
-
-/** Круглая плитка исполнителя для горизонтального ряда в поиске. */
 @Composable
-private fun SearchArtistTile(item: TrackItem, onClick: () -> Unit) {    Column(
+private fun SearchArtistTile(item: TrackItem, onClick: () -> Unit) {
+    val pressSource = remember { MutableInteractionSource() }
+    Column(
         modifier = Modifier
             .width(104.dp)
-            .clickable(onClick = onClick),
+            .pressScale(pressedScale = 0.94f, interactionSource = pressSource)
+            .clickable(
+                interactionSource = pressSource,
+                indication = ripple(),
+                onClick = onClick,
+            ),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Artwork(
@@ -3875,7 +3950,7 @@ private fun NowPlayingBar(
     Surface(
         // Полупрозрачное «стекло»: сквозь плашку мягко просвечивает контент под ней.
         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
-        shape = RoundedCornerShape(28.dp),
+        shape = ShapeCache.smooth32,
         tonalElevation = 0.dp,
         shadowElevation = 8.dp,
         border = androidx.compose.foundation.BorderStroke(
