@@ -19,6 +19,8 @@ import java.util.concurrent.ConcurrentHashMap
 data class ResolvedTrack(
     val title: String,
     val audioUrl: String,
+    /** Обложка трека (для уведомления/кроссфейда). Может быть null. */
+    val thumbnailUrl: String? = null,
 )
 
 /** Источник трека (для индикатора в UI). */
@@ -202,6 +204,7 @@ object Extractor {
             ResolvedTrack(
                 title = info.title ?: url,
                 audioUrl = audioUrl,
+                thumbnailUrl = info.thumbnail,
             )
         }
 }

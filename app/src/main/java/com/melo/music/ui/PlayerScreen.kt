@@ -516,7 +516,7 @@ fun PlayerScreen(
             // Проверяем, что очередь/индекс не сменились, пока резолвили.
             if (resolved != null && playingIndex == fromIndex) {
                 com.melo.music.playback.PlaybackService.setNext(
-                    resolved.audioUrl, nextItem.title, nextIdx, nextItem.speed,
+                    resolved.audioUrl, nextItem.title, nextIdx, nextItem.speed, nextItem.thumbnailUrl,
                 )
             }
         }

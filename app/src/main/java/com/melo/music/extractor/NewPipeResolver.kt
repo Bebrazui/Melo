@@ -133,6 +133,7 @@ object NewPipeResolver {
         ResolvedTrack(
             title = if (author != null) "${info.name} — $author" else info.name,
             audioUrl = audio.content,
+            thumbnailUrl = info.thumbnails.firstOrNull()?.url,
         )
     }
 

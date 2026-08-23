@@ -51,6 +51,7 @@ class PlaybackService : MediaSessionService() {
         // Следующий трек, заранее зарезолвленный в UI (для кроссфейда).
         @Volatile var nextUrl: String? = null
         @Volatile var nextTitle: String? = null
+        @Volatile var nextArtwork: String? = null
         @Volatile var nextIndexPending: Int = -1
         @Volatile var nextSpeed: Float = 1f
 
@@ -60,9 +61,10 @@ class PlaybackService : MediaSessionService() {
         /** Вызывается, когда кроссфейд переключил на следующий трек. */
         var onCrossfadeAdvance: ((index: Int) -> Unit)? = null
 
-        fun setNext(url: String?, title: String?, index: Int, speed: Float = 1f) {
+        fun setNext(url: String?, title: String?, index: Int, speed: Float = 1f, artwork: String? = null) {
             nextUrl = url
             nextTitle = title
+            nextArtwork = artwork
             nextIndexPending = index
             nextSpeed = speed
         }
@@ -70,6 +72,7 @@ class PlaybackService : MediaSessionService() {
         fun clearNext() {
             nextUrl = null
             nextTitle = null
+            nextArtwork = null
             nextIndexPending = -1
             nextSpeed = 1f
         }
@@ -193,6 +196,7 @@ class PlaybackService : MediaSessionService() {
         applyReverb(active)
         mediaSession = MediaSession.Builder(this, active)
             .setCallback(mediaButtonCallback)
+            .setBitmapLoader(CoilBitmapLoader(this))
             .build()
 
         // Изменили реверб в настройках → переустановить aux-send на активном плеере.
@@ -319,6 +323,7 @@ class PlaybackService : MediaSessionService() {
     private fun startCrossfade() {
         val url = nextUrl ?: return
         val title = nextTitle
+        val artwork = nextArtwork
         val advanceIndex = nextIndexPending
         val speed = nextSpeed
         crossfading = true
@@ -327,10 +332,12 @@ class PlaybackService : MediaSessionService() {
         val fromP = active
         val toP = standby
 
+        val meta = MediaMetadata.Builder().setTitle(title ?: "")
+        artwork?.let { meta.setArtworkUri(android.net.Uri.parse(it)) }
         toP.setMediaItem(
             MediaItem.Builder()
                 .setUri(url)
-                .setMediaMetadata(MediaMetadata.Builder().setTitle(title ?: "").build())
+                .setMediaMetadata(meta.build())
                 .build(),
         )
         // Скорость/тон следующего трека применяем на уровне сервиса — работает и в фоне.

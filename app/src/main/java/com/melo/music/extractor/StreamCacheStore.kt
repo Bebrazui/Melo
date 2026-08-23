@@ -60,6 +60,7 @@ object StreamCacheStore {
         return ResolvedTrack(
             title = obj.optString("title", pageUrl),
             audioUrl = audioUrl,
+            thumbnailUrl = obj.optString("thumb", "").ifBlank { null },
         )
     }
 
@@ -72,6 +73,7 @@ object StreamCacheStore {
             JSONObject().apply {
                 put("audio", resolved.audioUrl)
                 put("title", resolved.title)
+                put("thumb", resolved.thumbnailUrl ?: "")
                 put("exp", expiryOf(resolved.audioUrl))
             },
         )
