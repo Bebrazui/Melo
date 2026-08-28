@@ -5721,13 +5721,34 @@ private fun karaokeLine(
 ): androidx.compose.ui.text.AnnotatedString {
     val words = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
     if (words.isEmpty()) return androidx.compose.ui.text.AnnotatedString(text)
-    val dur = (nextMs - startMs).coerceAtLeast(1L)
-    val per = dur.toFloat() / words.size
+
+    val totalChars = words.sumOf { it.length }.coerceAtLeast(1)
+    val lineDur = (nextMs - startMs).coerceIn(800L, 9000L)
+    // Вокальная фразировка: пение занимает основную часть строки (~80%), оставляя паузу на вдох
+    val singingDur = (lineDur * 0.82f).toLong().coerceAtLeast(600L)
     val elapsed = (posMs - startMs).coerceAtLeast(0L)
-    val litCount = (elapsed / per).toInt()
+    val rawProgress = (elapsed.toFloat() / singingDur).coerceIn(0f, 1f)
+
+    // Плавная вокальная S-кривая без резких механических скачков
+    val easedProgress = rawProgress * rawProgress * (3f - 2f * rawProgress)
+    val litChars = (easedProgress * totalChars).toInt()
+
+    var charIndex = 0
     return androidx.compose.ui.text.buildAnnotatedString {
         words.forEachIndexed { idx, w ->
-            withStyle(androidx.compose.ui.text.SpanStyle(color = if (idx <= litCount) lit else unlit)) {
+            val wordStart = charIndex
+            val wordEnd = charIndex + w.length
+            charIndex = wordEnd
+
+            val wordColor = when {
+                litChars >= wordEnd -> lit
+                litChars <= wordStart -> unlit
+                else -> {
+                    val wordFrac = ((litChars - wordStart).toFloat() / w.length).coerceIn(0f, 1f)
+                    androidx.compose.ui.graphics.lerp(unlit, lit, wordFrac)
+                }
+            }
+            withStyle(androidx.compose.ui.text.SpanStyle(color = wordColor)) {
                 append(w)
             }
             if (idx < words.lastIndex) append(" ")

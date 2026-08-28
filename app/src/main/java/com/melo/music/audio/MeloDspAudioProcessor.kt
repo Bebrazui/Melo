@@ -51,6 +51,8 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
     private val comb4 = CombFilter(1356)
     private val allpass1 = AllpassFilter(556)
     private val allpass2 = AllpassFilter(441)
+    private var reverbHpStoreL = 0f
+    private var reverbHpStoreR = 0f
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount != 2) {
@@ -95,12 +97,12 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
 
         // ── Параметры реверберации ──
         val (reverbFeedback, reverbDamp, reverbWet) = when (reverbPreset) {
-            1 -> Triple(0.45f, 0.45f, 0.22f) // Малая комната
-            2 -> Triple(0.58f, 0.40f, 0.30f) // Средняя комната
-            3 -> Triple(0.70f, 0.35f, 0.38f) // Большая комната
-            4 -> Triple(0.78f, 0.30f, 0.42f) // Средний зал
-            5 -> Triple(0.84f, 0.25f, 0.48f) // Большой зал
-            6 -> Triple(0.74f, 0.50f, 0.35f) // Пластина (быстрая диффузия, чистый верх без низового гула)
+            1 -> Triple(0.55f, 0.40f, 0.35f) // Малая комната
+            2 -> Triple(0.68f, 0.35f, 0.45f) // Средняя комната
+            3 -> Triple(0.78f, 0.30f, 0.55f) // Большая комната
+            4 -> Triple(0.85f, 0.25f, 0.65f) // Средний зал
+            5 -> Triple(0.90f, 0.20f, 0.75f) // Большой зал
+            6 -> Triple(0.85f, 0.25f, 0.70f) // Пластина (яркое шелковистое студийное эхо)
             else -> Triple(0f, 0f, 0f)
         }
 
@@ -109,13 +111,10 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         comb3.feedback = reverbFeedback; comb3.damp = reverbDamp
         comb4.feedback = reverbFeedback; comb4.damp = reverbDamp
 
-        val spatialWidth = 1.0f + spatialStrength * 1.5f // 1.0 .. 2.5x ширина панорамы
-        val delaySamples = (sampleRate * 0.0012f).toInt().coerceIn(10, delayBufferLeft.size - 1) // 1.2ms задержка
+        val spatialWidth = 1.3f + spatialStrength * 1.8f // 1.3 .. 3.1x широкая стереопанорама
+        val delaySamples = (sampleRate * 0.0014f).toInt().coerceIn(10, delayBufferLeft.size - 1) // 1.4ms задержка
 
-        // Фильтр высоких частот для реверберации (отсекает бас < 280 Гц, чтобы реверб не гудел и не захлебывался)
-        var reverbHpStoreL = 0f
-        var reverbHpStoreR = 0f
-        val hpAlpha = (2.0 * Math.PI * 280.0 / sampleRate).toFloat().coerceIn(0.01f, 0.5f)
+        val hpAlpha = (2.0 * Math.PI * 250.0 / sampleRate).toFloat().coerceIn(0.01f, 0.5f)
 
         while (inputBuffer.remaining() >= 4) {
             var left = inputBuffer.short.toFloat()
@@ -142,9 +141,9 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 val delayedR = delayBufferRight[readIndex]
                 delayWriteIndex = (delayWriteIndex + 1) % delayBufferLeft.size
 
-                // Расширенное стереополе + бинауральный кросс-фид
-                left = mid + side * spatialWidth + delayedR * (spatialStrength * 0.25f)
-                right = mid - side * spatialWidth + delayedL * (spatialStrength * 0.25f)
+                // Расширенное 3D стереополе + бинауральный кросс-фид
+                left = mid + side * spatialWidth + delayedR * (spatialStrength * 0.35f)
+                right = mid - side * spatialWidth - delayedL * (spatialStrength * 0.35f)
             }
 
             // 3. Реверберация (Schroeder / Freeverb Matrix с High-Pass фильтром)
@@ -154,12 +153,12 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 reverbHpStoreR += (right - reverbHpStoreR) * hpAlpha
                 val hpInL = left - reverbHpStoreL
                 val hpInR = right - reverbHpStoreR
-                val monoIn = (hpInL + hpInR) * 0.5f * 0.008f
+                val monoIn = (hpInL + hpInR) * 0.5f * 0.025f
 
                 val cOut = comb1.process(monoIn) + comb2.process(monoIn) + comb3.process(monoIn) + comb4.process(monoIn)
-                val revOut = allpass2.process(allpass1.process(cOut)) * 14.0f
-                left = left * (1f - reverbWet * 0.25f) + revOut * reverbWet
-                right = right * (1f - reverbWet * 0.25f) + revOut * reverbWet
+                val revOut = allpass2.process(allpass1.process(cOut)) * 16.0f
+                left = left * (1f - reverbWet * 0.30f) + revOut * reverbWet
+                right = right * (1f - reverbWet * 0.30f) + revOut * reverbWet
             }
 
             // 4. Усиление громкости (Gain Booster)
@@ -188,6 +187,8 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         for (b in eqBands) b.reset()
         delayBufferLeft.fill(0f)
         delayBufferRight.fill(0f)
+        reverbHpStoreL = 0f
+        reverbHpStoreR = 0f
         comb1.reset(); comb2.reset(); comb3.reset(); comb4.reset()
         allpass1.reset(); allpass2.reset()
     }
