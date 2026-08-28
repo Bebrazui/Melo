@@ -175,16 +175,35 @@ class PlaybackService : MediaSessionService() {
             }
         }
         // Важно: у каждого плеера СВОЙ LoadControl (общий требует общий поток).
-        fun buildPlayer() = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(
-                DefaultMediaSourceFactory(dsFactory).setLoadErrorHandlingPolicy(loadErrorPolicy),
-            )
-            .setLoadControl(
-                DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(15_000, 50_000, 500, 1_000)
-                    .build(),
-            )
-            .build()
+        fun buildPlayer(): ExoPlayer {
+            val vocalProcessor = com.melo.music.audio.VocalCutAudioProcessor()
+            com.melo.music.audio.VocalCutManager.register(vocalProcessor)
+
+            val renderersFactory = object : androidx.media3.exoplayer.DefaultRenderersFactory(this) {
+                override fun buildAudioSink(
+                    context: android.content.Context,
+                    enableFloatOutput: Boolean,
+                    enableAudioTrackPlaybackParams: Boolean,
+                ): androidx.media3.exoplayer.audio.AudioSink {
+                    return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                        .setEnableFloatOutput(enableFloatOutput)
+                        .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                        .setAudioProcessors(arrayOf(vocalProcessor))
+                        .build()
+                }
+            }
+
+            return ExoPlayer.Builder(this, renderersFactory)
+                .setMediaSourceFactory(
+                    DefaultMediaSourceFactory(dsFactory).setLoadErrorHandlingPolicy(loadErrorPolicy),
+                )
+                .setLoadControl(
+                    DefaultLoadControl.Builder()
+                        .setBufferDurationsMs(15_000, 50_000, 500, 1_000)
+                        .build(),
+                )
+                .build()
+        }
 
         playerA = buildPlayer()
         playerB = buildPlayer()

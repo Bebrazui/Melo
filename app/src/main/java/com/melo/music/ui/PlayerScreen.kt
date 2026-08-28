@@ -89,6 +89,8 @@ import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Map
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.MicOff
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Settings
@@ -4434,6 +4436,15 @@ private fun FullPlayer(
                     color = white,
                     modifier = Modifier.weight(1f),
                 )
+                IconButton(onClick = { com.melo.music.audio.VocalCutManager.toggle() }) {
+                    val vocalCut = com.melo.music.audio.VocalCutManager.isEnabled
+                    Icon(
+                        imageVector = if (vocalCut) Icons.Rounded.MicOff else Icons.Rounded.Mic,
+                        contentDescription = if (vocalCut) "Вокал выключен (Караоке)" else "Убрать вокал",
+                        tint = if (vocalCut) accent else white,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
                 IconButton(onClick = onShowQueue) {
                     Icon(
                         Icons.AutoMirrored.Rounded.QueueMusic,
