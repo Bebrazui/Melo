@@ -220,32 +220,44 @@ object NewPipeResolver {
         }
     }
 
-    /** YouTube Music: песни (music_songs) + исполнители (music_artists) + альбомы (music_albums). */
-    private fun searchYouTube(query: String): List<TrackItem> {
+    /** YouTube Music: параллельный поиск песен (music_songs) + исполнителей (music_artists) + альбомов (music_albums). */
+    private suspend fun searchYouTube(query: String): List<TrackItem> = coroutineScope {
         val service = ServiceList.YouTube
-        val songs = SearchInfo.getInfo(
-            service,
-            service.searchQHFactory.fromQuery(query, listOf("music_songs"), ""),
-        ).relatedItems.filterIsInstance<StreamInfoItem>().map { it.toTrackItem(Source.YOUTUBE_MUSIC) }
+        val songsDeferred = async {
+            runCatching {
+                SearchInfo.getInfo(
+                    service,
+                    service.searchQHFactory.fromQuery(query, listOf("music_songs"), ""),
+                ).relatedItems.filterIsInstance<StreamInfoItem>().map { it.toTrackItem(Source.YOUTUBE_MUSIC) }
+            }.getOrDefault(emptyList())
+        }
 
         // Отдельный запрос за исполнителями — music_songs их не отдаёт.
-        val artists = runCatching {
-            SearchInfo.getInfo(
-                service,
-                service.searchQHFactory.fromQuery(query, listOf("music_artists"), ""),
-            ).relatedItems.filterIsInstance<ChannelInfoItem>().map { it.toArtistItem(Source.YOUTUBE_MUSIC) }
-        }.getOrDefault(emptyList())
+        val artistsDeferred = async {
+            runCatching {
+                SearchInfo.getInfo(
+                    service,
+                    service.searchQHFactory.fromQuery(query, listOf("music_artists"), ""),
+                ).relatedItems.filterIsInstance<ChannelInfoItem>().map { it.toArtistItem(Source.YOUTUBE_MUSIC) }
+            }.getOrDefault(emptyList())
+        }
 
         // Альбомы/релизы — тоже отдельный фильтр выдачи YouTube Music.
-        val albums = runCatching {
-            SearchInfo.getInfo(
-                service,
-                service.searchQHFactory.fromQuery(query, listOf("music_albums"), ""),
-            ).relatedItems.filterIsInstance<PlaylistInfoItem>().map { it.toAlbumItem(Source.YOUTUBE_MUSIC) }
-        }.getOrDefault(emptyList())
+        val albumsDeferred = async {
+            runCatching {
+                SearchInfo.getInfo(
+                    service,
+                    service.searchQHFactory.fromQuery(query, listOf("music_albums"), ""),
+                ).relatedItems.filterIsInstance<PlaylistInfoItem>().map { it.toAlbumItem(Source.YOUTUBE_MUSIC) }
+            }.getOrDefault(emptyList())
+        }
+
+        val artists = artistsDeferred.await()
+        val albums = albumsDeferred.await()
+        val songs = songsDeferred.await()
 
         // Исполнителей и альбомов вперёд (и немного), чтобы пережили обрезку списка.
-        return artists.take(3) + albums.take(3) + songs
+        artists.take(3) + albums.take(3) + songs
     }
 
     /**

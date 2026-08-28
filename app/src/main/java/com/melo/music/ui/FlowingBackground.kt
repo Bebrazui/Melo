@@ -62,6 +62,7 @@ fun FlowingBackground(
                 }
             } catch (_: Exception) { null }
 
+            var lastFftUpdate = 0L
             val listener = object : Visualizer.OnDataCaptureListener {
                 override fun onWaveFormDataCapture(
                     vis: Visualizer?,
@@ -75,9 +76,12 @@ fun FlowingBackground(
                     samplingRate: Int,
                 ) {
                     if (fft == null) return
+                    val now = android.os.SystemClock.uptimeMillis()
+                    if (now - lastFftUpdate < 40) return // Ограничиваем частоту обновления до ~25 fps
+                    lastFftUpdate = now
+
                     // Берём нижние частоты (бас 20-200 Hz).
                     // FFT layout: [re0, im0, re1, im1, ...]
-                    // bin index = freq * captureSize / samplingRate
                     val binSize = fft.size / 2
                     val lowEnd = (200f * fft.size / samplingRate).toInt().coerceIn(1, binSize - 1)
                     var sum = 0f
@@ -111,7 +115,7 @@ fun FlowingBackground(
 
     // Один непрерывный линейный драйвер фазы → без «замедления и рывка».
     val infinite = rememberInfiniteTransition(label = "flow")
-    val angle by infinite.animateFloat(
+    val angle = infinite.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
@@ -121,18 +125,6 @@ fun FlowingBackground(
         label = "angle",
     )
 
-    // Все гармоники целочисленные (и cos) → на стыке 360°→0° значения совпадают,
-    // поэтому петля бесшовная.
-    val rad = Math.toRadians(angle.toDouble())
-    val baseOffset = 100f // px
-    val amp = 1f + bassLevel * 3f
-    val tx = (sin(rad) * baseOffset * amp).toFloat()
-    val ty = (sin(rad * 2.0 + 1.0) * baseOffset * amp).toFloat()
-    val baseScale = 1.12f + bassLevel * 0.1f
-    val scaleOsc = (sin(rad * 2.0) * 0.06).toFloat()
-    val scale = baseScale + scaleOsc
-    val rotation = (cos(rad) * 3.0 * amp).toFloat()
-
     Box(modifier = modifier.fillMaxSize()) {
         AsyncImage(
             model = thumbnailUrl,
@@ -140,13 +132,26 @@ fun FlowingBackground(
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxSize()
-                .blur(48.dp)
+                .blur(36.dp)
                 .graphicsLayer {
+                    // Чтение state внутри graphicsLayer предотвращает рекомпозицию экрана
+                    val curAngle = angle.value
+                    val curBass = bassLevel
+                    val rad = Math.toRadians(curAngle.toDouble())
+                    val baseOffset = 100f // px
+                    val amp = 1f + curBass * 3f
+                    val tx = (sin(rad) * baseOffset * amp).toFloat()
+                    val ty = (sin(rad * 2.0 + 1.0) * baseOffset * amp).toFloat()
+                    val baseScale = 1.12f + curBass * 0.1f
+                    val scaleOsc = (sin(rad * 2.0) * 0.06).toFloat()
+                    val sc = baseScale + scaleOsc
+                    val rot = (cos(rad) * 3.0 * amp).toFloat()
+
                     translationX = tx
                     translationY = ty
-                    scaleX = scale
-                    scaleY = scale
-                    rotationZ = rotation
+                    scaleX = sc
+                    scaleY = sc
+                    rotationZ = rot
                 },
         )
     }

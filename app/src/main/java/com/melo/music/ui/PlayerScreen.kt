@@ -482,17 +482,15 @@ fun PlayerScreen(
             listTitle = "Результаты: $q"
             listLoading = true
             listError = null
-            items = emptyList()
             // Потоковая выдача: YouTube прилетает первым, SoundCloud дописывается позже.
             onSearch(q)
                 .catch { listError = it.message }
                 .collect { partial ->
                     items = partial.distinctBy { it.url }
-                    // Префетчим только ПЕРВЫЕ треки выдачи — не весь список (был шторм
-                    // на 15-30 SoundCloud-резолвов, прокси захлёбывался → таймауты).
-                    partial.filter { it.kind == ItemKind.TRACK }.take(3)
-                        .forEach { onPrefetch(it.url) }
                 }
+            // Префетчим первые треки только один раз после завершения сбора выдачи,
+            // чтобы не забивать сокеты и сеть во время поиска и отрисовки списка.
+            items.filter { it.kind == ItemKind.TRACK }.take(2).forEach { onPrefetch(it.url) }
             listLoading = false
         }
     }
@@ -2234,8 +2232,8 @@ private fun HomeFeed(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = topInset, bottom = 16.dp + bottomInset),
     ) {
-        item { Greeting(onOpenAccount) }
-        item {
+        item(key = "home_greeting") { Greeting(onOpenAccount) }
+        item(key = "home_sea") {
             SeaCard(
                 loading = seaLoading,
                 playingTitle = seaTitle,
@@ -2247,11 +2245,11 @@ private fun HomeFeed(
                 onLike = onSeaLike,
             )
         }
-        item { MoodChips(moods, onMood) }
+        item(key = "home_moods") { MoodChips(moods, onMood) }
 
         if (history.isNotEmpty()) {
-            item { SectionTitle("Недавно слушали") }
-            item {
+            item(key = "home_history_title") { SectionTitle("Недавно слушали") }
+            item(key = "home_history_row") {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -2269,8 +2267,8 @@ private fun HomeFeed(
             }
         }
 
-        item { SectionTitle("Быстрый выбор") }
-        item {
+        item(key = "home_quick_title") { SectionTitle("Быстрый выбор") }
+        item(key = "home_quick_grid") {
             QuickPickGrid(
                 recTracks, loading, nowPlayingUrl, isPlaying, resolvingUrl,
                 onPlay, onTrackLongClick,
@@ -2805,9 +2803,7 @@ private fun SearchResultsScreen(
             item(key = "people_header") { SectionTitle("Люди") }
             items(users, key = { "u_" + it.userId }) { p ->
                 Box(
-                    modifier = Modifier
-                        .animateItem(fadeInSpec = tween(160), fadeOutSpec = tween(120), placementSpec = tween(200))
-                        .padding(horizontal = 16.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp),
                 ) {
                     com.melo.music.ui.UserRow(profile = p, onClick = { onOpenUser(p) })
                 }
@@ -2863,9 +2859,7 @@ private fun SearchResultsScreen(
             item(key = "albums_header") { SectionTitle("Альбомы и синглы") }
             itemsIndexed(albums.take(8), key = { _, a -> "al_" + a.url }) { _, a ->
                 Box(
-                    modifier = Modifier
-                        .animateItem(fadeInSpec = tween(160), fadeOutSpec = tween(120), placementSpec = tween(200))
-                        .padding(horizontal = 16.dp, vertical = 5.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp),
                 ) {
                     SearchAlbumCard(
                         album = a,
@@ -2898,9 +2892,7 @@ private fun SearchResultsScreen(
                 item(key = "tail_header") { SectionTitle("Ещё") }
                 itemsIndexed(tail, key = { _, t -> "t_" + t.url }) { _, t ->
                     Box(
-                        modifier = Modifier
-                            .animateItem(fadeInSpec = tween(160), fadeOutSpec = tween(120), placementSpec = tween(200))
-                            .padding(horizontal = 16.dp, vertical = 5.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp),
                     ) {
                         TrackCard(
                             item = t,
