@@ -22,6 +22,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
@@ -1021,13 +1023,21 @@ fun PlayerScreen(
         AnimatedVisibility(
             visible = playerExpanded && current != null,
             enter = slideInVertically(
-                animationSpec = tween(Motion.TRANSITION_MS, easing = Motion.EmphasizedDecelerate),
-                initialOffsetY = { it },
-            ) + fadeIn(tween(Motion.FADE_MS)),
+                animationSpec = tween(380, easing = androidx.compose.animation.core.CubicBezierEasing(0.16f, 1f, 0.3f, 1f)),
+                initialOffsetY = { (it * 0.80f).toInt() },
+            ) + scaleIn(
+                animationSpec = tween(380, easing = androidx.compose.animation.core.CubicBezierEasing(0.16f, 1f, 0.3f, 1f)),
+                initialScale = 0.82f,
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.96f),
+            ) + fadeIn(tween(250)),
             exit = slideOutVertically(
-                animationSpec = tween(300, easing = Motion.EmphasizedAccelerate),
-                targetOffsetY = { it },
-            ) + fadeOut(tween(180)),
+                animationSpec = tween(320, easing = androidx.compose.animation.core.CubicBezierEasing(0.4f, 0f, 0.2f, 1f)),
+                targetOffsetY = { (it * 0.80f).toInt() },
+            ) + scaleOut(
+                animationSpec = tween(320, easing = androidx.compose.animation.core.CubicBezierEasing(0.4f, 0f, 0.2f, 1f)),
+                targetScale = 0.82f,
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.96f),
+            ) + fadeOut(tween(260)),
         ) {
             val item = current ?: nowPlaying
             if (item != null) {
@@ -4730,15 +4740,19 @@ private fun NowPlayingBar(
                     // 1. Матовое темное стекло (база)
                     drawRect(color = Color(0xEB13110E))
 
-                    // 2. Мягкий плавный вертикальный градиент снизу вверх (в цвет трека)
+                    // 2. Живой плавающий волновой градиент (дышит и плавно колышется по высоте и яркости)
+                    val waveShift = kotlin.math.sin(phase1.toDouble() * 1.5).toFloat() * (h * 0.15f)
+                    val startY = if (isPlaying) (h * 0.10f + waveShift).coerceIn(0f, h * 0.40f) else h * 0.35f
+                    val glowAlpha = if (isPlaying) (0.62f + kotlin.math.sin(phase2.toDouble() * 2.0).toFloat() * 0.18f).coerceIn(0.30f, 0.88f) else 0.16f
+
                     drawRect(
                         brush = Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                animatedTrackColor.copy(alpha = if (isPlaying) 0.14f else 0.04f),
-                                animatedTrackColor.copy(alpha = if (isPlaying) 0.52f else 0.16f),
+                                animatedTrackColor.copy(alpha = if (isPlaying) glowAlpha * 0.35f else 0.04f),
+                                animatedTrackColor.copy(alpha = if (isPlaying) glowAlpha else 0.16f),
                             ),
-                            startY = h * 0.15f,
+                            startY = startY,
                             endY = h,
                         ),
                     )
@@ -5053,10 +5067,21 @@ private fun FullPlayer(
     // 0 = ось ещё не выбрана, 1 = вертикаль, 2 = горизонталь.
     var axis by remember { mutableIntStateOf(0) }
 
+    val dragProgress = (dragOffset / 550f).coerceIn(0f, 1f)
+    val playerCornerRadius = (dragProgress * 42f).dp
+    val playerScale = 1f - dragProgress * 0.18f
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .offset { IntOffset(0, dragOffset.roundToInt()) }
+            .graphicsLayer {
+                scaleX = playerScale
+                scaleY = playerScale
+                clip = true
+                shape = RoundedCornerShape(playerCornerRadius)
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.96f)
+            }
             .background(Color(0xFF0E0E12))
             .pointerInput(Unit) {
                 detectDragGestures(
@@ -5080,7 +5105,7 @@ private fun FullPlayer(
                                 }
                             }
                         } else {
-                            if (dragOffset > 320f) onCollapse() else dragOffset = 0f
+                            if (dragOffset > 240f) onCollapse() else dragOffset = 0f
                         }
                         axis = 0
                     },

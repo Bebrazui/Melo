@@ -93,14 +93,14 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         val isEq = eqEnabled
         val gain = gainFactor
 
-        // Параметры реверберации в зависимости от пресета
+        // ── Параметры реверберации ──
         val (reverbFeedback, reverbDamp, reverbWet) = when (reverbPreset) {
-            1 -> Triple(0.50f, 0.40f, 0.25f) // Малая комната
-            2 -> Triple(0.65f, 0.35f, 0.35f) // Средняя комната
-            3 -> Triple(0.78f, 0.30f, 0.45f) // Большая комната
-            4 -> Triple(0.85f, 0.25f, 0.55f) // Средний зал
-            5 -> Triple(0.92f, 0.20f, 0.65f) // Большой зал
-            6 -> Triple(0.88f, 0.10f, 0.70f) // Пластина
+            1 -> Triple(0.45f, 0.45f, 0.22f) // Малая комната
+            2 -> Triple(0.58f, 0.40f, 0.30f) // Средняя комната
+            3 -> Triple(0.70f, 0.35f, 0.38f) // Большая комната
+            4 -> Triple(0.78f, 0.30f, 0.42f) // Средний зал
+            5 -> Triple(0.84f, 0.25f, 0.48f) // Большой зал
+            6 -> Triple(0.74f, 0.50f, 0.35f) // Пластина (быстрая диффузия, чистый верх без низового гула)
             else -> Triple(0f, 0f, 0f)
         }
 
@@ -111,6 +111,11 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
 
         val spatialWidth = 1.0f + spatialStrength * 1.5f // 1.0 .. 2.5x ширина панорамы
         val delaySamples = (sampleRate * 0.0012f).toInt().coerceIn(10, delayBufferLeft.size - 1) // 1.2ms задержка
+
+        // Фильтр высоких частот для реверберации (отсекает бас < 280 Гц, чтобы реверб не гудел и не захлебывался)
+        var reverbHpStoreL = 0f
+        var reverbHpStoreR = 0f
+        val hpAlpha = (2.0 * Math.PI * 280.0 / sampleRate).toFloat().coerceIn(0.01f, 0.5f)
 
         while (inputBuffer.remaining() >= 4) {
             var left = inputBuffer.short.toFloat()
@@ -142,13 +147,19 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 right = mid - side * spatialWidth + delayedL * (spatialStrength * 0.25f)
             }
 
-            // 3. Реверберация (Schroeder / Freeverb Matrix)
+            // 3. Реверберация (Schroeder / Freeverb Matrix с High-Pass фильтром)
             if (isReverb) {
-                val monoIn = (left + right) * 0.5f * 0.015f
+                // Отсекаем низкие частоты из сигнала ревербератора
+                reverbHpStoreL += (left - reverbHpStoreL) * hpAlpha
+                reverbHpStoreR += (right - reverbHpStoreR) * hpAlpha
+                val hpInL = left - reverbHpStoreL
+                val hpInR = right - reverbHpStoreR
+                val monoIn = (hpInL + hpInR) * 0.5f * 0.008f
+
                 val cOut = comb1.process(monoIn) + comb2.process(monoIn) + comb3.process(monoIn) + comb4.process(monoIn)
-                val revOut = allpass2.process(allpass1.process(cOut)) * 30.0f
-                left = left * (1f - reverbWet * 0.3f) + revOut * reverbWet
-                right = right * (1f - reverbWet * 0.3f) + revOut * reverbWet
+                val revOut = allpass2.process(allpass1.process(cOut)) * 14.0f
+                left = left * (1f - reverbWet * 0.25f) + revOut * reverbWet
+                right = right * (1f - reverbWet * 0.25f) + revOut * reverbWet
             }
 
             // 4. Усиление громкости (Gain Booster)
@@ -157,8 +168,14 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 right *= gain
             }
 
-            val outL = left.toInt().coerceIn(-32768, 32767).toShort()
-            val outR = right.toInt().coerceIn(-32768, 32767).toShort()
+            // 5. Мягкий лимитер (Soft-Clipping / Tanh), предотвращающий перегруз и хрипы на пиках
+            val normL = left / 32768f
+            val normR = right / 32768f
+            val limitedL = if (abs(normL) > 0.95f) sign(normL) * (0.95f + 0.05f * tanh((abs(normL) - 0.95f) / 0.5f)) else normL
+            val limitedR = if (abs(normR) > 0.95f) sign(normR) * (0.95f + 0.05f * tanh((abs(normR) - 0.95f) / 0.5f)) else normR
+
+            val outL = (limitedL * 32767f).toInt().coerceIn(-32768, 32767).toShort()
+            val outR = (limitedR * 32767f).toInt().coerceIn(-32768, 32767).toShort()
 
             output.putShort(outL)
             output.putShort(outR)
