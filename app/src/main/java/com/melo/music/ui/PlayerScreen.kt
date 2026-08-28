@@ -4664,36 +4664,80 @@ private fun NowPlayingBar(
     modifier: Modifier = Modifier,
 ) {
     if (item == null) return
+    val context = LocalContext.current
     val scallopedBtn = remember { ScallopedShape(petals = 8, depth = 0.15f) }
     val scallopedArt = remember { ScallopedShape(petals = 10, depth = 0.12f) }
 
-    // Анимация градиента в бит музыки (динамический подъем янтарного свечения)
-    val infiniteTransition = rememberInfiniteTransition(label = "beatSyncTransition")
-    val beatGlow by infiniteTransition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.85f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 520, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "beatGlowHeight",
-    )
-    val beatAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.45f,
-        targetValue = 0.95f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 400, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "beatGlowAlpha",
+    // Извлечение доминантного цвета из обложки трека в реальном времени
+    var trackColor by remember(item.thumbnailUrl) { mutableStateOf(Color(0xFFD4A853)) }
+    LaunchedEffect(item.thumbnailUrl) {
+        val url = item.thumbnailUrl ?: return@LaunchedEffect
+        runCatching {
+            val req = coil.request.ImageRequest.Builder(context)
+                .data(url)
+                .allowHardware(false)
+                .size(128)
+                .build()
+            val drawable = coil.Coil.imageLoader(context).execute(req).drawable
+            val bmp = (drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+            if (bmp != null) {
+                val palette = androidx.palette.graphics.Palette.from(bmp).generate()
+                val rgb = palette.vibrantSwatch?.rgb
+                    ?: palette.dominantSwatch?.rgb
+                    ?: palette.mutedSwatch?.rgb
+                    ?: palette.lightVibrantSwatch?.rgb
+                if (rgb != null) {
+                    trackColor = Color(rgb)
+                }
+            }
+        }
+    }
+
+    val animatedTrackColor by animateColorAsState(
+        targetValue = trackColor,
+        animationSpec = tween(650),
+        label = "miniPlayerAccentColor",
     )
 
+    // Плавный многочастотный визуализатор (не цикличный, органичный, как акустический спектр)
+    val infiniteTransition = rememberInfiniteTransition(label = "fluidVisualizerTransition")
+    val waveA by infiniteTransition.animateFloat(
+        initialValue = 0.15f,
+        targetValue = 0.90f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 680, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "waveA",
+    )
+    val waveB by infiniteTransition.animateFloat(
+        initialValue = 0.10f,
+        targetValue = 1.00f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 440, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "waveB",
+    )
+    val waveC by infiniteTransition.animateFloat(
+        initialValue = 0.20f,
+        targetValue = 0.80f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1150, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "waveC",
+    )
+
+    val dynamicGlowAlpha = if (isPlaying) (0.35f + waveB * 0.40f + waveA * 0.25f).coerceIn(0.2f, 1f) else 0.20f
+    val dynamicGlowHeight = if (isPlaying) (waveA * 0.45f + waveB * 0.35f + waveC * 0.20f).coerceIn(0.1f, 1f) else 0.25f
+
     Surface(
-        // Твердый глубокий капсульный контейнер (как на фото)
+        // Твердый глубокий капсульный контейнер
         color = Color(0xFF0F0D0A),
         shape = RoundedCornerShape(42.dp),
         shadowElevation = 18.dp,
-        border = BorderStroke(1.2.dp, Color(0xFF382E22)),
+        border = BorderStroke(1.2.dp, lerp(Color(0xFF2E241A), animatedTrackColor, 0.25f)),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -4703,35 +4747,35 @@ private fun NowPlayingBar(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFF0A0806),
-                            Color(0xFF19130C),
-                            if (isPlaying) {
-                                Color(0xFF8A5512).copy(alpha = beatAlpha)
-                            } else {
-                                Color(0xFF4A3212).copy(alpha = 0.5f)
-                            },
+                            Color(0xFF0A0A0C),
+                            Color(0xFF141418),
+                            lerp(Color(0xFF141418), animatedTrackColor, 0.35f * dynamicGlowHeight),
+                            animatedTrackColor.copy(alpha = dynamicGlowAlpha * 0.85f),
                         ),
                         startY = 0f,
                         endY = Float.POSITIVE_INFINITY,
                     )
                 )
-                // Сетка аккуратных фоновых точек (как на скриншоте)
+                // Сетка точек, плавно затухающих к верху (прозрачнее к верху в цвет трека)
                 .drawBehind {
                     val dotSpacing = 16.dp.toPx()
-                    val dotRadius = 1.3.dp.toPx()
+                    val dotRadius = 1.25.dp.toPx()
                     val cols = (size.width / dotSpacing).toInt() + 1
                     val rows = (size.height / dotSpacing).toInt() + 1
-                    val dotColor = Color(0xFFD4A853).copy(alpha = if (isPlaying) 0.18f else 0.10f)
                     for (r in 0..rows) {
-                        for (c in 0..cols) {
-                            drawCircle(
-                                color = dotColor,
-                                radius = dotRadius,
-                                center = Offset(
-                                    x = c * dotSpacing + (dotSpacing / 2),
-                                    y = r * dotSpacing + (dotSpacing / 2),
-                                ),
-                            )
+                        val yFactor = (r.toFloat() / rows.coerceAtLeast(1)).coerceIn(0f, 1f)
+                        val verticalAlpha = (yFactor * yFactor * yFactor) * if (isPlaying) 0.32f else 0.16f
+                        if (verticalAlpha > 0.005f) {
+                            for (c in 0..cols) {
+                                drawCircle(
+                                    color = animatedTrackColor.copy(alpha = verticalAlpha),
+                                    radius = dotRadius,
+                                    center = Offset(
+                                        x = c * dotSpacing + (dotSpacing / 2),
+                                        y = r * dotSpacing + (dotSpacing / 2),
+                                    ),
+                                )
+                            }
                         }
                     }
                 }
@@ -4757,8 +4801,8 @@ private fun NowPlayingBar(
                     ) {
                         Surface(
                             shape = scallopedArt,
-                            color = Color(0xFF2A2219),
-                            border = BorderStroke(1.8.dp, Color(0xFFD4A853)),
+                            color = Color(0xFF1E1A16),
+                            border = BorderStroke(1.8.dp, animatedTrackColor),
                             modifier = Modifier.size(52.dp),
                         ) {
                             Artwork(
@@ -4768,10 +4812,10 @@ private fun NowPlayingBar(
                                     .clip(scallopedArt),
                             )
                         }
-                        // Круглый золотистый бейдж ноты снизу справа
+                        // Круглый бейдж ноты снизу справа в цвет обложки
                         Surface(
                             shape = CircleShape,
-                            color = Color(0xFFD4A853),
+                            color = animatedTrackColor,
                             modifier = Modifier
                                 .size(20.dp)
                                 .align(Alignment.BottomEnd),
@@ -4780,7 +4824,7 @@ private fun NowPlayingBar(
                                 Icon(
                                     Icons.Rounded.MusicNote,
                                     contentDescription = null,
-                                    tint = Color(0xFF191612),
+                                    tint = if (animatedTrackColor.luminance() > 0.4f) Color.Black else Color.White,
                                     modifier = Modifier.size(13.dp),
                                 )
                             }
@@ -4789,7 +4833,7 @@ private fun NowPlayingBar(
 
                     Spacer(Modifier.width(12.dp))
 
-                    // Название трека и автор в теплых песочно-бронзовых тонах
+                    // Название трека и автор
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -4802,7 +4846,7 @@ private fun NowPlayingBar(
                                 letterSpacing = (-0.2).sp,
                             ),
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFF3E2C8),
+                            color = Color.White,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -4812,7 +4856,7 @@ private fun NowPlayingBar(
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontSize = 13.sp,
                             ),
-                            color = Color(0xFFBA9E76),
+                            color = lerp(Color.White.copy(alpha = 0.7f), animatedTrackColor, 0.35f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -4824,10 +4868,13 @@ private fun NowPlayingBar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
+                    val btnBg = lerp(Color(0xFFE2D6BE), animatedTrackColor, 0.12f)
+                    val playBg = lerp(Color(0xFFF5EACF), animatedTrackColor, 0.20f)
+
                     // Prev
                     Surface(
                         shape = scallopedBtn,
-                        color = Color(0xFFE2D6BE),
+                        color = btnBg,
                         modifier = Modifier
                             .size(42.dp)
                             .clip(scallopedBtn)
@@ -4846,7 +4893,7 @@ private fun NowPlayingBar(
                     // Play / Pause (чуть крупнее 50dp)
                     Surface(
                         shape = scallopedBtn,
-                        color = Color(0xFFF5EACF),
+                        color = playBg,
                         modifier = Modifier
                             .size(50.dp)
                             .clip(scallopedBtn)
@@ -4873,7 +4920,7 @@ private fun NowPlayingBar(
                     // Next
                     Surface(
                         shape = scallopedBtn,
-                        color = Color(0xFFE2D6BE),
+                        color = btnBg,
                         modifier = Modifier
                             .size(42.dp)
                             .clip(scallopedBtn)

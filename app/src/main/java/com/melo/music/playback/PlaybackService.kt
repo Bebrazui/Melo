@@ -288,6 +288,13 @@ class PlaybackService : MediaSessionService() {
         override fun onIsPlayingChanged(playing: Boolean) {
             com.melo.music.widget.WidgetUpdater.setPlaying(applicationContext, playing)
         }
+        override fun onAudioSessionIdChanged(newSessionId: Int) {
+            if (newSessionId != androidx.media3.common.C.AUDIO_SESSION_ID_UNSET && newSessionId != 0) {
+                audioSessionId = newSessionId
+                EqualizerManager.attach(newSessionId)
+                applyReverb(active)
+            }
+        }
         override fun onPlaybackStateChanged(state: Int) {
             if (state == Player.STATE_ENDED && !crossfading) {
                 // Таймер сна «до конца трека»: останавливаемся, а не идём дальше.

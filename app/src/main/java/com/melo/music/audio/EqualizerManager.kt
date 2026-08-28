@@ -36,6 +36,7 @@ object EqualizerManager {
     private var equalizer: Equalizer? = null
     private var loudness: LoudnessEnhancer? = null
     private var virtualizer: Virtualizer? = null
+    private var insertReverb: PresetReverb? = null
 
     // Реверберация — ГЛОБАЛЬНЫЙ вспомогательный (auxiliary) эффект на сессии 0.
     // Плеер шлёт в него звук через setAuxEffectInfo (вставка insert-реверба
@@ -78,7 +79,7 @@ object EqualizerManager {
     }
 
     /**
-     * Привязать эквалайзер и пространственный звук к сессии плеера. Вызывать при старте воспроизведения.
+     * Привязать эквалайзер, реверберацию и пространственный звук к сессии плеера. Вызывать при старте воспроизведения.
      */
     @Synchronized
     fun attach(audioSessionId: Int) {
@@ -134,6 +135,21 @@ object EqualizerManager {
         } catch (_: Exception) {
             virtualizer = null
         }
+
+        // ── Прямая реверберация (Insert PresetReverb на сессии) ──
+        try {
+            val ir = PresetReverb(0, audioSessionId)
+            val p = prefs?.getInt(KEY_REVERB, 0) ?: 0
+            if (p > 0) {
+                ir.preset = p.toShort()
+                ir.enabled = true
+            } else {
+                ir.enabled = false
+            }
+            insertReverb = ir
+        } catch (_: Exception) {
+            insertReverb = null
+        }
     }
 
     @Synchronized
@@ -144,6 +160,8 @@ object EqualizerManager {
         loudness = null
         virtualizer?.release()
         virtualizer = null
+        insertReverb?.release()
+        insertReverb = null
         // auxReverb НЕ освобождаем — он глобальный, живёт всё время.
     }
 
@@ -201,6 +219,16 @@ object EqualizerManager {
     @Synchronized
     fun setReverbPreset(preset: Int) {
         val p = preset.coerceIn(0, reverbPresetNames.lastIndex)
+        insertReverb?.let {
+            runCatching {
+                if (p > 0) {
+                    it.preset = p.toShort()
+                    it.enabled = true
+                } else {
+                    it.enabled = false
+                }
+            }
+        }
         auxReverb?.let {
             runCatching { it.preset = p.toShort() }
         }
