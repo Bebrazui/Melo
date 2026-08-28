@@ -4714,34 +4714,34 @@ private fun NowPlayingBar(
         label = "miniPlayerAccentColor",
     )
 
-    // Живые частотные фазы для динамического визуализатора спектра
-    val infiniteTransition = rememberInfiniteTransition(label = "audioSpectrumVisualizer")
-    val t1 by infiniteTransition.animateFloat(
+    // Плавный непредсказуемый органичный дрейф волн (без повторений и не в бит)
+    val infiniteTransition = rememberInfiniteTransition(label = "organicFluidDrift")
+    val phase1 by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = (2 * Math.PI).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1350, easing = LinearEasing),
+            animation = tween(durationMillis = 4800, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
-        label = "t1",
+        label = "phase1",
     )
-    val t2 by infiniteTransition.animateFloat(
+    val phase2 by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = (2 * Math.PI).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 850, easing = LinearEasing),
+            animation = tween(durationMillis = 3300, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
-        label = "t2",
+        label = "phase2",
     )
-    val t3 by infiniteTransition.animateFloat(
+    val phase3 by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = (2 * Math.PI).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2100, easing = LinearEasing),
+            animation = tween(durationMillis = 6700, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
-        label = "t3",
+        label = "phase3",
     )
 
     Surface(
@@ -4756,7 +4756,7 @@ private fun NowPlayingBar(
     ) {
         Box(
             modifier = Modifier
-                // Динамический визуализатор спектра и четкая матрица точек
+                // Высокий волнистый непредсказуемый градиент и четкая матрица точек
                 .drawBehind {
                     val w = size.width
                     val h = size.height
@@ -4764,32 +4764,60 @@ private fun NowPlayingBar(
                     // 1. Матовое стекло (база)
                     drawRect(color = Color(0xEB13110E))
 
-                    // 2. Многополосный живой эквалайзер-визуализатор (Multi-band Spectrum Glow)
-                    val bands = 24
-                    val bandWidth = w / bands
-                    for (i in 0 until bands) {
-                        val normX = i.toFloat() / bands
-                        val bandEnergy = if (isPlaying) {
-                            val s1 = kotlin.math.sin(t1.toDouble() * 2.2 + normX * 8.5).toFloat() * 0.35f
-                            val s2 = kotlin.math.sin(t2.toDouble() * 3.8 - normX * 14.0).toFloat() * 0.30f
-                            val s3 = kotlin.math.cos(t3.toDouble() * 1.6 + normX * 6.0).toFloat() * 0.35f
-                            (0.35f + s1 + s2 + s3).coerceIn(0.12f, 0.98f)
-                        } else 0.15f
+                    // 2. Высокий плавный волнистый градиент (Organic Wavy Flow)
+                    if (isPlaying) {
+                        val wavePath = androidx.compose.ui.graphics.Path()
+                        val steps = 36
+                        val stepX = w / steps
 
-                        val colStartX = i * bandWidth
-                        val colHeight = h * bandEnergy
+                        val wavePoints = (0..steps).map { i ->
+                            val x = i * stepX
+                            val normX = i.toFloat() / steps
+                            val w1 = kotlin.math.sin(phase1.toDouble() + normX * 4.0).toFloat() * 12.dp.toPx()
+                            val w2 = kotlin.math.sin(phase2.toDouble() - normX * 7.0).toFloat() * 8.dp.toPx()
+                            val w3 = kotlin.math.cos(phase3.toDouble() + normX * 3.0).toFloat() * 6.dp.toPx()
+                            val crestY = (h * 0.28f) + w1 + w2 + w3
+                            Offset(x, crestY.coerceIn(0f, h))
+                        }
+
+                        wavePath.moveTo(wavePoints[0].x, wavePoints[0].y)
+                        for (i in 0 until wavePoints.size - 1) {
+                            val p0 = wavePoints[i]
+                            val p1 = wavePoints[i + 1]
+                            val midX = (p0.x + p1.x) / 2f
+                            val midY = (p0.y + p1.y) / 2f
+                            wavePath.quadraticTo(p0.x, p0.y, midX, midY)
+                        }
+                        val last = wavePoints.last()
+                        wavePath.lineTo(last.x, last.y)
+                        wavePath.lineTo(w, h)
+                        wavePath.lineTo(0f, h)
+                        wavePath.close()
+
+                        drawPath(
+                            path = wavePath,
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    animatedTrackColor.copy(alpha = 0.22f),
+                                    animatedTrackColor.copy(alpha = 0.58f),
+                                    animatedTrackColor.copy(alpha = 0.90f),
+                                ),
+                                startY = h * 0.15f,
+                                endY = h,
+                            ),
+                        )
+                    } else {
                         drawRect(
                             brush = Brush.verticalGradient(
                                 colors = listOf(
                                     Color.Transparent,
-                                    animatedTrackColor.copy(alpha = (bandEnergy * 0.55f).coerceIn(0.08f, 0.65f)),
-                                    animatedTrackColor.copy(alpha = (bandEnergy * 0.90f).coerceIn(0.15f, 0.95f)),
+                                    animatedTrackColor.copy(alpha = 0.15f),
+                                    animatedTrackColor.copy(alpha = 0.35f),
                                 ),
-                                startY = h - colHeight,
+                                startY = h * 0.40f,
                                 endY = h,
                             ),
-                            topLeft = Offset(colStartX, h - colHeight),
-                            size = androidx.compose.ui.geometry.Size(bandWidth + 1f, colHeight),
                         )
                     }
 
@@ -4800,11 +4828,10 @@ private fun NowPlayingBar(
                     val rows = (h / dotSpacing).toInt() + 1
                     for (r in 0..rows) {
                         val yFactor = (r.toFloat() / rows.coerceAtLeast(1)).coerceIn(0f, 1f)
-                        // Точки четко видны, плавно усиливаются книзу в цвет трека
-                        val verticalAlpha = (0.06f + yFactor * yFactor * 0.72f) * if (isPlaying) 1.0f else 0.50f
+                        val verticalAlpha = (0.08f + yFactor * yFactor * 0.75f) * if (isPlaying) 1.0f else 0.50f
                         for (c in 0..cols) {
                             drawCircle(
-                                color = lerp(Color(0xFFF3E4CA), animatedTrackColor, 0.75f).copy(alpha = verticalAlpha),
+                                color = lerp(Color(0xFFF5E6CC), animatedTrackColor, 0.75f).copy(alpha = verticalAlpha),
                                 radius = dotRadius,
                                 center = Offset(
                                     x = c * dotSpacing + (dotSpacing / 2),
