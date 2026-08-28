@@ -148,6 +148,9 @@ class MeloApp : Application(), ImageLoaderFactory {
         val client = clientBuilder.build()
         return ImageLoader.Builder(this)
             .okHttpClient(client)
+            .components {
+                add(com.melo.music.ui.SquareCropInterceptor())
+            }
             .memoryCachePolicy(CachePolicy.ENABLED)
             .memoryCache {
                 MemoryCache.Builder(this)
