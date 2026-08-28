@@ -87,6 +87,7 @@ import androidx.compose.material.icons.rounded.DownloadForOffline
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Mic
@@ -2077,10 +2078,10 @@ private fun SeaCard(
     val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
     val (timeBadge, timeIcon) = remember(hour) {
         when (hour) {
-            in 5..11 -> "Утренний заряд" to "🌅"
-            in 12..17 -> "Дневной поток" to "☀️"
-            in 18..22 -> "Вечерний вайб" to "🌆"
-            else -> "Ночной чилл" to "🌙"
+            in 5..11 -> "Утренний заряд" to Icons.Rounded.WbSunny
+            in 12..17 -> "Дневной поток" to Icons.Rounded.WbSunny
+            in 18..22 -> "Вечерний вайб" to Icons.Rounded.Bedtime
+            else -> "Ночной чилл" to Icons.Rounded.Bedtime
         }
     }
 
@@ -2129,20 +2130,31 @@ private fun SeaCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                // Время суток бейдж
+                // Время суток бейдж с Material Icon
                 Surface(
                     shape = CircleShape,
-                    color = cs.primaryContainer.copy(alpha = 0.6f),
-                    border = BorderStroke(1.dp, cs.primary.copy(alpha = 0.2f)),
+                    color = cs.primaryContainer.copy(alpha = 0.7f),
+                    border = BorderStroke(1.dp, cs.primary.copy(alpha = 0.25f)),
                     modifier = Modifier.clip(CircleShape),
                 ) {
-                    Text(
-                        text = "$timeIcon $timeBadge",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = cs.onPrimaryContainer,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    ) {
+                        Icon(
+                            imageVector = timeIcon,
+                            contentDescription = null,
+                            tint = cs.onPrimaryContainer,
+                            modifier = Modifier.size(15.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = timeBadge,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = cs.onPrimaryContainer,
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(8.dp))
@@ -2170,48 +2182,47 @@ private fun SeaCard(
                 )
             }
 
-            // Крупная кнопка Play M3 Expressive (74dp)
+            // Крупная чистая кнопка Play M3 Expressive (72dp) без темного ореола
             val scaleBtn by animateFloatAsState(
                 targetValue = currentPulse,
                 animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
                 label = "btnScale",
             )
 
-            Box(
+            Surface(
+                shape = CircleShape,
+                color = cs.primary,
+                shadowElevation = 6.dp,
                 modifier = Modifier
-                    .size(74.dp)
+                    .size(72.dp)
                     .graphicsLayer {
                         scaleX = scaleBtn
                         scaleY = scaleBtn
                     }
                     .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            listOf(
-                                cs.primaryContainer,
-                                cs.primary,
-                            )
-                        )
-                    )
                     .clickable(
                         enabled = !loading,
                         onClick = { onPlayPause() },
                     ),
-                contentAlignment = Alignment.Center,
             ) {
-                if (loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(28.dp),
-                        strokeWidth = 3.dp,
-                        color = cs.onPrimary,
-                    )
-                } else {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                        contentDescription = "Волна",
-                        tint = cs.onPrimary,
-                        modifier = Modifier.size(38.dp),
-                    )
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(28.dp),
+                            strokeWidth = 3.dp,
+                            color = cs.onPrimary,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                            contentDescription = "Волна",
+                            tint = cs.onPrimary,
+                            modifier = Modifier.size(38.dp),
+                        )
+                    }
                 }
             }
         }
@@ -2455,7 +2466,7 @@ private fun HomeFeed(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    items(history.take(20), key = { "hist_" + it.url }) { t ->
+                    itemsIndexed(history.take(20), key = { idx, t -> "hist_${idx}_${t.url}" }) { _, t ->
                         ShelfCard(
                             item = t,
                             playing = nowPlayingUrl == t.url && isPlaying,
@@ -2482,21 +2493,21 @@ private fun HomeFeed(
         // Персонализированные полки.
         if (personalizedShelves.isNotEmpty()) {
             personalizedShelves.forEachIndexed { idx, (title, tracks) ->
-                item { SectionTitle(title) }
+                item(key = "pers_title_$idx") { SectionTitle(title) }
                 if (tracks.isEmpty()) {
-                    item {
+                    item(key = "pers_shelf_$idx") {
                         HorizontalShelf(
                             title.lowercase(), shelfCache, onLoadShelf, nowPlayingUrl, isPlaying,
                             resolvingUrl, onPlay, onTrackLongClick, onPrefetch,
                         )
                     }
                 } else {
-                    item {
+                    item(key = "pers_shelf_$idx") {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            itemsIndexed(tracks, key = { _, t -> "pers_${idx}_${t.url}" }) { index, t ->
+                            itemsIndexed(tracks, key = { itemIdx, t -> "pers_${idx}_${itemIdx}_${t.url}" }) { index, t ->
                                 ShelfCard(
                                     item = t,
                                     playing = nowPlayingUrl == t.url && isPlaying,
@@ -2511,24 +2522,24 @@ private fun HomeFeed(
             }
         } else {
             // Fallback
-            item { SectionTitle("Новинки") }
-            item {
+            item(key = "fb_title_1") { SectionTitle("Новинки") }
+            item(key = "fb_shelf_1") {
                 HorizontalShelf(
                     "новинки музыки 2026", shelfCache, onLoadShelf, nowPlayingUrl, isPlaying,
                     resolvingUrl, onPlay, onTrackLongClick, onPrefetch,
                 )
             }
 
-            item { SectionTitle("Электроника") }
-            item {
+            item(key = "fb_title_2") { SectionTitle("Электроника") }
+            item(key = "fb_shelf_2") {
                 HorizontalShelf(
                     "electronic synthwave chill", shelfCache, onLoadShelf, nowPlayingUrl, isPlaying,
                     resolvingUrl, onPlay, onTrackLongClick, onPrefetch,
                 )
             }
 
-            item { SectionTitle("Рок и Альтернатива") }
-            item {
+            item(key = "fb_title_3") { SectionTitle("Рок и Альтернатива") }
+            item(key = "fb_shelf_3") {
                 HorizontalShelf(
                     "rock indie alternative", shelfCache, onLoadShelf, nowPlayingUrl, isPlaying,
                     resolvingUrl, onPlay, onTrackLongClick, onPrefetch,
@@ -2536,16 +2547,16 @@ private fun HomeFeed(
             }
         }
 
-        item { SectionTitle("Рекомендуем") }
+        item(key = "rec_title") { SectionTitle("Рекомендуем") }
         if (loading) {
-            item {
+            item(key = "rec_loading") {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(24.dp),
                     contentAlignment = Alignment.Center,
                 ) { CircularProgressIndicator() }
             }
         }
-        itemsIndexed(recTracks, key = { _, it -> "rec_" + it.url }) { index, t ->
+        itemsIndexed(recTracks, key = { index, it -> "rec_${index}_${it.url}" }) { index, t ->
             Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) {
                 TrackCard(
                     item = t,

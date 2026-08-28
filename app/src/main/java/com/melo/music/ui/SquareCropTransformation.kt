@@ -21,53 +21,61 @@ class SquareCropTransformation : Transformation {
     override val cacheKey: String = "com.melo.music.ui.SquareCropTransformation"
 
     override suspend fun transform(input: Bitmap, size: Size): Bitmap {
-        val w = input.width
-        val h = input.height
-        if (w <= 0 || h <= 0) return input
+        return runCatching {
+            val w = input.width
+            val h = input.height
+            if (w <= 0 || h <= 0 || input.isRecycled) return input
 
-        val aspect = w.toFloat() / h.toFloat()
+            val aspect = w.toFloat() / h.toFloat()
 
-        // 1. YouTube hqdefault.jpg (4:3 соотношение ~1.33) -> имеет черные полосы сверху/снизу по 12.5%
-        if (aspect in 1.30f..1.38f) {
-            val topBlack = (h * 0.125f).toInt()
-            val activeHeight = h - topBlack * 2
-            val cropSize = activeHeight
-            val left = (w - cropSize) / 2
+            // 1. YouTube hqdefault.jpg (4:3 соотношение ~1.33) -> имеет черные полосы сверху/снизу по 12.5%
+            if (aspect in 1.30f..1.38f) {
+                val topBlack = (h * 0.125f).toInt()
+                val activeHeight = h - topBlack * 2
+                val cropSize = activeHeight
+                val left = (w - cropSize) / 2
 
-            val srcRect = Rect(left, topBlack, left + cropSize, topBlack + cropSize)
-            val outBitmap = Bitmap.createBitmap(cropSize, cropSize, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(outBitmap)
-            val dstRect = Rect(0, 0, cropSize, cropSize)
-            canvas.drawBitmap(input, srcRect, dstRect, null)
-            return outBitmap
-        }
+                if (cropSize > 0 && left >= 0 && topBlack >= 0) {
+                    val srcRect = Rect(left, topBlack, left + cropSize, topBlack + cropSize)
+                    val outBitmap = Bitmap.createBitmap(cropSize, cropSize, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(outBitmap)
+                    val dstRect = Rect(0, 0, cropSize, cropSize)
+                    canvas.drawBitmap(input, srcRect, dstRect, null)
+                    return outBitmap
+                }
+            }
 
-        // 2. YouTube 16:9 (~1.777) -> квадратная обложка альбома находится строго по центру (1:1)
-        if (aspect in 1.70f..1.85f) {
-            val cropSize = h
-            val left = (w - cropSize) / 2
-            val srcRect = Rect(left, 0, left + cropSize, h)
-            val outBitmap = Bitmap.createBitmap(cropSize, cropSize, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(outBitmap)
-            val dstRect = Rect(0, 0, cropSize, cropSize)
-            canvas.drawBitmap(input, srcRect, dstRect, null)
-            return outBitmap
-        }
+            // 2. YouTube 16:9 (~1.777) -> квадратная обложка альбома находится строго по центру (1:1)
+            if (aspect in 1.70f..1.85f) {
+                val cropSize = h
+                val left = (w - cropSize) / 2
+                if (cropSize > 0 && left >= 0) {
+                    val srcRect = Rect(left, 0, left + cropSize, h)
+                    val outBitmap = Bitmap.createBitmap(cropSize, cropSize, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(outBitmap)
+                    val dstRect = Rect(0, 0, cropSize, cropSize)
+                    canvas.drawBitmap(input, srcRect, dstRect, null)
+                    return outBitmap
+                }
+            }
 
-        // 3. Другие не-квадратные соотношения -> центрированный квадрат
-        if (Math.abs(aspect - 1.0f) > 0.05f) {
-            val cropSize = minOf(w, h)
-            val left = (w - cropSize) / 2
-            val top = (h - cropSize) / 2
-            val srcRect = Rect(left, top, left + cropSize, top + cropSize)
-            val outBitmap = Bitmap.createBitmap(cropSize, cropSize, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(outBitmap)
-            val dstRect = Rect(0, 0, cropSize, cropSize)
-            canvas.drawBitmap(input, srcRect, dstRect, null)
-            return outBitmap
-        }
+            // 3. Другие не-квадратные соотношения -> центрированный квадрат
+            if (Math.abs(aspect - 1.0f) > 0.05f) {
+                val cropSize = minOf(w, h)
+                val left = (w - cropSize) / 2
+                val top = (h - cropSize) / 2
+                if (cropSize > 0 && left >= 0 && top >= 0) {
+                    val srcRect = Rect(left, top, left + cropSize, top + cropSize)
+                    val outBitmap = Bitmap.createBitmap(cropSize, cropSize, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(outBitmap)
+                    val dstRect = Rect(0, 0, cropSize, cropSize)
+                    canvas.drawBitmap(input, srcRect, dstRect, null)
+                    return outBitmap
+                }
+            }
 
-        return input
+            input
+        }.getOrDefault(input)
     }
 }
 
@@ -77,6 +85,9 @@ class SquareCropTransformation : Transformation {
 class SquareCropInterceptor : Interceptor {
     override suspend fun intercept(chain: Interceptor.Chain): ImageResult {
         val request = chain.request
+        val hasTransformation = request.transformations.any { it is SquareCropTransformation }
+        if (hasTransformation) return chain.proceed(request)
+
         val newRequest = request.newBuilder()
             .transformations(listOf(SquareCropTransformation()) + request.transformations)
             .build()
