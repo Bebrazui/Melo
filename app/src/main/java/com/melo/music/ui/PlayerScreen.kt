@@ -4579,8 +4579,19 @@ private fun SleepTimerControl(white: Color, accent: Color) {
 @Composable
 fun Artwork(url: String?, modifier: Modifier = Modifier) {
     if (url != null) {
+        val context = LocalContext.current
+        val request = remember(url) {
+            coil.request.ImageRequest.Builder(context)
+                .data(url)
+                .memoryCacheKey(url)
+                .diskCacheKey(url)
+                .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+                .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                .crossfade(false)
+                .build()
+        }
         AsyncImage(
-            model = url,
+            model = request,
             contentDescription = null,
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
@@ -4699,38 +4710,35 @@ private fun NowPlayingBar(
         label = "miniPlayerAccentColor",
     )
 
-    // Плавный многочастотный визуализатор (не цикличный, органичный, как акустический спектр)
-    val infiniteTransition = rememberInfiniteTransition(label = "fluidVisualizerTransition")
-    val waveA by infiniteTransition.animateFloat(
-        initialValue = 0.15f,
-        targetValue = 0.90f,
+    // Волнистая органичная волна (Liquid Waveform visualizer)
+    val infiniteTransition = rememberInfiniteTransition(label = "fluidLiquidWave")
+    val wavePhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 680, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 3000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "wavePhase",
+    )
+    val wavePhase2 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "wavePhase2",
+    )
+    val waveAmplitude by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 650, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse,
         ),
-        label = "waveA",
+        label = "waveAmplitude",
     )
-    val waveB by infiniteTransition.animateFloat(
-        initialValue = 0.10f,
-        targetValue = 1.00f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 440, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "waveB",
-    )
-    val waveC by infiniteTransition.animateFloat(
-        initialValue = 0.20f,
-        targetValue = 0.80f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1150, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "waveC",
-    )
-
-    val dynamicGlowAlpha = if (isPlaying) (0.35f + waveB * 0.40f + waveA * 0.25f).coerceIn(0.2f, 1f) else 0.20f
-    val dynamicGlowHeight = if (isPlaying) (waveA * 0.45f + waveB * 0.35f + waveC * 0.20f).coerceIn(0.1f, 1f) else 0.25f
 
     Surface(
         // Твердый глубокий капсульный контейнер
@@ -4744,24 +4752,66 @@ private fun NowPlayingBar(
     ) {
         Box(
             modifier = Modifier
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF0A0A0C),
-                            Color(0xFF141418),
-                            lerp(Color(0xFF141418), animatedTrackColor, 0.35f * dynamicGlowHeight),
-                            animatedTrackColor.copy(alpha = dynamicGlowAlpha * 0.85f),
-                        ),
-                        startY = 0f,
-                        endY = Float.POSITIVE_INFINITY,
-                    )
-                )
-                // Сетка точек, плавно затухающих к верху (прозрачнее к верху в цвет трека)
+                // Волнистый живой визуализатор и затухающая матрица точек
                 .drawBehind {
+                    val w = size.width
+                    val h = size.height
+
+                    // 1. Темный базовый фон капсулы
+                    drawRect(color = Color(0xFF0C0A08))
+
+                    // 2. Волнистый гребень градиента (Liquid Audio Wave)
+                    if (isPlaying) {
+                        val wavePath = androidx.compose.ui.graphics.Path()
+                        val baseHeight = h * (0.42f * waveAmplitude)
+                        val amp1 = 8.dp.toPx() * waveAmplitude
+                        val amp2 = 5.dp.toPx() * waveAmplitude
+                        val steps = 24
+                        val stepX = w / steps
+
+                        val startY = h - (baseHeight + kotlin.math.sin(wavePhase.toDouble()).toFloat() * amp1)
+                        wavePath.moveTo(0f, startY)
+
+                        for (i in 1..steps) {
+                            val x = i * stepX
+                            val rad1 = (x / w) * (2 * Math.PI) + wavePhase
+                            val rad2 = (x / w) * (3 * Math.PI) - wavePhase2
+                            val y = h - (baseHeight + kotlin.math.sin(rad1).toFloat() * amp1 + kotlin.math.cos(rad2).toFloat() * amp2)
+                            wavePath.lineTo(x, y)
+                        }
+                        wavePath.lineTo(w, h)
+                        wavePath.lineTo(0f, h)
+                        wavePath.close()
+
+                        drawPath(
+                            path = wavePath,
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    animatedTrackColor.copy(alpha = 0.15f),
+                                    animatedTrackColor.copy(alpha = 0.75f),
+                                    animatedTrackColor.copy(alpha = 0.95f),
+                                ),
+                                startY = h - baseHeight - amp1 * 2,
+                                endY = h,
+                            ),
+                        )
+                    } else {
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFF0A0A0C),
+                                    Color(0xFF141418),
+                                    animatedTrackColor.copy(alpha = 0.25f),
+                                ),
+                            ),
+                        )
+                    }
+
+                    // 3. Сетка точек, плавно затухающих к верху (прозрачнее к верху в цвет трека)
                     val dotSpacing = 16.dp.toPx()
                     val dotRadius = 1.25.dp.toPx()
-                    val cols = (size.width / dotSpacing).toInt() + 1
-                    val rows = (size.height / dotSpacing).toInt() + 1
+                    val cols = (w / dotSpacing).toInt() + 1
+                    val rows = (h / dotSpacing).toInt() + 1
                     for (r in 0..rows) {
                         val yFactor = (r.toFloat() / rows.coerceAtLeast(1)).coerceIn(0f, 1f)
                         val verticalAlpha = (yFactor * yFactor * yFactor) * if (isPlaying) 0.32f else 0.16f

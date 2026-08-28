@@ -178,6 +178,8 @@ class PlaybackService : MediaSessionService() {
         fun buildPlayer(): ExoPlayer {
             val vocalProcessor = com.melo.music.audio.VocalCutAudioProcessor()
             com.melo.music.audio.VocalCutManager.register(vocalProcessor)
+            val dspProcessor = com.melo.music.audio.MeloDspAudioProcessor()
+            com.melo.music.audio.EqualizerManager.registerDsp(dspProcessor)
 
             val renderersFactory = object : androidx.media3.exoplayer.DefaultRenderersFactory(this) {
                 override fun buildAudioSink(
@@ -188,7 +190,7 @@ class PlaybackService : MediaSessionService() {
                     return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
                         .setEnableFloatOutput(enableFloatOutput)
                         .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                        .setAudioProcessors(arrayOf(vocalProcessor))
+                        .setAudioProcessors(arrayOf(vocalProcessor, dspProcessor))
                         .build()
                 }
             }

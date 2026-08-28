@@ -165,6 +165,30 @@ object EqualizerManager {
         // auxReverb НЕ освобождаем — он глобальный, живёт всё время.
     }
 
+    private val dspProcessors = java.util.concurrent.CopyOnWriteArrayList<MeloDspAudioProcessor>()
+
+    fun registerDsp(dsp: MeloDspAudioProcessor) {
+        dspProcessors.add(dsp)
+        syncDsp(dsp)
+    }
+
+    fun unregisterDsp(dsp: MeloDspAudioProcessor) {
+        dspProcessors.remove(dsp)
+    }
+
+    private fun syncDsp(dsp: MeloDspAudioProcessor) {
+        dsp.spatialEnabled = isSpatialEnabled()
+        dsp.spatialStrength = (getSpatialStrength() / 1000f).coerceIn(0f, 1f)
+        dsp.reverbPreset = getReverbPreset()
+        dsp.gainFactor = 1.0f + (getGain() / 1000f) * 0.75f
+        dsp.eqEnabled = isEnabled()
+        val levels = loadBandLevels()
+        for (i in 0 until 5) {
+            val db = if (i < levels.size) levels[i] / 100f else 0f
+            dsp.setBandGain(i, db)
+        }
+    }
+
     // ── Пространственный звук 3D (Spatial Audio) ──────────────────────────────
 
     fun isSpatialEnabled(): Boolean = prefs?.getBoolean(KEY_SPATIAL, false) ?: false
@@ -174,6 +198,7 @@ object EqualizerManager {
     @Synchronized
     fun setSpatialEnabled(enabled: Boolean) {
         virtualizer?.let { runCatching { it.enabled = enabled } }
+        for (d in dspProcessors) d.spatialEnabled = enabled
         prefs?.edit()?.putBoolean(KEY_SPATIAL, enabled)?.apply()
     }
 
@@ -185,6 +210,7 @@ object EqualizerManager {
                 if (it.strengthSupported) it.setStrength(s.toShort())
             }
         }
+        for (d in dspProcessors) d.spatialStrength = (s / 1000f).coerceIn(0f, 1f)
         prefs?.edit()?.putInt(KEY_SPATIAL_STRENGTH, s)?.apply()
     }
 
@@ -202,6 +228,7 @@ object EqualizerManager {
                 it.enabled = v > 0
             }
         }
+        for (d in dspProcessors) d.gainFactor = 1.0f + (v / 1000f) * 0.75f
         prefs?.edit()?.putInt(KEY_GAIN, v)?.apply()
     }
 
@@ -232,37 +259,50 @@ object EqualizerManager {
         auxReverb?.let {
             runCatching { it.preset = p.toShort() }
         }
+        for (d in dspProcessors) d.reverbPreset = p
         prefs?.edit()?.putInt(KEY_REVERB, p)?.apply()
         // Сервис переустановит aux-send на активном плеере (0 ↔ полный).
         onReverbChanged?.invoke()
     }
 
-    fun isEnabled(): Boolean = equalizer?.enabled ?: false
+    fun isEnabled(): Boolean = prefs?.getBoolean(KEY_ENABLED, false) ?: false
 
     @Synchronized
     fun setEnabled(enabled: Boolean) {
         equalizer?.enabled = enabled
+        for (d in dspProcessors) d.eqEnabled = enabled
         prefs?.edit()?.putBoolean(KEY_ENABLED, enabled)?.apply()
     }
 
     @Synchronized
     fun setPreset(presetIndex: Int) {
-        val eq = equalizer ?: return
-        if (presetIndex in 0 until eq.numberOfPresets) {
+        val eq = equalizer
+        if (eq != null && presetIndex in 0 until eq.numberOfPresets) {
             eq.usePreset(presetIndex.toShort())
-            prefs?.edit()?.putInt(KEY_PRESET, presetIndex)?.apply()
             saveBandLevels()
+        }
+        prefs?.edit()?.putInt(KEY_PRESET, presetIndex)?.apply()
+        val levels = loadBandLevels()
+        for (d in dspProcessors) {
+            for (i in 0 until 5) {
+                val db = if (i < levels.size) levels[i] / 100f else 0f
+                d.setBandGain(i, db)
+            }
         }
     }
 
     @Synchronized
     fun setBandLevel(band: Int, level: Short) {
-        val eq = equalizer ?: return
-        if (band in 0 until bandCount) {
-            eq.setBandLevel(band.toShort(), level)
-            prefs?.edit()?.putInt(KEY_PRESET, -1)?.apply() // Сброс пресета
-            saveBandLevels()
+        equalizer?.let {
+            if (band in 0 until bandCount) {
+                it.setBandLevel(band.toShort(), level)
+            }
         }
+        for (d in dspProcessors) {
+            d.setBandGain(band, level / 100f)
+        }
+        prefs?.edit()?.putInt(KEY_PRESET, -1)?.apply() // Сброс пресета
+        saveBandLevels()
     }
 
     fun getBandLevel(band: Int): Short =
@@ -271,7 +311,6 @@ object EqualizerManager {
     fun getPreset(): Int {
         val eq = equalizer ?: return -1
         return try {
-            // Проверяем, совпадает ли текущее состояние с каким-то пресетом.
             val saved = prefs?.getInt(KEY_PRESET, -1) ?: -1
             if (saved in 0 until eq.numberOfPresets) saved else -1
         } catch (_: Exception) {
@@ -280,18 +319,22 @@ object EqualizerManager {
     }
 
     private fun saveBandLevels() {
-        val eq = equalizer ?: return
-        val levels = ShortArray(bandCount) { eq.getBandLevel(it.toShort()) }
+        val eq = equalizer
+        val levels = if (eq != null && bandCount > 0) {
+            ShortArray(bandCount) { eq.getBandLevel(it.toShort()) }
+        } else {
+            ShortArray(5) { 0 }
+        }
         val json = levels.joinToString(",")
         prefs?.edit()?.putString(KEY_BANDS, json)?.apply()
     }
 
     private fun loadBandLevels(): ShortArray {
-        val json = prefs?.getString(KEY_BANDS, null) ?: return shortArrayOf()
+        val json = prefs?.getString(KEY_BANDS, null) ?: return shortArrayOf(0, 0, 0, 0, 0)
         return try {
             json.split(",").map { it.trim().toShort() }.toShortArray()
         } catch (_: Exception) {
-            shortArrayOf()
+            shortArrayOf(0, 0, 0, 0, 0)
         }
     }
 }

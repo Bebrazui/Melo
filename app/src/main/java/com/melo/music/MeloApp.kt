@@ -154,14 +154,15 @@ class MeloApp : Application(), ImageLoaderFactory {
             .memoryCachePolicy(CachePolicy.ENABLED)
             .memoryCache {
                 MemoryCache.Builder(this)
-                    .maxSizePercent(0.25)
+                    .maxSizePercent(0.35)
+                    .strongReferencesEnabled(true)
                     .build()
             }
             .diskCachePolicy(CachePolicy.ENABLED)
             .diskCache {
                 DiskCache.Builder()
                     .directory(cacheDir.resolve("image_cache"))
-                    .maxSizeBytes(256L * 1024 * 1024)
+                    .maxSizeBytes(512L * 1024 * 1024)
                     .build()
             }
             .respectCacheHeaders(false)
