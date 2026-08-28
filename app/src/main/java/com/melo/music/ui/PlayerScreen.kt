@@ -988,6 +988,8 @@ fun PlayerScreen(
               resolving = resolvingUrl != null,
               error = playerError,
               onTogglePlayPause = onTogglePlayPause,
+              onPrev = { playPrev() },
+              onNext = { playNext() },
               onClick = { playerExpanded = true },
               modifier = Modifier.align(Alignment.BottomCenter),
           )
@@ -1008,6 +1010,8 @@ fun PlayerScreen(
                         resolving = resolvingUrl != null,
                         error = playerError,
                         onTogglePlayPause = onTogglePlayPause,
+                        onPrev = { playPrev() },
+                        onNext = { playNext() },
                         onClick = { playerExpanded = true },
                     )
                 },
@@ -1643,7 +1647,7 @@ private fun AccountTab(
             }
         }
 
-        // Профиль (аватар, имя, описание) — для вошедших в аккаунт.
+        // Профиль (Hero Card) — для вошедших и для гостей.
         if (com.melo.music.auth.AuthManager.loggedIn) {
             ProfileHeaderCard()
             val uid = com.melo.music.auth.AuthManager.userId
@@ -1661,6 +1665,157 @@ private fun AccountTab(
                         modifier = Modifier
                             .weight(1f)
                             .clickable { clipboard.setText(AnnotatedString(uid)) },
+                    )
+                }
+            }
+        } else {
+            // Bento Hero карточка для Гостя (Material 3 Expressive)
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = Color(0xFF1E1A15),
+                border = BorderStroke(1.2.dp, Color(0xFF3D3224)),
+                shadowElevation = 8.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 18.dp),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    Color(0xFF2B231A),
+                                    Color(0xFF1A1612),
+                                )
+                            )
+                        )
+                        .padding(20.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFFD4A853),
+                            modifier = Modifier.size(56.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Rounded.AccountCircle,
+                                    contentDescription = null,
+                                    tint = Color(0xFF191612),
+                                    modifier = Modifier.size(36.dp),
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Гостевой профиль",
+                                style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp),
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFFF3E2C8),
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                "Синхронизируй плейлисты и делись треками на карте",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFBA9E76),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Button(
+                        onClick = onOpenLogin,
+                        shape = RoundedCornerShape(22.dp),
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFD4A853),
+                            contentColor = Color(0xFF191612),
+                        ),
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                    ) {
+                        Icon(Icons.Rounded.AccountCircle, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Войти или зарегистрироваться", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // Bento-сетка быстрой статистики (Любимое + Плейлисты)
+        val favCount = remember(refreshKey) { com.melo.music.favorites.FavoritesManager.getAll().size }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // Карточка «Избранное»
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Color.White.copy(alpha = 0.05f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                modifier = Modifier.weight(1f),
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFFE53935).copy(alpha = 0.2f),
+                        modifier = Modifier.size(38.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.Favorite,
+                                contentDescription = null,
+                                tint = Color(0xFFFF6E6E),
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "$favCount треков",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                    Text(
+                        "В Избранном",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.6f),
+                    )
+                }
+            }
+
+            // Карточка «Плейлисты»
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Color.White.copy(alpha = 0.05f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                modifier = Modifier.weight(1f),
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Surface(
+                        shape = CircleShape,
+                        color = cs.primaryContainer.copy(alpha = 0.6f),
+                        modifier = Modifier.size(38.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.LibraryMusic,
+                                contentDescription = null,
+                                tint = cs.onPrimaryContainer,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "${playlists.size} шт.",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                    Text(
+                        "Мои плейлисты",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.6f),
                     )
                 }
             }
@@ -4460,6 +4615,51 @@ fun Artwork(url: String?, modifier: Modifier = Modifier) {
     }
 }
 
+/** Material 3 Expressive Scalloped / Starburst Shape (как на фото) */
+private class ScallopedShape(
+    val petals: Int = 8,
+    val depth: Float = 0.14f,
+) : androidx.compose.ui.graphics.Shape {
+    override fun createOutline(
+        size: androidx.compose.ui.geometry.Size,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        density: androidx.compose.ui.unit.Density,
+    ): androidx.compose.ui.graphics.Outline {
+        val path = androidx.compose.ui.graphics.Path()
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val maxR = kotlin.math.min(cx, cy)
+        val minR = maxR * (1f - depth)
+        val totalPoints = petals * 2
+        val step = (2.0 * Math.PI / totalPoints).toFloat()
+
+        val points = (0 until totalPoints).map { i ->
+            val angle = i * step - (Math.PI / 2).toFloat()
+            val r = if (i % 2 == 0) maxR else minR
+            androidx.compose.ui.geometry.Offset(
+                cx + r * kotlin.math.cos(angle.toDouble()).toFloat(),
+                cy + r * kotlin.math.sin(angle.toDouble()).toFloat(),
+            )
+        }
+
+        path.moveTo(
+            (points[0].x + points.last().x) / 2f,
+            (points[0].y + points.last().y) / 2f,
+        )
+
+        for (i in points.indices) {
+            val p = points[i]
+            val next = points[(i + 1) % points.size]
+            val midX = (p.x + next.x) / 2f
+            val midY = (p.y + next.y) / 2f
+            path.quadraticTo(p.x, p.y, midX, midY)
+        }
+
+        path.close()
+        return androidx.compose.ui.graphics.Outline.Generic(path)
+    }
+}
+
 @Composable
 private fun NowPlayingBar(
     item: TrackItem?,
@@ -4467,76 +4667,183 @@ private fun NowPlayingBar(
     resolving: Boolean,
     error: String?,
     onTogglePlayPause: () -> Unit,
+    onPrev: () -> Unit = {},
+    onNext: () -> Unit = {},
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (item == null) return
+    val scallopedBtn = remember { ScallopedShape(petals = 8, depth = 0.15f) }
+    val scallopedArt = remember { ScallopedShape(petals = 10, depth = 0.12f) }
+
     Surface(
-        // Полупрозрачное «стекло»: сквозь плашку мягко просвечивает контент под ней.
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
-        shape = ShapeCache.smooth32,
-        tonalElevation = 0.dp,
-        shadowElevation = 8.dp,
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-        ),
+        // Твердый глубокий теплый капсульный контейнер (как на фото пользователя)
+        color = Color(0xFF191612),
+        shape = RoundedCornerShape(42.dp),
+        shadowElevation = 16.dp,
+        border = BorderStroke(1.2.dp, Color(0xFF382E22)),
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 12.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp)
             .clickable(onClick = onClick),
     ) {
-        Column {
+        Box(
+            modifier = Modifier
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color(0xFF181511),
+                            Color(0xFF261F18),
+                            Color(0xFF1C1712),
+                        )
+                    )
+                )
+        ) {
             Row(
-                modifier = Modifier.padding(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Artwork(
-                    url = item.thumbnailUrl,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(14.dp)),
-                )
+                // Обложка в фигурной волнистой рамке со значком ноты
+                Box(
+                    modifier = Modifier.size(54.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    // Волнистый контур обложки
+                    Surface(
+                        shape = scallopedArt,
+                        color = Color(0xFF2A2219),
+                        border = BorderStroke(1.8.dp, Color(0xFFD4A853)),
+                        modifier = Modifier.size(52.dp),
+                    ) {
+                        Artwork(
+                            url = item.thumbnailUrl,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(scallopedArt),
+                        )
+                    }
+                    // Круглый золотистый бейдж ноты снизу справа
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFFD4A853),
+                        modifier = Modifier
+                            .size(20.dp)
+                            .align(Alignment.BottomEnd),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.MusicNote,
+                                contentDescription = null,
+                                tint = Color(0xFF191612),
+                                modifier = Modifier.size(13.dp),
+                            )
+                        }
+                    }
+                }
+
                 Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
+
+                // Название трека и автор в теплых песочно-бронзовых тонах
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 6.dp),
+                ) {
                     Text(
                         text = item.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 17.sp,
+                            letterSpacing = (-0.2).sp,
+                        ),
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFF3E2C8),
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                    item.uploader?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                            maxLines = 1,
-                        )
+                    Spacer(Modifier.height(1.dp))
+                    Text(
+                        text = "by — ${item.uploader ?: "Unknown"}",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 13.sp,
+                        ),
+                        color = Color(0xFFBA9E76),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
+                // Кнопки управления в виде фигурных звездочек / лепестков
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    // Prev
+                    Surface(
+                        shape = scallopedBtn,
+                        color = Color(0xFFE2D6BE),
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(scallopedBtn)
+                            .clickable(onClick = onPrev),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.SkipPrevious,
+                                contentDescription = "Назад",
+                                tint = Color(0xFF1A1612),
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+
+                    // Play / Pause (чуть крупнее 50dp)
+                    Surface(
+                        shape = scallopedBtn,
+                        color = Color(0xFFF5EACF),
+                        modifier = Modifier
+                            .size(50.dp)
+                            .clip(scallopedBtn)
+                            .clickable(onClick = onTogglePlayPause),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            if (resolving) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    strokeWidth = 2.5.dp,
+                                    color = Color(0xFF1A1612),
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                    contentDescription = if (isPlaying) "Пауза" else "Играть",
+                                    tint = Color(0xFF1A1612),
+                                    modifier = Modifier.size(26.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    // Next
+                    Surface(
+                        shape = scallopedBtn,
+                        color = Color(0xFFE2D6BE),
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(scallopedBtn)
+                            .clickable(onClick = onNext),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.SkipNext,
+                                contentDescription = "Вперед",
+                                tint = Color(0xFF1A1612),
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
                     }
                 }
-                Spacer(Modifier.width(8.dp))
-                FilledIconButton(onClick = onTogglePlayPause) {
-                    if (resolving) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    } else {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = if (isPlaying) "Пауза" else "Играть",
-                        )
-                    }
-                }
-            }
-            error?.let {
-                Text(
-                    text = "Плеер: $it",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                )
             }
         }
     }
