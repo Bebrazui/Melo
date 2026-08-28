@@ -16,6 +16,10 @@ object Recommender {
 
     private var initialized = false
 
+    var cachedShelves: List<Pair<String, List<TrackItem>>> = emptyList()
+    var cachedQuickPicks: List<TrackItem> = emptyList()
+    var cachedPersonalizedRecs: List<TrackItem> = emptyList()
+
     fun init(context: Context) {
         if (initialized) return
         SkipTracker.init(context)
@@ -31,7 +35,11 @@ object Recommender {
     suspend fun generatePersonalizedShelves(
         onLoadShelf: suspend (String) -> List<TrackItem>,
         related: suspend (TrackItem) -> List<TrackItem> = { emptyList() },
+        forceRefresh: Boolean = false,
     ): List<Pair<String, List<TrackItem>>> = withContext(Dispatchers.IO) {
+        if (!forceRefresh && cachedShelves.isNotEmpty()) {
+            return@withContext cachedShelves
+        }
         val profile = TasteProfile.build()
         val liked = FavoritesManager.getAll()
         val history = HistoryManager.getAll()
@@ -91,6 +99,7 @@ object Recommender {
             }
         }
 
+        cachedShelves = shelves
         shelves
     }
 
@@ -101,7 +110,11 @@ object Recommender {
     suspend fun generateQuickPicks(
         fallbackTracks: List<TrackItem> = emptyList(),
         related: suspend (TrackItem) -> List<TrackItem> = { emptyList() },
+        forceRefresh: Boolean = false,
     ): List<TrackItem> = withContext(Dispatchers.IO) {
+        if (!forceRefresh && cachedQuickPicks.isNotEmpty()) {
+            return@withContext cachedQuickPicks
+        }
         val liked = FavoritesManager.getAll()
         val history = HistoryManager.getAll()
         val bannedUrls = SkipTracker.getBannedUrls()
@@ -112,7 +125,9 @@ object Recommender {
             .distinctBy { it.url }
 
         if (validUserTracks.isEmpty()) {
-            return@withContext fallbackTracks.take(12)
+            val res = fallbackTracks.take(12)
+            cachedQuickPicks = res
+            return@withContext res
         }
 
         val pool = mutableListOf<TrackItem>()
@@ -127,7 +142,9 @@ object Recommender {
             pool.addAll(fresh.take(4))
         }
 
-        TasteProfile.rankByTaste(pool.distinctBy { it.url }, profile).take(12)
+        val res = TasteProfile.rankByTaste(pool.distinctBy { it.url }, profile).take(12)
+        cachedQuickPicks = res
+        res
     }
 
     /**
@@ -136,7 +153,11 @@ object Recommender {
     suspend fun generatePersonalizedRecommendations(
         fallbackProvider: suspend () -> List<TrackItem>,
         related: suspend (TrackItem) -> List<TrackItem>,
+        forceRefresh: Boolean = false,
     ): List<TrackItem> = withContext(Dispatchers.IO) {
+        if (!forceRefresh && cachedPersonalizedRecs.isNotEmpty()) {
+            return@withContext cachedPersonalizedRecs
+        }
         val liked = FavoritesManager.getAll()
         val history = HistoryManager.getAll()
         val bannedUrls = SkipTracker.getBannedUrls()
@@ -144,7 +165,9 @@ object Recommender {
 
         val validSeeds = (liked + history).filter { it.url !in bannedUrls }.distinctBy { it.url }
         if (validSeeds.isEmpty()) {
-            return@withContext fallbackProvider()
+            val res = fallbackProvider()
+            cachedPersonalizedRecs = res
+            return@withContext res
         }
 
         val results = mutableListOf<TrackItem>()
@@ -163,7 +186,9 @@ object Recommender {
             results.addAll(fallback.filter { it.url !in excludeUrls })
         }
 
-        TasteProfile.rankByTaste(results.distinctBy { it.url }, profile)
+        val res = TasteProfile.rankByTaste(results.distinctBy { it.url }, profile)
+        cachedPersonalizedRecs = res
+        res
     }
 
     /**

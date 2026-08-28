@@ -2655,17 +2655,21 @@ private fun HomeFeed(
     }
     val recTracks = recommendations.filter { it.kind == ItemKind.TRACK }.distinctBy { it.url }
 
-    // Персонализированные полки из Taste Profile.
+    // Персонализированные полки из Taste Profile (с мгновенным кэшем при смене табов).
     var personalizedShelves by remember {
-        mutableStateOf<List<Pair<String, List<TrackItem>>>>(emptyList())
+        mutableStateOf(Recommender.cachedShelves)
     }
     var quickPicks by remember {
-        mutableStateOf<List<TrackItem>>(emptyList())
+        mutableStateOf(Recommender.cachedQuickPicks)
     }
 
     LaunchedEffect(history.size, recommendations.size) {
-        personalizedShelves = Recommender.generatePersonalizedShelves(onLoadShelf, onRelatedTracks)
-        quickPicks = Recommender.generateQuickPicks(fallbackTracks = recTracks, related = onRelatedTracks)
+        if (personalizedShelves.isEmpty()) {
+            personalizedShelves = Recommender.generatePersonalizedShelves(onLoadShelf, onRelatedTracks)
+        }
+        if (quickPicks.isEmpty()) {
+            quickPicks = Recommender.generateQuickPicks(fallbackTracks = recTracks, related = onRelatedTracks)
+        }
     }
 
     // Кэш полок живёт здесь (LazyColumn не уничтожается при скролле),
@@ -4710,111 +4714,95 @@ private fun NowPlayingBar(
         label = "miniPlayerAccentColor",
     )
 
-    // Волнистая органичная волна (Liquid Waveform visualizer)
-    val infiniteTransition = rememberInfiniteTransition(label = "fluidLiquidWave")
-    val wavePhase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2 * Math.PI).toFloat(),
+    // Плавная органичная пульсация свечения (без резких волн)
+    val infiniteTransition = rememberInfiniteTransition(label = "ambientGlowPulse")
+    val pulseGlow by infiniteTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 0.90f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "wavePhase",
-    )
-    val wavePhase2 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2 * Math.PI).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1900, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "wavePhase2",
-    )
-    val waveAmplitude by infiniteTransition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.85f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 650, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse,
         ),
-        label = "waveAmplitude",
+        label = "pulseGlow",
+    )
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "pulseScale",
     )
 
     Surface(
-        // Твердый глубокий капсульный контейнер
-        color = Color(0xFF0F0D0A),
+        // Матовое полупрозрачное стекло
+        color = Color(0xEB13110E),
         shape = RoundedCornerShape(42.dp),
         shadowElevation = 18.dp,
-        border = BorderStroke(1.2.dp, lerp(Color(0xFF2E241A), animatedTrackColor, 0.25f)),
+        border = BorderStroke(1.2.dp, lerp(Color(0x44FFFFFF), animatedTrackColor, 0.35f)),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Box(
             modifier = Modifier
-                // Волнистый живой визуализатор и затухающая матрица точек
+                // Светящиеся круги, блюр и затухающая матрица точек
                 .drawBehind {
                     val w = size.width
                     val h = size.height
 
-                    // 1. Темный базовый фон капсулы
-                    drawRect(color = Color(0xFF0C0A08))
+                    // 1. Матовое стекло
+                    drawRect(color = Color(0xEB13110E))
 
-                    // 2. Волнистый гребень градиента (Liquid Audio Wave)
+                    // 2. Мягкие светящиеся круги с радиальным размытием (Ambient Glowing Circles)
                     if (isPlaying) {
-                        val wavePath = androidx.compose.ui.graphics.Path()
-                        val baseHeight = h * (0.42f * waveAmplitude)
-                        val amp1 = 8.dp.toPx() * waveAmplitude
-                        val amp2 = 5.dp.toPx() * waveAmplitude
-                        val steps = 24
-                        val stepX = w / steps
-
-                        val startY = h - (baseHeight + kotlin.math.sin(wavePhase.toDouble()).toFloat() * amp1)
-                        wavePath.moveTo(0f, startY)
-
-                        for (i in 1..steps) {
-                            val x = i * stepX
-                            val rad1 = (x / w) * (2 * Math.PI) + wavePhase
-                            val rad2 = (x / w) * (3 * Math.PI) - wavePhase2
-                            val y = h - (baseHeight + kotlin.math.sin(rad1).toFloat() * amp1 + kotlin.math.cos(rad2).toFloat() * amp2)
-                            wavePath.lineTo(x, y)
-                        }
-                        wavePath.lineTo(w, h)
-                        wavePath.lineTo(0f, h)
-                        wavePath.close()
-
-                        drawPath(
-                            path = wavePath,
-                            brush = Brush.verticalGradient(
+                        // Правый светящийся круг под кнопками управления
+                        drawCircle(
+                            brush = Brush.radialGradient(
                                 colors = listOf(
-                                    animatedTrackColor.copy(alpha = 0.15f),
-                                    animatedTrackColor.copy(alpha = 0.75f),
-                                    animatedTrackColor.copy(alpha = 0.95f),
+                                    animatedTrackColor.copy(alpha = 0.45f * pulseGlow),
+                                    animatedTrackColor.copy(alpha = 0.18f * pulseGlow),
+                                    Color.Transparent,
                                 ),
-                                startY = h - baseHeight - amp1 * 2,
-                                endY = h,
+                                center = Offset(w - 70.dp.toPx(), h / 2),
+                                radius = 90.dp.toPx() * pulseScale,
                             ),
                         )
-                    } else {
-                        drawRect(
-                            brush = Brush.verticalGradient(
+                        // Левый мягкий ореол под обложкой
+                        drawCircle(
+                            brush = Brush.radialGradient(
                                 colors = listOf(
-                                    Color(0xFF0A0A0C),
-                                    Color(0xFF141418),
-                                    animatedTrackColor.copy(alpha = 0.25f),
+                                    animatedTrackColor.copy(alpha = 0.35f * pulseGlow),
+                                    Color.Transparent,
                                 ),
+                                center = Offset(45.dp.toPx(), h / 2),
+                                radius = 70.dp.toPx(),
                             ),
                         )
                     }
 
-                    // 3. Сетка точек, плавно затухающих к верху (прозрачнее к верху в цвет трека)
+                    // 3. Вертикальный градиент снизу
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                animatedTrackColor.copy(alpha = if (isPlaying) 0.12f * pulseGlow else 0.05f),
+                                animatedTrackColor.copy(alpha = if (isPlaying) 0.38f * pulseGlow else 0.12f),
+                            ),
+                            startY = h * 0.3f,
+                            endY = h,
+                        ),
+                    )
+
+                    // 4. Сетка точек, плавно затухающих к верху (прозрачнее к верху в цвет трека)
                     val dotSpacing = 16.dp.toPx()
                     val dotRadius = 1.25.dp.toPx()
                     val cols = (w / dotSpacing).toInt() + 1
                     val rows = (h / dotSpacing).toInt() + 1
                     for (r in 0..rows) {
                         val yFactor = (r.toFloat() / rows.coerceAtLeast(1)).coerceIn(0f, 1f)
-                        val verticalAlpha = (yFactor * yFactor * yFactor) * if (isPlaying) 0.32f else 0.16f
+                        val verticalAlpha = (yFactor * yFactor * yFactor) * if (isPlaying) 0.28f else 0.14f
                         if (verticalAlpha > 0.005f) {
                             for (c in 0..cols) {
                                 drawCircle(
