@@ -1011,6 +1011,7 @@ fun PlayerScreen(
                         onTogglePlayPause = onTogglePlayPause,
                         onPrev = { playPrev() },
                         onNext = { playNext() },
+                        onOpenArtist = { artistItem -> artistOpen = artistItem },
                         onClick = { playerExpanded = true },
                     )
                 },
@@ -1066,6 +1067,10 @@ fun PlayerScreen(
                     onToggleLike = { toggleLike(item) },
                     onShowQueue = { showQueue = true },
                     onFetchLyrics = { onFetchLyrics(item.title, item.uploader) },
+                    onOpenArtist = { artistItem ->
+                        playerExpanded = false
+                        artistOpen = artistItem
+                    },
                     onCollapse = { playerExpanded = false },
                 )
             }
@@ -3650,6 +3655,7 @@ private fun ArtistScreen(
     var similar by remember(artist.url) { mutableStateOf<List<TrackItem>>(emptyList()) }
     var loading by remember(artist.url) { mutableStateOf(true) }
     var error by remember(artist.url) { mutableStateOf<String?>(null) }
+
     LaunchedEffect(artist.url) {
         loading = true
         error = null
@@ -3659,25 +3665,20 @@ private fun ArtistScreen(
         loading = false
     }
     LaunchedEffect(artist.url) {
-        // Альбомы грузим параллельно с треками — не ждём друг друга.
         albums = runCatching { onLoadAlbums() }.getOrDefault(emptyList())
     }
-    // Похожие исполнители — только когда треки готовы (переиспользуем их как сид,
-    // чтобы не качать вкладку канала второй раз и не душить прокси).
     LaunchedEffect(tracks) {
         if (tracks.isEmpty() || similar.isNotEmpty()) return@LaunchedEffect
         similar = runCatching { onLoadSimilar(tracks) }.getOrDefault(emptyList())
     }
 
-    // Топ-5 по просмотрам, остальное — «Все треки».
     val popular = remember(tracks) { tracks.sortedByDescending { it.viewCount }.take(5) }
     val popularUrls = remember(popular) { popular.map { it.url }.toSet() }
     val otherTracks = tracks.filter { it.url !in popularUrls }
 
-    val hiRes = remember(artist.thumbnailUrl) { upscaleThumb(artist.thumbnailUrl, 600) }
+    val hiRes = remember(artist.thumbnailUrl) { upscaleThumb(artist.thumbnailUrl, 700) }
     val white = Color.White
 
-    // Палитра из фото исполнителя → акцент и подложка карточек.
     val context = LocalContext.current
     val fallback = MaterialTheme.colorScheme.primary
     var accent by remember(artist.url) { mutableStateOf(fallback) }
@@ -3696,87 +3697,166 @@ private fun ArtistScreen(
             }
         }
     }
-    // Подложка карточек/строк — затемнённый акцент (читается на тёмном фоне).
-    val cardTint = lerp(accent, Color(0xFF111114), 0.72f)
-    val darkAccent = lerp(accent, Color.Black, 0.82f)
-    val onAccent = if (accent.luminance() > 0.5f) Color.Black else Color.White
 
-    val pageBg = Color(0xFF000000)
+    val animatedAccent by animateColorAsState(targetValue = accent, animationSpec = tween(500), label = "artistAccent")
+    val cardTint = lerp(animatedAccent, Color(0xFF141218), 0.78f)
+    val onAccent = if (animatedAccent.luminance() > 0.45f) Color.Black else Color.White
+    val pageBg = Color(0xFF0E0C11)
+
     Box(modifier = Modifier.fillMaxSize().background(pageBg)) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(bottom = 36.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                Box(modifier = Modifier.fillMaxWidth().height(380.dp)) {
-                    // Большое фото исполнителя на всю ширину.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(390.dp),
+                ) {
                     Artwork(
                         url = hiRes ?: artist.thumbnailUrl,
                         modifier = Modifier.fillMaxSize(),
                     )
                     Box(
-                        modifier = Modifier.fillMaxSize().background(
-                            Brush.verticalGradient(
-                                0f to Color.Black.copy(alpha = 0.35f),
-                                0.45f to Color.Transparent,
-                                0.8f to pageBg.copy(alpha = 0.85f),
-                                1f to pageBg,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    0f to Color.Black.copy(alpha = 0.25f),
+                                    0.40f to animatedAccent.copy(alpha = 0.20f),
+                                    0.75f to pageBg.copy(alpha = 0.88f),
+                                    1f to pageBg,
+                                ),
                             ),
-                        ),
                     )
-                    IconButton(
-                        onClick = onClose,
+
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.Black.copy(alpha = 0.45f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.20f)),
                         modifier = Modifier
                             .align(Alignment.TopStart)
-                            .padding(top = 10.dp, start = 10.dp)
-                            .size(40.dp)
-                            .background(Color.Black.copy(alpha = 0.4f), CircleShape),
+                            .padding(top = 14.dp, start = 16.dp)
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .clickable(onClick = onClose),
                     ) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Назад", tint = white)
-                    }
-                    Column(modifier = Modifier.align(Alignment.BottomStart).padding(20.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            SourceBadge(artist.source, Modifier.size(14.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = "Исполнитель · ${sourceLabel(artist.source)}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = white.copy(alpha = 0.85f),
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = "Назад",
+                                tint = white,
+                                modifier = Modifier.size(22.dp),
                             )
                         }
-                        Spacer(Modifier.height(6.dp))
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.White.copy(alpha = 0.12f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                            ) {
+                                SourceBadge(artist.source, Modifier.size(13.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "АРТИСТ · ${sourceLabel(artist.source).uppercase()}",
+                                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.8.sp),
+                                    fontWeight = FontWeight.Bold,
+                                    color = white.copy(alpha = 0.90f),
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
                         Text(
                             text = artist.title,
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.displaySmall.copy(
+                                fontSize = 34.sp,
+                                lineHeight = 36.sp,
+                                letterSpacing = (-0.6).sp,
+                            ),
+                            fontWeight = FontWeight.Black,
                             color = white,
                             maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                        Spacer(Modifier.height(14.dp))
+
+                        Spacer(Modifier.height(4.dp))
+
+                        Text(
+                            text = if (tracks.isNotEmpty()) {
+                                "${tracks.size} треков${if (albums.isNotEmpty()) " · ${albums.size} альбомов" else ""}"
+                            } else {
+                                "Загрузка дискографии..."
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = white.copy(alpha = 0.70f),
+                        )
+
+                        Spacer(Modifier.height(16.dp))
+
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Button(
-                                onClick = { if (tracks.isNotEmpty()) onPlay(tracks, 0) },
-                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                    containerColor = accent,
-                                    contentColor = onAccent,
-                                ),
+                            Surface(
+                                shape = RoundedCornerShape(26.dp),
+                                color = animatedAccent,
+                                shadowElevation = 6.dp,
+                                modifier = Modifier
+                                    .height(52.dp)
+                                    .clip(RoundedCornerShape(26.dp))
+                                    .clickable(enabled = tracks.isNotEmpty()) { onPlay(tracks, 0) },
                             ) {
-                                Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Слушать")
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 22.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.PlayArrow,
+                                        contentDescription = null,
+                                        tint = onAccent,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = "Слушать",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = onAccent,
+                                    )
+                                }
                             }
-                            FilledTonalIconButton(
-                                onClick = { if (tracks.isNotEmpty()) onShuffle(tracks) },
-                                colors = androidx.compose.material3.IconButtonDefaults.filledTonalIconButtonColors(
-                                    containerColor = accent.copy(alpha = 0.35f),
-                                    contentColor = Color.White,
-                                ),
+
+                            Surface(
+                                shape = CircleShape,
+                                color = Color.White.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clip(CircleShape)
+                                    .clickable(enabled = tracks.isNotEmpty()) { onShuffle(tracks) },
                             ) {
-                                Icon(Icons.Rounded.Shuffle, contentDescription = "Перемешать")
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Shuffle,
+                                        contentDescription = "Перемешать",
+                                        tint = white,
+                                        modifier = Modifier.size(22.dp),
+                                    )
+                                }
                             }
                         }
                     }
@@ -3786,62 +3866,79 @@ private fun ArtistScreen(
             if (popular.isNotEmpty()) {
                 item(key = "popular_header") {
                     Text(
-                        "Популярное",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
+                        text = "Популярное",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 21.sp,
+                            letterSpacing = (-0.3).sp,
+                        ),
+                        fontWeight = FontWeight.ExtraBold,
                         color = white,
-                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 6.dp),
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 4.dp),
                     )
                 }
                 itemsIndexed(popular, key = { _, t -> "pop_" + t.url }) { i, t ->
-                    Row(
+                    val isCurrent = nowPlayingUrl == t.url
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = if (isCurrent) animatedAccent.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.05f),
+                        border = BorderStroke(1.dp, if (isCurrent) animatedAccent.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.06f)),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 3.dp)
+                            .clip(RoundedCornerShape(18.dp))
                             .combinedClickable(
                                 onClick = { onPlay(tracks, tracks.indexOf(t)) },
                                 onLongClick = { onTrackLongClick(t) },
-                            )
-                            .padding(horizontal = 20.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            ),
                     ) {
-                        Text(
-                            text = "${i + 1}",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = white.copy(alpha = 0.45f),
-                            modifier = Modifier.width(26.dp),
-                        )
-                        Artwork(t.thumbnailUrl, Modifier.size(48.dp).clip(ShapeCache.smooth8))
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             Text(
-                                t.title,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = white,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontWeight = if (nowPlayingUrl == t.url) FontWeight.Bold else FontWeight.Normal,
+                                text = "${i + 1}",
+                                style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = if (isCurrent) animatedAccent else white.copy(alpha = 0.40f),
+                                modifier = Modifier.width(24.dp),
                             )
-                            val sub = listOfNotNull(
-                                formatViews(t.viewCount).takeIf { it.isNotBlank() },
-                                formatDuration(t.durationSeconds).takeIf { it.isNotBlank() },
-                                HistoryManager.playCount(t.url).takeIf { it > 0 }?.let { "слушали $it раз" },
-                            ).joinToString(" · ")
-                            if (sub.isNotBlank()) {
+                            Artwork(t.thumbnailUrl, Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)))
+                            Spacer(Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    sub,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = white.copy(alpha = 0.6f),
+                                    text = t.title,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                                    color = white,
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                val sub = listOfNotNull(
+                                    formatViews(t.viewCount).takeIf { it.isNotBlank() },
+                                    formatDuration(t.durationSeconds).takeIf { it.isNotBlank() },
+                                    HistoryManager.playCount(t.url).takeIf { it > 0 }?.let { "слушали $it раз" },
+                                ).joinToString(" · ")
+                                if (sub.isNotBlank()) {
+                                    Text(
+                                        text = sub,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = white.copy(alpha = 0.60f),
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+                            if (resolvingUrl == t.url) {
+                                CircularProgressIndicator(color = animatedAccent, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else if (isCurrent && isPlaying) {
+                                Icon(
+                                    imageVector = Icons.Rounded.MusicNote,
+                                    contentDescription = null,
+                                    tint = animatedAccent,
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
-                        }
-                        if (resolvingUrl == t.url) {
-                            CircularProgressIndicator(color = white, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        } else if (nowPlayingUrl == t.url && isPlaying) {
-                            Icon(
-                                Icons.Rounded.MusicNote, contentDescription = null,
-                                tint = accent, modifier = Modifier.size(18.dp),
-                            )
                         }
                     }
                 }
@@ -3850,18 +3947,21 @@ private fun ArtistScreen(
             if (albums.isNotEmpty()) {
                 item(key = "albums_header") {
                     Text(
-                        "Альбомы",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
+                        text = "Альбомы и релизы",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 21.sp,
+                            letterSpacing = (-0.3).sp,
+                        ),
+                        fontWeight = FontWeight.ExtraBold,
                         color = white,
-                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 10.dp),
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 4.dp),
                     )
                 }
                 items(albums.distinctBy { it.url }, key = { it.url }) { al ->
-                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
                         AlbumCard(
                             album = al,
-                            accent = accent,
+                            accent = animatedAccent,
                             onAccent = onAccent,
                             cardTint = cardTint,
                             nowPlayingUrl = nowPlayingUrl,
@@ -3878,12 +3978,12 @@ private fun ArtistScreen(
             when {
                 loading -> item(key = "tracks_loading") {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = white)
+                        CircularProgressIndicator(color = animatedAccent)
                     }
                 }
                 error != null && tracks.isEmpty() -> item(key = "tracks_error") {
                     Text(
-                        text = "Не удалось загрузить треки: $error",
+                        text = "Не удалось загрузить дискографию: $error",
                         color = white.copy(alpha = 0.8f),
                         modifier = Modifier.padding(24.dp),
                     )
@@ -3898,18 +3998,20 @@ private fun ArtistScreen(
                 otherTracks.isNotEmpty() -> {
                     item(key = "all_tracks_header") {
                         Text(
-                            "Все треки",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
+                            text = "Все треки",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 21.sp,
+                                letterSpacing = (-0.3).sp,
+                            ),
+                            fontWeight = FontWeight.ExtraBold,
                             color = white,
-                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 6.dp),
+                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 4.dp),
                         )
                     }
-                    // Плотная 2-колоночная сетка плиток — разнообразнее плоского списка.
                     val rows = otherTracks.chunked(2)
                     itemsIndexed(rows, key = { i, row -> i.toString() + row.joinToString("|") { it.url } }) { _, row ->
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             row.forEach { t ->
@@ -3917,7 +4019,7 @@ private fun ArtistScreen(
                                     item = t,
                                     playing = nowPlayingUrl == t.url,
                                     resolving = resolvingUrl == t.url,
-                                    accent = accent,
+                                    accent = animatedAccent,
                                     onClick = { onPlay(tracks, tracks.indexOf(t)) },
                                     onLongClick = { onTrackLongClick(t) },
                                     modifier = Modifier.weight(1f),
@@ -3932,20 +4034,23 @@ private fun ArtistScreen(
             if (similar.isNotEmpty()) {
                 item(key = "similar_header") {
                     Text(
-                        "Похожие исполнители",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
+                        text = "Похожие артисты",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 21.sp,
+                            letterSpacing = (-0.3).sp,
+                        ),
+                        fontWeight = FontWeight.ExtraBold,
                         color = white,
-                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 10.dp),
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 6.dp),
                     )
                 }
                 item(key = "similar_row") {
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         itemsIndexed(similar, key = { _, a -> "sim_" + a.url }) { _, a ->
-                            SimilarArtistTile(item = a, onClick = { onOpenSimilar(a) })
+                            SimilarArtistTile(item = a, accent = animatedAccent, onClick = { onOpenSimilar(a) })
                         }
                     }
                 }
@@ -3987,8 +4092,9 @@ private fun AlbumCard(
     val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "chev")
 
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(22.dp),
         color = cardTint,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column {
@@ -3996,36 +4102,47 @@ private fun AlbumCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { expanded = !expanded; if (expanded) load() }
-                    .padding(10.dp),
+                    .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Artwork(album.thumbnailUrl, Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)))
-                Spacer(Modifier.width(12.dp))
+                Artwork(album.thumbnailUrl, Modifier.size(58.dp).clip(RoundedCornerShape(14.dp)))
+                Spacer(Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        album.title,
+                        text = album.title,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         color = white,
                         maxLines = 1,
                     )
+                    Spacer(Modifier.height(2.dp))
                     Text(
-                        if (tracks.isNotEmpty()) "Альбом · ${tracks.size} треков" else "Альбом",
+                        text = if (tracks.isNotEmpty()) "Альбом · ${tracks.size} треков" else "Альбом",
                         style = MaterialTheme.typography.bodySmall,
                         color = white.copy(alpha = 0.7f),
                         maxLines = 1,
                     )
                 }
-                FilledIconButton(
-                    onClick = { load { if (it.isNotEmpty()) onPlay(it, 0) } },
-                    colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
-                        containerColor = accent,
-                        contentColor = onAccent,
-                    ),
-                ) { Icon(Icons.Rounded.PlayArrow, contentDescription = "Играть альбом") }
+                Surface(
+                    shape = CircleShape,
+                    color = accent,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .clickable { load { if (it.isNotEmpty()) onPlay(it, 0) } },
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.PlayArrow,
+                            contentDescription = "Играть альбом",
+                            tint = onAccent,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
                 IconButton(onClick = { expanded = !expanded; if (expanded) load() }) {
                     Icon(
-                        Icons.Rounded.KeyboardArrowDown,
+                        imageVector = Icons.Rounded.KeyboardArrowDown,
                         contentDescription = null,
                         tint = white,
                         modifier = Modifier.rotate(rotation),
@@ -4033,56 +4150,61 @@ private fun AlbumCard(
                 }
             }
             AnimatedVisibility(visible = expanded) {
-                Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                Column(modifier = Modifier.padding(bottom = 8.dp, start = 8.dp, end = 8.dp)) {
                     if (loading) {
                         Box(
                             modifier = Modifier.fillMaxWidth().padding(16.dp),
                             contentAlignment = Alignment.Center,
                         ) {
                             CircularProgressIndicator(
-                                color = white, modifier = Modifier.size(24.dp), strokeWidth = 2.dp,
+                                color = accent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp,
                             )
                         }
                     } else {
                         tracks.forEachIndexed { i, t ->
-                            Row(
+                            val isTrackCurrent = nowPlayingUrl == t.url
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isTrackCurrent) accent.copy(alpha = 0.15f) else Color.Transparent,
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
                                     .combinedClickable(
                                         onClick = { onPlay(tracks, i) },
                                         onLongClick = { onTrackLongClick(t) },
                                     )
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
                             ) {
-                                Artwork(t.thumbnailUrl, Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)))
-                                Spacer(Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        t.title,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = white,
-                                        maxLines = 1,
-                                        fontWeight = if (nowPlayingUrl == t.url) FontWeight.Bold else FontWeight.Normal,
-                                    )
-                                    t.uploader?.let {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Artwork(t.thumbnailUrl, Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)))
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            it,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = white.copy(alpha = 0.7f),
+                                            text = t.title,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = white,
                                             maxLines = 1,
+                                            fontWeight = if (isTrackCurrent) FontWeight.Bold else FontWeight.Normal,
+                                        )
+                                        t.uploader?.let {
+                                            Text(
+                                                text = it,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = white.copy(alpha = 0.65f),
+                                                maxLines = 1,
+                                            )
+                                        }
+                                    }
+                                    if (resolvingUrl == t.url) {
+                                        CircularProgressIndicator(
+                                            color = accent, modifier = Modifier.size(18.dp), strokeWidth = 2.dp,
+                                        )
+                                    } else if (isTrackCurrent && isPlaying) {
+                                        Icon(
+                                            Icons.Rounded.MusicNote, contentDescription = null,
+                                            tint = accent, modifier = Modifier.size(18.dp),
                                         )
                                     }
-                                }
-                                if (resolvingUrl == t.url) {
-                                    CircularProgressIndicator(
-                                        color = white, modifier = Modifier.size(18.dp), strokeWidth = 2.dp,
-                                    )
-                                } else if (nowPlayingUrl == t.url && isPlaying) {
-                                    Icon(
-                                        Icons.Rounded.MusicNote, contentDescription = null,
-                                        tint = white, modifier = Modifier.size(18.dp),
-                                    )
                                 }
                             }
                         }
@@ -4093,7 +4215,7 @@ private fun AlbumCard(
     }
 }
 
-/** Плитка трека в сетке «Все треки» на экране исполнителя (тёмная тема). */
+/** Плитка трека в 2-колоночной сетке «Все треки» (Material 3 Expressive). */
 @Composable
 private fun ArtistTrackTile(
     item: TrackItem,
@@ -4105,75 +4227,93 @@ private fun ArtistTrackTile(
     modifier: Modifier = Modifier,
 ) {
     val white = Color.White
-    Row(
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = if (playing) accent.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.05f),
+        border = BorderStroke(1.dp, if (playing) accent.copy(alpha = 0.40f) else Color.White.copy(alpha = 0.06f)),
         modifier = modifier
-            .clip(ShapeCache.smooth12)
-            .background(accent.copy(alpha = 0.16f))
+            .clip(RoundedCornerShape(18.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(2.dp),
     ) {
-        Box {
-            Artwork(item.thumbnailUrl, Modifier.size(46.dp).clip(ShapeCache.smooth8))
-            if (resolving) {
-                Box(
-                    modifier = Modifier.size(46.dp).background(Color.Black.copy(alpha = 0.45f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(color = white, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        Row(
+            modifier = Modifier.padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box {
+                Artwork(item.thumbnailUrl, Modifier.size(46.dp).clip(RoundedCornerShape(12.dp)))
+                if (resolving) {
+                    Box(
+                        modifier = Modifier.size(46.dp).background(Color.Black.copy(alpha = 0.50f), RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(color = accent, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    }
                 }
             }
-        }
-        Spacer(Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                item.title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (playing) FontWeight.Bold else FontWeight.Medium,
-                color = white,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            item.uploader?.let {
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = white.copy(alpha = 0.6f),
+                    text = item.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (playing) FontWeight.Bold else FontWeight.Medium,
+                    color = white,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                item.uploader?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = white.copy(alpha = 0.6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-        }
-        if (playing) {
-            Icon(
-                Icons.Rounded.MusicNote, contentDescription = null,
-                tint = accent, modifier = Modifier.size(16.dp),
-            )
+            if (playing) {
+                Icon(
+                    imageVector = Icons.Rounded.MusicNote,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
     }
 }
 
-/** Круглая плитка похожего исполнителя на тёмном экране артиста. */
+/** Круглая выразительная плитка похожего артиста с неоновым обрамлением. */
 @Composable
-private fun SimilarArtistTile(item: TrackItem, onClick: () -> Unit) {
+private fun SimilarArtistTile(item: TrackItem, accent: Color, onClick: () -> Unit) {
     Column(
         modifier = Modifier
-            .width(96.dp)
-            .clickable(onClick = onClick),
+            .width(100.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Artwork(
-            url = item.thumbnailUrl,
-            modifier = Modifier.size(96.dp).clip(CircleShape),
-        )
-        Spacer(Modifier.height(6.dp))
+        Surface(
+            shape = CircleShape,
+            color = Color.White.copy(alpha = 0.08f),
+            border = BorderStroke(2.dp, accent.copy(alpha = 0.50f)),
+            modifier = Modifier.size(76.dp),
+        ) {
+            Artwork(
+                url = item.thumbnailUrl,
+                modifier = Modifier.fillMaxSize().clip(CircleShape),
+            )
+        }
+        Spacer(Modifier.height(8.dp))
         Text(
             text = item.title,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
             color = Color.White,
-            textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
         )
     }
 }
@@ -4605,6 +4745,7 @@ private fun NowPlayingBar(
     onTogglePlayPause: () -> Unit,
     onPrev: () -> Unit = {},
     onNext: () -> Unit = {},
+    onOpenArtist: (TrackItem) -> Unit = {},
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -4817,6 +4958,22 @@ private fun NowPlayingBar(
                             color = lerp(Color.White.copy(alpha = 0.7f), animatedTrackColor, 0.35f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable {
+                                    item.uploader?.let { artistName ->
+                                        val artistItem = TrackItem(
+                                            title = artistName,
+                                            uploader = artistName,
+                                            url = "artist:$artistName",
+                                            durationSeconds = 0L,
+                                            thumbnailUrl = item.thumbnailUrl,
+                                            source = item.source,
+                                            kind = ItemKind.ARTIST,
+                                        )
+                                        onOpenArtist(artistItem)
+                                    }
+                                },
                         )
                     }
                 }
@@ -4977,6 +5134,7 @@ private fun FullPlayer(
     onToggleLike: () -> Unit,
     onShowQueue: () -> Unit,
     onFetchLyrics: suspend () -> Lyrics?,
+    onOpenArtist: (TrackItem) -> Unit = {},
     onCollapse: () -> Unit,
 ) {
     BackHandler(onBack = onCollapse)
@@ -5297,15 +5455,48 @@ private fun FullPlayer(
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                 )
-                                item.uploader?.let {
+                                item.uploader?.let { artistName ->
                                     Spacer(Modifier.height(6.dp))
-                                    Text(
-                                        text = it,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = whiteDim,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = Color.White.copy(alpha = 0.08f),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable {
+                                                val artistItem = TrackItem(
+                                                    title = artistName,
+                                                    uploader = artistName,
+                                                    url = "artist:$artistName",
+                                                    durationSeconds = 0L,
+                                                    thumbnailUrl = item.thumbnailUrl,
+                                                    source = item.source,
+                                                    kind = ItemKind.ARTIST,
+                                                )
+                                                onOpenArtist(artistItem)
+                                            },
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                        ) {
+                                            Text(
+                                                text = artistName,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = whiteDim,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            Spacer(Modifier.width(4.dp))
+                                            Icon(
+                                                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                                                contentDescription = "Страница артиста",
+                                                tint = whiteDim.copy(alpha = 0.7f),
+                                                modifier = Modifier.size(14.dp),
+                                            )
+                                        }
+                                    }
                                 }
                                 Spacer(Modifier.height(8.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
