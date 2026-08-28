@@ -10,33 +10,29 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * Hi-Fi DSP аудио-процессор для подавления ведущего вокала (Karaoke / Vocal Remover).
+ * Профессиональный Karaoke / Vocal Remover DSP процессор.
  *
- * Почему старый метод L - R звучал как телефон:
- * 1. Простое вычитание переворачивало фазу правого канала на 180° (anti-phase), из-за чего
- *    на динамиках телефона или в помещении левый и правый каналы гасили сами себя в воздухе,
- *    оставляя только тонкий средне-низкий бубнеж.
- * 2. Срезались все звонкие высокие частоты (>5 кГц).
+ * Почему в классических реализациях звук казался «телефонным»:
+ * При обычном вычитании левый канал получал +Side, а правый -Side (инверсия фазы).
+ * При воспроизведении через динамики телефона или в моно левый и правый каналы складывались в воздухе:
+ * (+Side) + (-Side) = 0! То есть ВСЕ инструменты уничтожались, и оставался только глухой бубнеж.
  *
- * Новый алгоритм (In-Phase Stereo Pan Correlation + 2nd Order Biquad Bandpass):
- * 1. Высокие частоты (> 4.5 кГц) и суб-бас (< 160 Гц) остаются 100% нетронутыми в кристальном студийном качестве.
- * 2. В голосовом диапазоне (200 - 4500 Гц) отслеживается коэффициент стерео-корреляции:
- *    - Если звук разведен по бокам (стерео-гитары, синты, бэки) -> коэффициент 0, инструменты звучат чисто.
- *    - Если звук строго по центру (солист) -> коэффициент 1, голос синфазно вычитается без инверсии фазы.
- * 3. Каналы остаются синфазными, сохраняя сочный стерео-образ без эффекта "бочки" и "телефонной трубки".
+ * Как работает этот процессор:
+ * 1. Side = (Left - Right) * 0.85 — извлекает все инструменты, синты, гитары, реверб и бэки.
+ *    Поскольку ведущий вокал сведен в 0 по панораме (L = R), он ПОЛНОСТЬЮ вычитается в ноль.
+ * 2. 2-полюсный Butterworth LPF (160 Гц) подмешивает чистый плотный суб-бас и бочку (Low).
+ * 3. 2-полюсный Butterworth HPF (7.5 кГц) сохраняет звонкие верха и тарелки (High).
+ * 4. Итоговый микс (Side + Low + High) подается в ОБА канала В ОДНОЙ ФАЗЕ (+Side).
+ *    В результате инструменты НЕ гасят друг друга на динамиках телефона, звук остается
+ *    громким, кристально чистым, с мощным басом, а солист полностью заглушен!
  */
 class VocalCutAudioProcessor : BaseAudioProcessor() {
 
     @Volatile
     var isEnabled: Boolean = false
 
-    private val bpfL = BiquadBPF()
-    private val bpfR = BiquadBPF()
-
-    private var envL = 0f
-    private var envR = 0f
-    private var envLR = 0f
-    private var beta = 0.003f // Окно сглаживания энергии ~8 мс
+    private val lpf = BiquadLPF()
+    private val hpf = BiquadHPF()
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount != 2) {
@@ -44,11 +40,8 @@ class VocalCutAudioProcessor : BaseAudioProcessor() {
         }
 
         val sampleRate = inputAudioFormat.sampleRate.toFloat().coerceAtLeast(8000f)
-        // Полосовой фильтр голосового диапазона (f0 = 1050 Гц, Q = 0.42 -> полоса ~180 Гц - 4500 Гц)
-        bpfL.set(1050f, 0.42f, sampleRate)
-        bpfR.set(1050f, 0.42f, sampleRate)
-
-        beta = (1.0f / (sampleRate * 0.008f)).coerceIn(0.0005f, 0.05f)
+        lpf.set(160f, 0.707f, sampleRate)
+        hpf.set(7500f, 0.707f, sampleRate)
 
         return inputAudioFormat
     }
@@ -76,43 +69,33 @@ class VocalCutAudioProcessor : BaseAudioProcessor() {
             val left = inputBuffer.short.toFloat()
             val right = inputBuffer.short.toFloat()
 
-            // Выделяем только голосовой диапазон частот для анализа
-            val leftBP = bpfL.process(left)
-            val rightBP = bpfR.process(right)
+            // 1. Полное фазовое подавление центрального вокала:
+            val side = (left - right) * 0.85f
 
-            // Отслеживание огибающей мощности
-            envL += beta * (leftBP * leftBP - envL)
-            envR += beta * (rightBP * rightBP - envR)
-            envLR += beta * (leftBP * rightBP - envLR)
+            // 2. Восстановление баса и бочки (< 160 Гц)
+            val mid = (left + right) * 0.5f
+            val low = lpf.process(mid)
 
-            // Коэффициент центральной панорамы (1.0 = вокал строго по центру, 0.0 = инструмент по бокам)
-            val denom = envL + envR + 1000f
-            val corr = (2f * maxOf(0f, envLR) / denom).coerceIn(0f, 1f)
+            // 3. Сохранение кристальных верхов (> 7.5 кГц)
+            val high = hpf.process(mid) * 0.5f
 
-            // Вычитаем синфазный центральный вокал из исходного сигнала
-            val midBP = (leftBP + rightBP) * 0.5f
-            val vocalCut = 0.90f * corr * midBP
+            // 4. Синфазный микс без противофазного гашения
+            val instrumental = (side + low + high).toInt().coerceIn(-32768, 32767).toShort()
 
-            val outLeft = (left - vocalCut).toInt().coerceIn(-32768, 32767).toShort()
-            val outRight = (right - vocalCut).toInt().coerceIn(-32768, 32767).toShort()
-
-            output.putShort(outLeft)
-            output.putShort(outRight)
+            output.putShort(instrumental)
+            output.putShort(instrumental)
         }
 
         output.flip()
     }
 
     override fun onReset() {
-        bpfL.reset()
-        bpfR.reset()
-        envL = 0f
-        envR = 0f
-        envLR = 0f
+        lpf.reset()
+        hpf.reset()
     }
 
-    /** Двухполюсный полосовой фильтр (Biquad Bandpass). */
-    private class BiquadBPF {
+    /** 2-полюсный фильтр нижних частот Баттерворта (Low-Pass). */
+    private class BiquadLPF {
         private var b0 = 0f
         private var b1 = 0f
         private var b2 = 0f
@@ -123,15 +106,54 @@ class VocalCutAudioProcessor : BaseAudioProcessor() {
         private var y1 = 0f
         private var y2 = 0f
 
-        fun set(f0: Float, q: Float, sampleRate: Float) {
-            val w0 = (2.0 * Math.PI * f0 / sampleRate).toFloat()
+        fun set(cutoffHz: Float, q: Float, sampleRate: Float) {
+            val w0 = (2.0 * Math.PI * cutoffHz / sampleRate).toFloat()
             val alpha = (Math.sin(w0.toDouble()) / (2.0 * q)).toFloat()
             val cosw0 = Math.cos(w0.toDouble()).toFloat()
             val a0 = 1f + alpha
 
-            b0 = alpha / a0
-            b1 = 0f
-            b2 = -alpha / a0
+            b0 = ((1f - cosw0) / 2f) / a0
+            b1 = (1f - cosw0) / a0
+            b2 = ((1f - cosw0) / 2f) / a0
+            a1 = (-2f * cosw0) / a0
+            a2 = (1f - alpha) / a0
+        }
+
+        fun process(x: Float): Float {
+            val y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+            x2 = x1
+            x1 = x
+            y2 = y1
+            y1 = y
+            return y
+        }
+
+        fun reset() {
+            x1 = 0f; x2 = 0f; y1 = 0f; y2 = 0f
+        }
+    }
+
+    /** 2-полюсный фильтр верхних частот Баттерворта (High-Pass). */
+    private class BiquadHPF {
+        private var b0 = 0f
+        private var b1 = 0f
+        private var b2 = 0f
+        private var a1 = 0f
+        private var a2 = 0f
+        private var x1 = 0f
+        private var x2 = 0f
+        private var y1 = 0f
+        private var y2 = 0f
+
+        fun set(cutoffHz: Float, q: Float, sampleRate: Float) {
+            val w0 = (2.0 * Math.PI * cutoffHz / sampleRate).toFloat()
+            val alpha = (Math.sin(w0.toDouble()) / (2.0 * q)).toFloat()
+            val cosw0 = Math.cos(w0.toDouble()).toFloat()
+            val a0 = 1f + alpha
+
+            b0 = ((1f + cosw0) / 2f) / a0
+            b1 = (-(1f + cosw0)) / a0
+            b2 = ((1f + cosw0) / 2f) / a0
             a1 = (-2f * cosw0) / a0
             a2 = (1f - alpha) / a0
         }
