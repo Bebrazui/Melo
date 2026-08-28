@@ -88,8 +88,13 @@ class MainActivity : ComponentActivity() {
 
     private fun playResolved(track: ResolvedTrack) {
         val player = controller ?: return
-        android.util.Log.e("MeloArt", "playResolved title=${track.title.take(40)} thumb=${track.thumbnailUrl}")
-        val meta = MediaMetadata.Builder().setTitle(track.title)
+        val artist = track.artist ?: ""
+        val meta = MediaMetadata.Builder()
+            .setTitle(track.title)
+            .setDisplayTitle(track.title)
+            .setArtist(artist)
+            .setAlbumArtist(artist)
+            .setSubtitle(artist)
         track.thumbnailUrl?.let { meta.setArtworkUri(android.net.Uri.parse(it)) }
         val item = MediaItem.Builder()
             .setUri(track.audioUrl)

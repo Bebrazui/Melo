@@ -41,6 +41,8 @@ class PlaybackService : MediaSessionService() {
         /** Вызывается при окончании трека без кроссфейда (фолбэк). */
         var onTrackEnded: (() -> Unit)? = null
 
+        var onToggleFavorite: (() -> Unit)? = null
+
         /** Переключение треков из наушников / уведомления (резолвит и играет UI). */
         var onSkipNext: (() -> Unit)? = null
         var onSkipPrev: (() -> Unit)? = null
@@ -52,6 +54,7 @@ class PlaybackService : MediaSessionService() {
         @Volatile var nextUrl: String? = null
         @Volatile var nextTitle: String? = null
         @Volatile var nextArtwork: String? = null
+        @Volatile var nextArtist: String? = null
         @Volatile var nextIndexPending: Int = -1
         @Volatile var nextSpeed: Float = 1f
 
@@ -61,10 +64,11 @@ class PlaybackService : MediaSessionService() {
         /** Вызывается, когда кроссфейд переключил на следующий трек. */
         var onCrossfadeAdvance: ((index: Int) -> Unit)? = null
 
-        fun setNext(url: String?, title: String?, index: Int, speed: Float = 1f, artwork: String? = null) {
+        fun setNext(url: String?, title: String?, index: Int, speed: Float = 1f, artwork: String? = null, artist: String? = null) {
             nextUrl = url
             nextTitle = title
             nextArtwork = artwork
+            nextArtist = artist
             nextIndexPending = index
             nextSpeed = speed
         }
@@ -73,6 +77,7 @@ class PlaybackService : MediaSessionService() {
             nextUrl = null
             nextTitle = null
             nextArtwork = null
+            nextArtist = null
             nextIndexPending = -1
             nextSpeed = 1f
         }
@@ -122,6 +127,26 @@ class PlaybackService : MediaSessionService() {
     private var tapCount = 0
     private var tapRunnable: Runnable? = null
     private val tapWindowMs = 320L
+
+    private inner class MeloForwardingPlayer(player: Player) : androidx.media3.common.ForwardingPlayer(player) {
+        override fun getAvailableCommands(): Player.Commands {
+            return super.getAvailableCommands().buildUpon()
+                .add(Player.COMMAND_SEEK_TO_NEXT)
+                .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                .add(Player.COMMAND_PLAY_PAUSE)
+                .build()
+        }
+        override fun isCommandAvailable(command: Int): Boolean {
+            if (command == Player.COMMAND_SEEK_TO_NEXT || command == Player.COMMAND_SEEK_TO_PREVIOUS) return true
+            return super.isCommandAvailable(command)
+        }
+        override fun seekToNext() {
+            handler.post { onSkipNext?.invoke() }
+        }
+        override fun seekToPrevious() {
+            handler.post { onSkipPrev?.invoke() }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -215,8 +240,15 @@ class PlaybackService : MediaSessionService() {
         audioSessionId = active.audioSessionId
         EqualizerManager.attach(audioSessionId)
         applyReverb(active)
-        mediaSession = MediaSession.Builder(this, active)
+
+        val likeBtn = androidx.media3.session.CommandButton.Builder()
+            .setDisplayName("Избранное")
+            .setSessionCommand(androidx.media3.session.SessionCommand("ACTION_TOGGLE_LIKE", android.os.Bundle()))
+            .build()
+
+        mediaSession = MediaSession.Builder(this, MeloForwardingPlayer(active))
             .setCallback(mediaButtonCallback)
+            .setCustomLayout(listOf(likeBtn))
             .setBitmapLoader(CoilBitmapLoader(this))
             .build()
 
@@ -228,10 +260,42 @@ class PlaybackService : MediaSessionService() {
     }
 
     /**
-     * Управление с гарнитуры: ловим кнопочные события и сами считаем тапы,
-     * т.к. система не везде раскладывает мульти-тап на NEXT/PREVIOUS.
+     * Управление с гарнитуры, Dynamic Island и системы:
      */
     private val mediaButtonCallback = object : MediaSession.Callback {
+        override fun onPlayerCommandRequest(
+            session: MediaSession,
+            controllerInfo: MediaSession.ControllerInfo,
+            playerCommand: Int,
+        ): Int {
+            when (playerCommand) {
+                Player.COMMAND_SEEK_TO_NEXT -> {
+                    handler.post { onSkipNext?.invoke() }
+                    return androidx.media3.session.SessionResult.RESULT_SUCCESS
+                }
+                Player.COMMAND_SEEK_TO_PREVIOUS -> {
+                    handler.post { onSkipPrev?.invoke() }
+                    return androidx.media3.session.SessionResult.RESULT_SUCCESS
+                }
+            }
+            return super.onPlayerCommandRequest(session, controllerInfo, playerCommand)
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controllerInfo: MediaSession.ControllerInfo,
+            customCommand: androidx.media3.session.SessionCommand,
+            args: android.os.Bundle,
+        ): com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.SessionResult> {
+            if (customCommand.customAction == "ACTION_TOGGLE_LIKE") {
+                handler.post { onToggleFavorite?.invoke() }
+                return com.google.common.util.concurrent.Futures.immediateFuture(
+                    androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS)
+                )
+            }
+            return super.onCustomCommand(session, controllerInfo, customCommand, args)
+        }
+
         override fun onMediaButtonEvent(
             session: MediaSession,
             controllerInfo: MediaSession.ControllerInfo,
@@ -352,6 +416,7 @@ class PlaybackService : MediaSessionService() {
         val url = nextUrl ?: return
         val title = nextTitle
         val artwork = nextArtwork
+        val artist = nextArtist
         val advanceIndex = nextIndexPending
         val speed = nextSpeed
         crossfading = true
@@ -360,7 +425,12 @@ class PlaybackService : MediaSessionService() {
         val fromP = active
         val toP = standby
 
-        val meta = MediaMetadata.Builder().setTitle(title ?: "")
+        val meta = MediaMetadata.Builder()
+            .setTitle(title ?: "")
+            .setDisplayTitle(title ?: "")
+            .setArtist(artist ?: "")
+            .setAlbumArtist(artist ?: "")
+            .setSubtitle(artist ?: "")
         artwork?.let { meta.setArtworkUri(android.net.Uri.parse(it)) }
         toP.setMediaItem(
             MediaItem.Builder()
@@ -379,7 +449,7 @@ class PlaybackService : MediaSessionService() {
         usingA = !usingA
         fromP.removeListener(endListener)
         toP.addListener(endListener)
-        mediaSession?.player = toP
+        mediaSession?.player = MeloForwardingPlayer(toP)
         audioSessionId = toP.audioSessionId
         EqualizerManager.attach(audioSessionId)
         applyReverb(toP)

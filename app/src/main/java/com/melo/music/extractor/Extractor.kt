@@ -21,6 +21,8 @@ data class ResolvedTrack(
     val audioUrl: String,
     /** Обложка трека (для уведомления/кроссфейда). Может быть null. */
     val thumbnailUrl: String? = null,
+    /** Автор/исполнитель трека (для системного уведомления и Dynamic Island). */
+    val artist: String? = null,
 )
 
 /** Источник трека (для индикатора в UI). */

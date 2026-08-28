@@ -526,13 +526,13 @@ fun PlayerScreen(
         } else {
             (fromIndex + 1) % list.size
         }
-        val nextItem = list.getOrNull(nextIdx) ?: return
         scope.launch {
+            val nextItem = list.getOrNull(nextIdx) ?: return@launch
             val resolved = runCatching { onResolveAudioUrl(nextItem.url) }.getOrNull()
             // Проверяем, что очередь/индекс не сменились, пока резолвили.
             if (resolved != null && playingIndex == fromIndex) {
                 com.melo.music.playback.PlaybackService.setNext(
-                    resolved.audioUrl, nextItem.title, nextIdx, nextItem.speed, nextItem.thumbnailUrl,
+                    resolved.audioUrl, nextItem.title, nextIdx, nextItem.speed, nextItem.thumbnailUrl, nextItem.uploader,
                 )
             }
         }
@@ -576,13 +576,10 @@ fun PlayerScreen(
             resolvingUrl = item.url
             runCatching { onResolveAudioUrl(item.url) }
                 .onSuccess {
-                    // android.util.Log.e(
-                    //     "MeloPerf",
-                    //     "TAP→resolved ${android.os.SystemClock.elapsedRealtime() - tStart}ms",
-                    // )
                     // Если пользователь уже переключился — не играть старый трек.
                     if (resolvingUrl == item.url) {
-                        onPlayResolved(it)
+                        val resolvedWithArtist = if (it.artist.isNullOrBlank()) it.copy(artist = item.uploader) else it
+                        onPlayResolved(resolvedWithArtist)
                         // Сохранённая slowed/sped up версия играет со своим тоном.
                         setSpeed(item.speed)
                         pushNextResolved(index)
@@ -4725,68 +4722,23 @@ private fun NowPlayingBar(
     ) {
         Box(
             modifier = Modifier
-                // Сплошной мягкий волновой градиент (без резких стыков и масок) и точки
+                // Мягкий плавный фоновый градиент и матрица точек
                 .drawBehind {
                     val w = size.width
                     val h = size.height
 
-                    // 1. Матовое стекло (база)
+                    // 1. Матовое темное стекло (база)
                     drawRect(color = Color(0xEB13110E))
 
-                    // 2. Сплошные мягкие волновые световые поля БЕЗ резких границ и масок
-                    if (isPlaying) {
-                        val cx1 = w * (0.28f + kotlin.math.sin(phase1.toDouble()).toFloat() * 0.18f)
-                        val cy1 = h * (0.65f + kotlin.math.cos(phase2.toDouble()).toFloat() * 0.20f)
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    animatedTrackColor.copy(alpha = 0.55f),
-                                    animatedTrackColor.copy(alpha = 0.22f),
-                                    Color.Transparent,
-                                ),
-                                center = Offset(cx1, cy1),
-                                radius = w * 0.42f,
-                            ),
-                        )
-
-                        val cx2 = w * (0.75f + kotlin.math.cos(phase2.toDouble()).toFloat() * 0.18f)
-                        val cy2 = h * (0.60f + kotlin.math.sin(phase3.toDouble()).toFloat() * 0.20f)
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    animatedTrackColor.copy(alpha = 0.50f),
-                                    animatedTrackColor.copy(alpha = 0.18f),
-                                    Color.Transparent,
-                                ),
-                                center = Offset(cx2, cy2),
-                                radius = w * 0.48f,
-                            ),
-                        )
-
-                        val cx3 = w * (0.50f + kotlin.math.sin(phase3.toDouble()).toFloat() * 0.25f)
-                        val cy3 = h * (0.78f + kotlin.math.cos(phase1.toDouble()).toFloat() * 0.14f)
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    animatedTrackColor.copy(alpha = 0.65f),
-                                    animatedTrackColor.copy(alpha = 0.25f),
-                                    Color.Transparent,
-                                ),
-                                center = Offset(cx3, cy3),
-                                radius = w * 0.38f,
-                            ),
-                        )
-                    }
-
-                    // Мягкий базовый вертикальный градиент
+                    // 2. Мягкий плавный вертикальный градиент снизу вверх (в цвет трека)
                     drawRect(
                         brush = Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                animatedTrackColor.copy(alpha = if (isPlaying) 0.12f else 0.04f),
-                                animatedTrackColor.copy(alpha = if (isPlaying) 0.45f else 0.14f),
+                                animatedTrackColor.copy(alpha = if (isPlaying) 0.14f else 0.04f),
+                                animatedTrackColor.copy(alpha = if (isPlaying) 0.52f else 0.16f),
                             ),
-                            startY = 0f,
+                            startY = h * 0.15f,
                             endY = h,
                         ),
                     )
@@ -4798,10 +4750,10 @@ private fun NowPlayingBar(
                     val rows = (h / dotSpacing).toInt() + 1
                     for (r in 0..rows) {
                         val yFactor = (r.toFloat() / rows.coerceAtLeast(1)).coerceIn(0f, 1f)
-                        // Сверху (первые 35% высоты) точки полностью отсутствуют
-                        if (yFactor > 0.35f) {
-                            val progress = ((yFactor - 0.35f) / 0.65f).coerceIn(0f, 1f)
-                            val verticalAlpha = (progress * progress * progress * 0.85f) * if (isPlaying) 1.0f else 0.45f
+                        // Сверху (первые 40% высоты) точки полностью отсутствуют
+                        if (yFactor > 0.40f) {
+                            val progress = ((yFactor - 0.40f) / 0.60f).coerceIn(0f, 1f)
+                            val verticalAlpha = (progress * progress * progress * 0.88f) * if (isPlaying) 1.0f else 0.45f
                             if (verticalAlpha > 0.005f) {
                                 for (c in 0..cols) {
                                     drawCircle(
