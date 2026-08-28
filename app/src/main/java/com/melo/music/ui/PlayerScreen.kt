@@ -1550,6 +1550,7 @@ private fun AccountTab(
     var showCreate by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<Playlist?>(null) }
     var menuTarget by remember { mutableStateOf<Playlist?>(null) }
+    val cs = MaterialTheme.colorScheme
 
     Column(
         modifier = Modifier
@@ -1558,38 +1559,87 @@ private fun AccountTab(
             .padding(start = 20.dp, end = 20.dp)
             .padding(bottom = bottomInset),
     ) {
-        // Шапка: заголовок + шестерёнка настроек справа.
+        // Шапка: заголовок в стиле M3 Expressive + шестерёнка настроек справа.
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     "Аккаунт",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.displaySmall.copy(
+                        fontSize = 32.sp,
+                        letterSpacing = (-0.5).sp,
+                    ),
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
                 )
                 com.melo.music.auth.AuthManager.email?.let { mail ->
                     Text(
                         mail,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.65f),
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
-            if (com.melo.music.auth.AuthManager.loggedIn) {
-                TextButton(onClick = { accountScope.launch { com.melo.music.auth.AuthManager.logout() } }) {
-                    Text("Выйти")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (com.melo.music.auth.AuthManager.loggedIn) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.08f),
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { accountScope.launch { com.melo.music.auth.AuthManager.logout() } },
+                    ) {
+                        Text(
+                            "Выйти",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
+                    }
+                } else {
+                    Surface(
+                        shape = CircleShape,
+                        color = cs.primaryContainer,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable(onClick = onOpenLogin),
+                    ) {
+                        Text(
+                            "Войти",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = cs.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
                 }
-            } else {
-                FilledTonalButton(
-                    onClick = onOpenLogin,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                ) { Text("Войти") }
-            }
-            IconButton(onClick = onOpenSettings) {
-                Icon(Icons.Rounded.Settings, contentDescription = "Настройки")
+
+                Surface(
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.08f),
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onOpenSettings),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.Settings,
+                            contentDescription = "Настройки",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
             }
         }
 
@@ -1600,13 +1650,13 @@ private fun AccountTab(
             val clipboard = LocalClipboardManager.current
             if (uid != null) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         "ID: $uid (тап — копировать)",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Color.White.copy(alpha = 0.5f),
                         maxLines = 1,
                         modifier = Modifier
                             .weight(1f)
@@ -1616,56 +1666,100 @@ private fun AccountTab(
             }
         }
 
+        // Секция «Мои плейлисты»
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 "Мои плейлисты",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = 22.sp,
+                    letterSpacing = (-0.3).sp,
+                ),
+                fontWeight = FontWeight.ExtraBold,
+                color = Color.White,
                 modifier = Modifier.weight(1f),
             )
-            FilledTonalButton(
-                onClick = { showCreate = true },
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            Surface(
+                shape = CircleShape,
+                color = cs.primaryContainer,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable { showCreate = true },
             ) {
-                Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Создать")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                ) {
+                    Icon(
+                        Icons.Rounded.Add,
+                        contentDescription = null,
+                        tint = cs.onPrimaryContainer,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Создать",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = cs.onPrimaryContainer,
+                    )
+                }
             }
         }
 
-        // Импорт плейлиста из других сервисов.
-        Row(
+        // Импорт плейлиста из других сервисов (Material 3 Expressive Frosted Card)
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = Color.White.copy(alpha = 0.05f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 14.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-                .clickable(onClick = onOpenImport)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .padding(bottom = 16.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .clickable(onClick = onOpenImport),
         ) {
-            Icon(
-                Icons.Rounded.CloudDownload,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Импорт плейлиста", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                Text(
-                    "Из YouTube Music или SoundCloud",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = cs.primaryContainer.copy(alpha = 0.6f),
+                    modifier = Modifier.size(46.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.CloudDownload,
+                            contentDescription = null,
+                            tint = cs.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Импорт плейлиста",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                    Text(
+                        "Из YouTube Music или SoundCloud",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.65f),
+                    )
+                }
+                Icon(
+                    Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.4f),
                 )
             }
-            Icon(
-                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
 
         if (playlists.isEmpty()) {

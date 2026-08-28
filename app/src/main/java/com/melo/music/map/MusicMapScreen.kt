@@ -29,11 +29,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -46,9 +49,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Favorite
@@ -59,6 +63,7 @@ import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -349,26 +354,41 @@ fun MusicMapScreen(
     Box(modifier = Modifier.fillMaxSize().background(MAP_BG)) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
 
-        // Верхняя панель — заголовок + поиск песен по карте.
+        // Верхняя панель — заголовок + поиск песен по карте (Material 3 Expressive)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(Color(0xF20B1610), Color(0xCC0B1610), Color(0x000B1610))))
-                .padding(start = 6.dp, end = 14.dp, top = topInset + 8.dp, bottom = 16.dp),
+                .padding(start = 14.dp, end = 14.dp, top = topInset + 12.dp, bottom = 16.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Surface(
                     color = SOLID,
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                    modifier = Modifier.size(42.dp).clickable(onClick = onClose),
+                    shape = CircleShape,
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onClose),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(Icons.Rounded.Close, contentDescription = "Закрыть", tint = Color.White)
                     }
                 }
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Карта музыки", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(
+                        "Карта музыки",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 22.sp,
+                            letterSpacing = (-0.3).sp,
+                        ),
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                    )
                     Text(
                         status ?: "${ms.drops.size} рядом · двигай карту",
                         style = MaterialTheme.typography.bodySmall,
@@ -376,7 +396,7 @@ fun MusicMapScreen(
                     )
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
             TextField(
                 value = mapQuery,
                 onValueChange = { mapQuery = it },
@@ -390,7 +410,7 @@ fun MusicMapScreen(
                     }
                 },
                 singleLine = true,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(26.dp),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = SOLID,
                     unfocusedContainerColor = SOLID,
@@ -401,33 +421,40 @@ fun MusicMapScreen(
                     unfocusedTextColor = Color.White,
                     cursorColor = MaterialTheme.colorScheme.primary,
                 ),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), RoundedCornerShape(26.dp)),
             )
             if (searchHits.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Surface(
                     color = GLASS,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth().padding(start = 6.dp).heightIn(max = 300.dp),
+                    shape = RoundedCornerShape(22.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
                 ) {
-                    LazyColumn(modifier = Modifier.padding(6.dp)) {
+                    LazyColumn(modifier = Modifier.padding(8.dp)) {
                         items(searchHits, key = { it.id }) { d ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
                                     .clickable { flyTo(d) }
-                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 AsyncImage(
                                     model = d.thumbnailUrl,
                                     contentDescription = null,
-                                    modifier = Modifier.size(42.dp).clip(RoundedCornerShape(9.dp)).background(Color.White.copy(alpha = 0.06f)),
+                                    modifier = Modifier
+                                        .size(46.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color.White.copy(alpha = 0.06f)),
                                 )
-                                Spacer(Modifier.width(10.dp))
+                                Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(d.title, color = Color.White, maxLines = 1, fontWeight = FontWeight.Medium)
-                                    d.artist?.let { Text(it, color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall, maxLines = 1) }
+                                    Text(d.title, color = Color.White, maxLines = 1, fontWeight = FontWeight.SemiBold)
+                                    d.artist?.let { Text(it, color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall, maxLines = 1) }
                                 }
                                 Icon(Icons.Rounded.Place, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                             }
@@ -437,7 +464,7 @@ fun MusicMapScreen(
             }
         }
 
-        // Низ карты: карточка пина → мини-плеер → кнопка во всю ширину.
+        // Низ карты: карточка пина → мини-плеер → кнопка во всю ширину (Material 3 Expressive)
         var lastSel by remember { mutableStateOf<MapDrop?>(null) }
         LaunchedEffect(selected) { if (selected != null) lastSel = selected }
         Column(
@@ -455,41 +482,76 @@ fun MusicMapScreen(
                 if (d != null) {
                     Surface(
                         color = GLASS,
-                        shape = RoundedCornerShape(22.dp),
-                        tonalElevation = 8.dp,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                        shape = RoundedCornerShape(28.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                        tonalElevation = 10.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
+                        Column(modifier = Modifier.padding(18.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 AsyncImage(
                                     model = d.thumbnailUrl,
                                     contentDescription = null,
-                                    modifier = Modifier.size(60.dp).clip(RoundedCornerShape(14.dp)),
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(RoundedCornerShape(18.dp)),
                                 )
                                 Spacer(Modifier.width(14.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(d.title, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1)
-                                    d.artist?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f), maxLines = 1) }
+                                    Text(
+                                        d.title,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        maxLines = 1,
+                                    )
+                                    d.artist?.let {
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.65f), maxLines = 1)
+                                    }
                                 }
-                                IconButton(onClick = { selected = null }) {
-                                    Icon(Icons.Rounded.Close, contentDescription = "Закрыть", tint = Color.White.copy(alpha = 0.8f))
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color.White.copy(alpha = 0.08f),
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .clickable { selected = null },
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Rounded.Close, contentDescription = "Закрыть", tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
+                                    }
                                 }
                             }
                             if (d.caption.isNotBlank()) {
-                                Spacer(Modifier.height(10.dp))
-                                Text("«${d.caption}»", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.85f))
+                                Spacer(Modifier.height(12.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = Color.White.copy(alpha = 0.05f),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        "«${d.caption}»",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color.White.copy(alpha = 0.85f),
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    )
+                                }
                             }
-                            Spacer(Modifier.height(14.dp))
+                            Spacer(Modifier.height(16.dp))
                             Button(
                                 onClick = { onPlay(d.toTrackItem()) },
-                                modifier = Modifier.fillMaxWidth().height(48.dp),
-                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                shape = RoundedCornerShape(26.dp),
                             ) {
-                                Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text("Слушать", fontWeight = FontWeight.SemiBold)
+                                Text("Слушать трек", fontWeight = FontWeight.Bold)
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Spacer(Modifier.height(4.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 TextButton(onClick = { reportDrop = d }) {
                                     Icon(Icons.Rounded.Flag, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White.copy(alpha = 0.6f))
                                     Spacer(Modifier.width(6.dp))
@@ -516,10 +578,12 @@ fun MusicMapScreen(
             ) {
                 Surface(
                     color = SOLID,
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                    shadowElevation = 6.dp,
+                    shape = CircleShape,
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    shadowElevation = 8.dp,
                     modifier = Modifier
-                        .size(46.dp)
+                        .size(50.dp)
+                        .clip(CircleShape)
                         .clickable {
                             val ok = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
                                 PackageManager.PERMISSION_GRANTED ||
@@ -537,7 +601,7 @@ fun MusicMapScreen(
                             Icons.Rounded.NearMe,
                             contentDescription = "Мое местоположение",
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(22.dp),
+                            modifier = Modifier.size(24.dp),
                         )
                     }
                 }
@@ -684,7 +748,7 @@ fun MusicMapScreen(
     }
 }
 
-/** Кнопка «оставить трек» во всю ширину — градиент + лёгкое покачивание иконки. */
+/** Кнопка «оставить трек» во всю ширину — градиент + лёгкое покачивание иконки (M3 Expressive). */
 @Composable
 private fun DropButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val inf = rememberInfiniteTransition(label = "drop")
@@ -696,27 +760,39 @@ private fun DropButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val accent = MaterialTheme.colorScheme.primary
     val accentLight = androidx.compose.ui.graphics.lerp(accent, Color.White, 0.28f)
 
-    Row(
+    Surface(
+        shape = RoundedCornerShape(26.dp),
+        shadowElevation = 8.dp,
         modifier = modifier
-            .height(56.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Brush.horizontalGradient(listOf(accent, accentLight)))
+            .height(58.dp)
+            .clip(RoundedCornerShape(26.dp))
             .clickable(onClick = onClick),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            Icons.Rounded.Place,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier.size(22.dp).graphicsLayer { translationY = -bob * 3f },
-        )
-        Spacer(Modifier.width(9.dp))
-        Text("Оставить трек здесь", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Brush.horizontalGradient(listOf(accent, accentLight))),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Rounded.Place,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(24.dp).graphicsLayer { translationY = -bob * 3f },
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "Оставить трек здесь",
+                color = MaterialTheme.colorScheme.onPrimary,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+        }
     }
 }
 
-/** Нижний лист выбора трека: избранное / плейлисты / поиск. */
+/** Нижний лист выбора трека: избранное / плейлисты / поиск (Material 3 Expressive). */
 @Composable
 private fun TrackPickerSheet(
     onSearch: (String) -> Flow<List<TrackItem>>,
@@ -740,104 +816,125 @@ private fun TrackPickerSheet(
 
     Surface(
         color = MAP_BG,
-        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight(0.9f),
     ) {
-        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-                Spacer(Modifier.height(12.dp))
-                Box(
-                    Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .width(40.dp).height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(Color.White.copy(alpha = 0.2f)),
-                )
-                Spacer(Modifier.height(14.dp))
-                Text("Что оставить на карте?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
-                Spacer(Modifier.height(14.dp))
+        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
+            Spacer(Modifier.height(14.dp))
+            Box(
+                Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .width(44.dp).height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color.White.copy(alpha = 0.25f)),
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "Что оставить на карте?",
+                style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+            )
+            Spacer(Modifier.height(14.dp))
 
-                // Сегменты-вкладки.
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    PickerTab("Избранное", Icons.Rounded.Favorite, tab == 0, Modifier.weight(1f)) { tab = 0; openPlaylist = null }
-                    PickerTab("Плейлисты", Icons.Rounded.QueueMusic, tab == 1, Modifier.weight(1f)) { tab = 1 }
-                    PickerTab("Поиск", Icons.Rounded.Search, tab == 2, Modifier.weight(1f)) { tab = 2 }
-                }
-                Spacer(Modifier.height(14.dp))
+            // Сегменты-вкладки (Expressive Pills)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                PickerTab("Избранное", Icons.Rounded.Favorite, tab == 0, Modifier.weight(1f)) { tab = 0; openPlaylist = null }
+                PickerTab("Плейлисты", Icons.Rounded.QueueMusic, tab == 1, Modifier.weight(1f)) { tab = 1 }
+                PickerTab("Поиск", Icons.Rounded.Search, tab == 2, Modifier.weight(1f)) { tab = 2 }
+            }
+            Spacer(Modifier.height(16.dp))
 
-                when (tab) {
-                    0 -> TrackList(favorites, onPick)
-                    1 -> {
-                        val pl = openPlaylist
-                        if (pl == null) {
-                            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                                items(playlists, key = { it.id }) { p ->
+            when (tab) {
+                0 -> TrackList(favorites, onPick)
+                1 -> {
+                    val pl = openPlaylist
+                    if (pl == null) {
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            items(playlists, key = { it.id }) { p ->
+                                Surface(
+                                    shape = RoundedCornerShape(18.dp),
+                                    color = Color.White.copy(alpha = 0.04f),
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                        .clip(RoundedCornerShape(18.dp))
+                                        .clickable { openPlaylist = p },
+                                ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable { openPlaylist = p }
-                                            .padding(vertical = 10.dp),
+                                            .padding(10.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
                                         AsyncImage(
                                             model = p.coverUrl,
                                             contentDescription = null,
-                                            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.06f)),
+                                            modifier = Modifier
+                                                .size(54.dp)
+                                                .clip(RoundedCornerShape(14.dp))
+                                                .background(Color.White.copy(alpha = 0.06f)),
                                         )
-                                        Spacer(Modifier.width(12.dp))
+                                        Spacer(Modifier.width(14.dp))
                                         Column(Modifier.weight(1f)) {
-                                            Text(p.name, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                                            Text("${p.tracks.size} треков", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
+                                            Text(p.name, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+                                            Spacer(Modifier.height(2.dp))
+                                            Text("${p.tracks.size} треков", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
                                         }
                                     }
                                 }
                             }
-                        } else {
-                            Column(Modifier.fillMaxSize()) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { openPlaylist = null }) {
-                                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Назад", tint = Color.White)
-                                    }
-                                    Text(pl.name, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        }
+                    } else {
+                        Column(Modifier.fillMaxSize()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { openPlaylist = null }) {
+                                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Назад", tint = Color.White)
                                 }
-                                TrackList(pl.tracks, onPick)
+                                Text(pl.name, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
                             }
+                            TrackList(pl.tracks, onPick)
                         }
                     }
-                    else -> {
-                        OutlinedTextField(
-                            value = query,
-                            onValueChange = { query = it },
-                            label = { Text("Поиск трека") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        if (searching) {
-                            Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(26.dp))
-                            }
+                }
+                else -> {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        label = { Text("Поиск трека") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(18.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    if (searching) {
+                        Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(26.dp))
                         }
-                        TrackList(results, onPick)
                     }
+                    TrackList(results, onPick)
                 }
             }
         }
+    }
 }
 
 @Composable
 private fun PickerTab(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, active: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Surface(
         color = if (active) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.06f),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, if (active) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.08f)),
         modifier = modifier.height(44.dp).clickable(onClick = onClick),
     ) {
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(17.dp), tint = if (active) Color(0xFF0C3A26) else Color.White.copy(alpha = 0.8f))
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = if (active) Color(0xFF0C3A26) else Color.White.copy(alpha = 0.8f))
             Spacer(Modifier.width(6.dp))
-            Text(label, color = if (active) Color(0xFF0C3A26) else Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            Text(label, color = if (active) Color(0xFF0C3A26) else Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -850,26 +947,39 @@ private fun TrackList(tracks: List<TrackItem>, onPick: (TrackItem) -> Unit) {
         }
         return
     }
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 6.dp)) {
         items(tracks, key = { it.url + "@" + it.speed }) { t ->
-            Row(
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White.copy(alpha = 0.04f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onPick(t) }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .padding(vertical = 3.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { onPick(t) },
             ) {
-                AsyncImage(
-                    model = t.thumbnailUrl,
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)).background(Color.White.copy(alpha = 0.06f)),
-                )
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(t.title, color = Color.White, maxLines = 1, fontWeight = FontWeight.Medium)
-                    t.uploader?.let { Text(it, color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall, maxLines = 1) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AsyncImage(
+                        model = t.thumbnailUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(alpha = 0.06f)),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(t.title, color = Color.White, maxLines = 1, fontWeight = FontWeight.SemiBold)
+                        t.uploader?.let { Text(it, color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall, maxLines = 1) }
+                    }
+                    Icon(Icons.Rounded.Place, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                 }
-                Icon(Icons.Rounded.Place, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             }
         }
     }
