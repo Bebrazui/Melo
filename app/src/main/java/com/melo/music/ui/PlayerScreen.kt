@@ -1669,39 +1669,30 @@ private fun AccountTab(
                 }
             }
         } else {
-            // Bento Hero карточка для Гостя (Material 3 Expressive)
+            // Bento Hero карточка для Гостя (в едином стиле темы приложения)
             Surface(
                 shape = RoundedCornerShape(28.dp),
-                color = Color(0xFF1E1A15),
-                border = BorderStroke(1.2.dp, Color(0xFF3D3224)),
+                color = Color.White.copy(alpha = 0.05f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
                 shadowElevation = 8.dp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 18.dp),
             ) {
                 Column(
-                    modifier = Modifier
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    Color(0xFF2B231A),
-                                    Color(0xFF1A1612),
-                                )
-                            )
-                        )
-                        .padding(20.dp)
+                    modifier = Modifier.padding(20.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
                             shape = CircleShape,
-                            color = Color(0xFFD4A853),
+                            color = cs.primaryContainer,
                             modifier = Modifier.size(56.dp),
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     Icons.Rounded.AccountCircle,
                                     contentDescription = null,
-                                    tint = Color(0xFF191612),
+                                    tint = cs.onPrimaryContainer,
                                     modifier = Modifier.size(36.dp),
                                 )
                             }
@@ -1711,30 +1702,30 @@ private fun AccountTab(
                             Text(
                                 "Гостевой профиль",
                                 style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp),
-                                fontWeight = FontWeight.Black,
-                                color = Color(0xFFF3E2C8),
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
                             )
-                            Spacer(Modifier.height(2.dp))
+                            Spacer(Modifier.height(3.dp))
                             Text(
                                 "Синхронизируй плейлисты и делись треками на карте",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFBA9E76),
+                                color = Color.White.copy(alpha = 0.7f),
                             )
                         }
                     }
                     Spacer(Modifier.height(16.dp))
                     Button(
                         onClick = onOpenLogin,
-                        shape = RoundedCornerShape(22.dp),
+                        shape = RoundedCornerShape(24.dp),
                         colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFD4A853),
-                            contentColor = Color(0xFF191612),
+                            containerColor = cs.primary,
+                            contentColor = cs.onPrimary,
                         ),
                         modifier = Modifier.fillMaxWidth().height(48.dp),
                     ) {
                         Icon(Icons.Rounded.AccountCircle, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Войти или зарегистрироваться", fontWeight = FontWeight.Bold)
+                        Text("Войти в аккаунт", fontWeight = FontWeight.Bold)
                     }
                 }
             }
