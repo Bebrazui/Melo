@@ -1011,7 +1011,6 @@ fun PlayerScreen(
                         onTogglePlayPause = onTogglePlayPause,
                         onPrev = { playPrev() },
                         onNext = { playNext() },
-                        onOpenArtist = { artistItem -> artistOpen = artistItem },
                         onClick = { playerExpanded = true },
                     )
                 },
@@ -4745,7 +4744,6 @@ private fun NowPlayingBar(
     onTogglePlayPause: () -> Unit,
     onPrev: () -> Unit = {},
     onNext: () -> Unit = {},
-    onOpenArtist: (TrackItem) -> Unit = {},
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -4958,22 +4956,6 @@ private fun NowPlayingBar(
                             color = lerp(Color.White.copy(alpha = 0.7f), animatedTrackColor, 0.35f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .clickable {
-                                    item.uploader?.let { artistName ->
-                                        val artistItem = TrackItem(
-                                            title = artistName,
-                                            uploader = artistName,
-                                            url = "artist:$artistName",
-                                            durationSeconds = 0L,
-                                            thumbnailUrl = item.thumbnailUrl,
-                                            source = item.source,
-                                            kind = ItemKind.ARTIST,
-                                        )
-                                        onOpenArtist(artistItem)
-                                    }
-                                },
                         )
                     }
                 }

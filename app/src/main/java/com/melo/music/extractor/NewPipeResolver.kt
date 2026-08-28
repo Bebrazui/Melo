@@ -292,25 +292,52 @@ object NewPipeResolver {
         }
     }
 
+    /** Разрешает официальный YouTube Music канал артиста по имени или URL. */
+    suspend fun resolveArtistChannelUrl(artist: TrackItem): String? = withContext(Dispatchers.IO) {
+        if (isYouTube(artist.url) && (artist.url.contains("/channel/") || artist.url.contains("/@") || artist.url.contains("/user/"))) {
+            return@withContext artist.url
+        }
+        runCatching {
+            val search = SearchInfo.getInfo(
+                ServiceList.YouTube,
+                ServiceList.YouTube.searchQHFactory.fromQuery(artist.title, listOf("music_artists"), "")
+            )
+            val channels = search.relatedItems.filterIsInstance<ChannelInfoItem>()
+            val target = normalizeArtistName(artist.title)
+            val exact = channels.firstOrNull { ch ->
+                normalizeArtistName(ch.name) == target
+            }
+            exact?.url ?: channels.firstOrNull()?.url
+        }.getOrNull()
+    }
+
     /**
-     * Треки исполнителя: сперва вкладка канала, иначе фолбэк — поиск по имени.
-     * Для YouTube-исполнителей вкладка часто пустая, поэтому фолбэк надёжнее.
+     * Треки исполнителя: сперва официальная вкладка треков канала артиста,
+     * а затем точный поиск треков с фильтрацией по исполнителю.
      */
     suspend fun artistTracks(context: Context, artist: TrackItem): List<TrackItem> =
         withContext(Dispatchers.IO) {
             ensureInit(context)
-            val viaChannel = runCatching { channelTracks(artist.url) }
-                .onFailure {
-                    android.util.Log.e(
-                        "MeloArtist",
-                        "artistTracks viaChannel FAILED: ${it.javaClass.simpleName}: ${it.message}",
-                    )
-                }
-                .getOrDefault(emptyList())
+            val channelUrl = if (artist.url.startsWith("http") && (artist.url.contains("/channel/") || artist.url.contains("/@") || artist.url.contains("/user/"))) {
+                artist.url
+            } else {
+                resolveArtistChannelUrl(artist)
+            }
 
-            // Фолбэк/дополнение: ищем песни по имени исполнителя в его источнике.
-            // Мержим с вкладкой канала (dedupe по url) — вкладка часто неполная,
-            // а поиск может не найти глубокий каталог; вместе покрывают лучше.
+            val viaChannel = if (channelUrl != null && channelUrl.startsWith("http")) {
+                runCatching { channelTracks(channelUrl) }
+                    .onFailure {
+                        android.util.Log.e(
+                            "MeloArtist",
+                            "artistTracks viaChannel FAILED: ${it.javaClass.simpleName}: ${it.message}",
+                        )
+                    }
+                    .getOrDefault(emptyList())
+            } else {
+                emptyList()
+            }
+
+            // Поиск песен артиста (music_songs на YouTube Music либо tracks на SoundCloud)
             val fromSearch = runCatching {
                 val raw = when (artist.source) {
                     Source.SOUNDCLOUD -> {
@@ -318,9 +345,9 @@ object NewPipeResolver {
                         searchService(ServiceList.SoundCloud, artist.title, Source.SOUNDCLOUD, listOf("tracks"))
                     }
                     Source.BANDCAMP -> BandcampSearcher.search(artist.title)
-                    else -> searchYouTube(artist.title).filter { it.kind == ItemKind.TRACK }
+                    else -> searchService(ServiceList.YouTube, artist.title, Source.YOUTUBE_MUSIC, listOf("music_songs"))
                 }
-                raw.filter { artistMatches(it.uploader, artist.title) }
+                raw.filter { artistMatches(it.uploader, artist.title, it.title) }
             }.getOrDefault(emptyList())
 
             android.util.Log.e(
@@ -334,37 +361,45 @@ object NewPipeResolver {
     suspend fun artistAlbums(context: Context, artist: TrackItem): List<TrackItem> =
         withContext(Dispatchers.IO) {
             ensureInit(context)
-            val viaChannel = runCatching {
-                val service = serviceFor(artist.url)
-                val channel = ChannelInfo.getInfo(service, artist.url)
-                val tab = channel.tabs.firstOrNull { lh ->
-                    lh.contentFilters.any { it == ChannelTabs.ALBUMS }
-                } ?: throw IllegalStateException("no ALBUMS tab, all=${channel.tabs.map { it.contentFilters }}")
-                ChannelTabInfo.getInfo(service, tab).relatedItems
-                    .filterIsInstance<PlaylistInfoItem>()
-                    .map { pl ->
-                        TrackItem(
-                            title = pl.name,
-                            uploader = artist.title,
-                            url = pl.url,
-                            durationSeconds = 0,
-                            thumbnailUrl = pl.thumbnails.maxByOrNull { it.height }?.url
-                                ?: pl.thumbnails.firstOrNull()?.url,
-                            source = artist.source,
-                            kind = ItemKind.ALBUM,
-                        )
-                    }
-            }.onFailure {
-                android.util.Log.e(
-                    "MeloArtist",
-                    "albums viaChannel FAILED: ${it.javaClass.simpleName}: ${it.message}",
-                )
-            }.getOrDefault(emptyList())
-            if (viaChannel.isNotEmpty() || !isYouTube(artist.url)) return@withContext viaChannel
+            val channelUrl = if (artist.url.startsWith("http") && (artist.url.contains("/channel/") || artist.url.contains("/@") || artist.url.contains("/user/"))) {
+                artist.url
+            } else {
+                resolveArtistChannelUrl(artist)
+            }
 
-            // Фолбэк для YouTube: поиск music_albums по имени — не зависит от вкладок канала.
-            // Оставляем только релизы самого исполнителя (по uploader), но если фильтр
-            // всё выкинул — отдаём топ без фильтра.
+            val viaChannel = if (channelUrl != null && channelUrl.startsWith("http")) {
+                runCatching {
+                    val service = serviceFor(channelUrl)
+                    val channel = ChannelInfo.getInfo(service, channelUrl)
+                    val tab = channel.tabs.firstOrNull { lh ->
+                        lh.contentFilters.any { it == ChannelTabs.ALBUMS }
+                    } ?: throw IllegalStateException("no ALBUMS tab, all=${channel.tabs.map { it.contentFilters }}")
+                    ChannelTabInfo.getInfo(service, tab).relatedItems
+                        .filterIsInstance<PlaylistInfoItem>()
+                        .map { pl ->
+                            TrackItem(
+                                title = pl.name,
+                                uploader = artist.title,
+                                url = pl.url,
+                                durationSeconds = 0,
+                                thumbnailUrl = pl.thumbnails.maxByOrNull { it.height }?.url
+                                    ?: pl.thumbnails.firstOrNull()?.url,
+                                source = artist.source,
+                                kind = ItemKind.ALBUM,
+                            )
+                        }
+                }.onFailure {
+                    android.util.Log.e(
+                        "MeloArtist",
+                        "albums viaChannel FAILED: ${it.javaClass.simpleName}: ${it.message}",
+                    )
+                }.getOrDefault(emptyList())
+            } else {
+                emptyList()
+            }
+            if (viaChannel.isNotEmpty() || !isYouTube(channelUrl ?: artist.url)) return@withContext viaChannel
+
+            // Фолбэк для YouTube: поиск music_albums по имени
             runCatching {
                 SearchInfo.getInfo(
                     ServiceList.YouTube,
@@ -372,7 +407,6 @@ object NewPipeResolver {
                 ).relatedItems.filterIsInstance<PlaylistInfoItem>()
                     .map { it.toAlbumItem(Source.YOUTUBE_MUSIC) }
                     .let { raw ->
-                        android.util.Log.e("MeloArtist", "albums search raw=${raw.size}")
                         val mine = raw.filter { albumMatches(it.uploader, artist.title) }
                         if (mine.isNotEmpty()) mine else raw.take(8)
                     }
@@ -384,7 +418,10 @@ object NewPipeResolver {
         val u = uploader?.lowercase()?.trim().takeUnless { it.isNullOrBlank() } ?: return false
         val n = normalizeArtistName(artistName)
         if (n.isBlank()) return false
-        return u.contains(n) || n.contains(u)
+        val uClean = normalizeArtistName(u)
+        if (uClean == n) return true
+        val pattern = Regex("\\b" + Regex.escape(n) + "\\b", RegexOption.IGNORE_CASE)
+        return pattern.containsMatchIn(uClean)
     }
 
     /** Извлекает video id из YouTube-ссылки (?v=ID или youtu.be/ID). */
@@ -523,7 +560,12 @@ object NewPipeResolver {
         }
 
     private fun normalizeArtistName(name: String): String =
-        name.lowercase().removeSuffix(" - topic").trim()
+        name.lowercase()
+            .removeSuffix(" - topic")
+            .removeSuffix(" official")
+            .removeSuffix("vevo")
+            .replace(Regex("[\"']"), "")
+            .trim()
 
     /** Треки альбома/плейлиста по ссылке. */
     suspend fun albumTracks(context: Context, albumUrl: String): List<TrackItem> =
@@ -569,14 +611,28 @@ object NewPipeResolver {
                 .firstOrNull { it.kind == ItemKind.TRACK }
         }
 
-    /** Совпадает ли исполнитель трека с именем артиста (с учётом " - Topic"). */
-    private fun artistMatches(uploader: String?, name: String): Boolean {
-        val u = uploader?.lowercase()?.removeSuffix(" - topic")?.trim() ?: return false
-        val n = name.lowercase().removeSuffix(" - topic").trim()
-        if (u.isBlank() || n.isBlank()) return false
-        // Только точное совпадение или uploader, содержащий ПОЛНОЕ имя
-        // (иначе «Dazey» подходит под «Dazey and the Scouts»).
-        return u == n || u.contains(n)
+    /** Совпадает ли исполнитель трека с именем артиста (с учётом Topic, VEVO, коллабораций и названий). */
+    private fun artistMatches(uploader: String?, name: String, trackTitle: String? = null): Boolean {
+        val n = normalizeArtistName(name)
+        if (n.isBlank()) return false
+        val u = uploader?.let(::normalizeArtistName)
+        if (u != null && u.isNotBlank()) {
+            if (u == n) return true
+            // Поддержка коллабораций: "Artist 1, Artist 2" или "Artist 1 feat. Artist 2"
+            val parts = u.split(Regex("[,&/+]|\\b(feat\\.?|ft\\.?|featuring|vs\\.?|with|x|и)\\b", RegexOption.IGNORE_CASE))
+            if (parts.any { normalizeArtistName(it) == n }) return true
+            // Матчинг по границам слов (чтобы "OG" не подходило под "OG Buda", "Платина" не цепляло сторонние фразы)
+            val pattern = Regex("\\b" + Regex.escape(n) + "\\b", RegexOption.IGNORE_CASE)
+            if (pattern.containsMatchIn(u)) return true
+        }
+
+        if (trackTitle != null) {
+            val titleLower = trackTitle.lowercase().trim()
+            if (titleLower.startsWith("$n - ") || titleLower.startsWith("$n – ") || titleLower.startsWith("$n — ") || titleLower.startsWith("$n : ")) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun channelTracks(channelUrl: String): List<TrackItem> {
