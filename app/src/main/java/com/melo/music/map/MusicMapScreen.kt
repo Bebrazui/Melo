@@ -54,6 +54,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.NearMe
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.QueueMusic
@@ -123,6 +124,7 @@ private val SOLID = Color(0xFF18241E)
 /** Состояние карты, доступное из не-Compose колбэков (слушатель карты). */
 private class MapHolder {
     var drops: List<MapDrop> = emptyList()
+    var userLocation: GeoPoint? = null
     val artCache = HashMap<String, Bitmap>()
     var render: () -> Unit = {}
 }
@@ -173,11 +175,25 @@ fun MusicMapScreen(
         onDispose { mapView.onPause() }
     }
 
-    // Рендер маркеров с кластеризацией. Читает ms.drops (актуальные данные).
+    // Рендер маркеров с кластеризацией. Читает ms.drops и ms.userLocation.
     ms.render = render@{
         val proj: Projection = mapView.projection ?: return@render
         val clusters = clusterDrops(ms.drops, proj, context.px(64f))
         mapView.overlays.clear()
+
+        // Синяя точка — маркер местоположения самого пользователя
+        val uLoc = ms.userLocation
+        if (uLoc != null) {
+            val userMarker = Marker(mapView).apply {
+                position = uLoc
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                infoWindow = null
+                icon = BitmapDrawable(res, makeUserLocationBitmap(context))
+                setOnMarkerClickListener { _, _ -> true }
+            }
+            mapView.overlays.add(userMarker)
+        }
+
         for (cl in clusters) {
             if (cl.items.size == 1) {
                 val d = cl.items[0]
@@ -270,6 +286,31 @@ fun MusicMapScreen(
         searchHits = emptyList()
     }
 
+    fun updateUserLocation(centerMap: Boolean = false) {
+        val ok = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!ok) return
+        val fused = LocationServices.getFusedLocationProviderClient(context)
+        fused.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
+            .addOnSuccessListener { loc ->
+                if (loc != null) {
+                    val geo = GeoPoint(loc.latitude, loc.longitude)
+                    ms.userLocation = geo
+                    ms.render()
+                    if (centerMap) {
+                        mapView.controller.animateTo(geo)
+                        mapView.controller.setZoom(14.0)
+                    }
+                }
+            }
+    }
+
+    LaunchedEffect(Unit) {
+        updateUserLocation(centerMap = true)
+    }
+
     fun fetchLocationThenCaption(track: TrackItem) {
         val fused = LocationServices.getFusedLocationProviderClient(context)
         status = "Определяю геолокацию…"
@@ -277,6 +318,9 @@ fun MusicMapScreen(
             .addOnSuccessListener { loc ->
                 if (loc == null) { status = "Не удалось получить геолокацию"; return@addOnSuccessListener }
                 status = null
+                val geo = GeoPoint(loc.latitude, loc.longitude)
+                ms.userLocation = geo
+                ms.render()
                 pendingTrack = track
                 captionFor = loc.latitude to loc.longitude
             }
@@ -460,6 +504,42 @@ fun MusicMapScreen(
                     }
                 }
             }
+            // Кнопка центрирования на себе (GPS)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                Surface(
+                    color = SOLID,
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    shadowElevation = 6.dp,
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clickable {
+                            val ok = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                                PackageManager.PERMISSION_GRANTED ||
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                                PackageManager.PERMISSION_GRANTED
+                            if (ok) {
+                                updateUserLocation(centerMap = true)
+                            } else {
+                                permLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                            }
+                        },
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.NearMe,
+                            contentDescription = "Мое местоположение",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+            }
+
             // Мини-плеер (если что-то играет) — над кнопкой.
             nowPlayingBar()
             // Кнопка во всю ширину.
@@ -829,6 +909,29 @@ private suspend fun loadArtBitmap(context: Context, url: String): Bitmap? = runC
     val r = context.imageLoader.execute(req)
     (r as? SuccessResult)?.drawable?.let { (it as? BitmapDrawable)?.bitmap }
 }.getOrNull()
+
+/** Синяя точка текущего местоположения пользователя (стиль GPS). */
+private fun makeUserLocationBitmap(context: Context): Bitmap {
+    val size = context.px(28f).toInt().coerceAtLeast(24)
+    val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val cx = size / 2f
+    val r = size / 2f
+
+    // Полупрозрачный ореол
+    val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = AColor.argb(0x44, 0x1E, 0x88, 0xE5) }
+    c.drawCircle(cx, cx, r, halo)
+
+    // Белая окантовка
+    val border = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = AColor.WHITE }
+    c.drawCircle(cx, cx, r * 0.72f, border)
+
+    // Синий центральный круг
+    val blue = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = AColor.rgb(0x1E, 0x88, 0xE5) }
+    c.drawCircle(cx, cx, r * 0.52f, blue)
+
+    return bmp
+}
 
 /** Круглый пин с обложкой (или акцентной заливкой и нотой) и белым хвостиком снизу. */
 private fun makePinBitmap(context: Context, art: Bitmap?, accent: Int): Bitmap {

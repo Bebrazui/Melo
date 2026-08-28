@@ -412,14 +412,18 @@ fun PlayerScreen(
 
     LaunchedEffect(Unit) {
         listLoading = true
-        runCatching { onLoadRecommendations() }
+        runCatching {
+            com.melo.music.recommend.Recommender.generatePersonalizedRecommendations(
+                fallbackProvider = { onLoadRecommendations() },
+                related = onRelatedTracks,
+            )
+        }
             .onSuccess { result ->
                 // distinctBy: YouTube иногда отдаёт один трек дважды → дубль ключа в LazyColumn.
                 items = result.distinctBy { it.url }
                 listError = null
-                // Фоновая предзагрузка ПЕРВЫХ рекомендаций (очередь, по одному воркеру):
-                // к моменту тапа трек уже в кэше. Не больше 3 — иначе шторм резолвов.
-                items.take(3).forEach { onPrefetch(it.url) }
+                // Фоновая предзагрузка первых рекомендаций
+                items.take(2).forEach { onPrefetch(it.url) }
             }
             .onFailure { listError = it.message }
         listLoading = false
@@ -989,7 +993,7 @@ fun PlayerScreen(
                 onPlay = { track -> playAt(listOf(track), 0) },
                 onClose = { selectedTab = MeloTab.Home },
                 topInset = innerPadding.calculateTopPadding(),
-                bottomInset = innerPadding.calculateBottomPadding() + playerInset,
+                bottomInset = innerPadding.calculateBottomPadding(),
                 nowPlayingBar = {
                     NowPlayingBar(
                         item = nowPlaying,
@@ -2214,14 +2218,13 @@ private fun HomeFeed(
     var personalizedShelves by remember {
         mutableStateOf<List<Pair<String, List<TrackItem>>>>(emptyList())
     }
-    LaunchedEffect(Unit) {
+    var quickPicks by remember {
+        mutableStateOf<List<TrackItem>>(emptyList())
+    }
+
+    LaunchedEffect(history.size, recommendations.size) {
         personalizedShelves = Recommender.generatePersonalizedShelves(onLoadShelf, onRelatedTracks)
-            .ifEmpty {
-                listOf(
-                    "Новинки" to emptyList(),
-                    "Русский рэп" to emptyList(),
-                )
-            }
+        quickPicks = Recommender.generateQuickPicks(fallbackTracks = recTracks, related = onRelatedTracks)
     }
 
     // Кэш полок живёт здесь (LazyColumn не уничтожается при скролле),
@@ -2267,12 +2270,15 @@ private fun HomeFeed(
             }
         }
 
-        item(key = "home_quick_title") { SectionTitle("Быстрый выбор") }
-        item(key = "home_quick_grid") {
-            QuickPickGrid(
-                recTracks, loading, nowPlayingUrl, isPlaying, resolvingUrl,
-                onPlay, onTrackLongClick,
-            )
+        val displayedQuickPicks = if (quickPicks.isNotEmpty()) quickPicks else recTracks.take(12)
+        if (displayedQuickPicks.isNotEmpty()) {
+            item(key = "home_quick_title") { SectionTitle("Быстрый выбор") }
+            item(key = "home_quick_grid") {
+                QuickPickGrid(
+                    displayedQuickPicks, loading && displayedQuickPicks.isEmpty(), nowPlayingUrl, isPlaying, resolvingUrl,
+                    onPlay, onTrackLongClick,
+                )
+            }
         }
 
         // Персонализированные полки.
@@ -2307,7 +2313,7 @@ private fun HomeFeed(
                 }
             }
         } else {
-            // Fallback: стандартные полки.
+            // Fallback: нейтральные подборки без навязанного рэпа.
             item { SectionTitle("Новинки") }
             item {
                 HorizontalShelf(
@@ -2316,18 +2322,18 @@ private fun HomeFeed(
                 )
             }
 
-            item { SectionTitle("Русский рэп") }
+            item { SectionTitle("Электроника") }
             item {
                 HorizontalShelf(
-                    "русский рэп хиты", shelfCache, onLoadShelf, nowPlayingUrl, isPlaying,
+                    "electronic synthwave chill", shelfCache, onLoadShelf, nowPlayingUrl, isPlaying,
                     resolvingUrl, onPlay, onTrackLongClick, onPrefetch,
                 )
             }
 
-            item { SectionTitle("Под настроение") }
+            item { SectionTitle("Рок и Альтернатива") }
             item {
                 HorizontalShelf(
-                    "lofi chill", shelfCache, onLoadShelf, nowPlayingUrl, isPlaying,
+                    "rock indie alternative", shelfCache, onLoadShelf, nowPlayingUrl, isPlaying,
                     resolvingUrl, onPlay, onTrackLongClick, onPrefetch,
                 )
             }

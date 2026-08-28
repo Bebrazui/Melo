@@ -19,57 +19,73 @@ object TasteProfile {
     )
 
     /**
-     * Строит профиль вкуса из текущих лайков.
+     * Строит профиль вкуса из текущих лайков и истории прослушиваний.
      */
     fun build(): Profile {
-        val tracks = FavoritesManager.getAll()
-        if (tracks.isEmpty()) return emptyProfile()
+        val liked = FavoritesManager.getAll()
+        val history = com.melo.music.history.HistoryManager.getAll()
+        val bannedUrls = SkipTracker.getBannedUrls()
 
-        // --- Артисты ---
+        val validLiked = liked.filter { it.url !in bannedUrls }
+        val validHistory = history.filter { it.url !in bannedUrls }
+
+        if (validLiked.isEmpty() && validHistory.isEmpty()) return emptyProfile()
+
+        // --- Артисты с весами (лайк = 3 балла, история = 1 балл) ---
         val artistFreq = mutableMapOf<String, Int>()
-        for (t in tracks) {
-            val artist = t.uploader
+        fun addArtist(raw: String?, weight: Int) {
+            val artist = raw
                 ?.removeSuffix(" - Topic")
+                ?.removeSuffix(" - topic")
                 ?.trim()
                 ?.lowercase()
-                ?: continue
-            if (artist.length < 2) continue
-            artistFreq[artist] = (artistFreq[artist] ?: 0) + 1
+                ?: return
+            if (artist.length < 2) return
+            artistFreq[artist] = (artistFreq[artist] ?: 0) + weight
         }
+
+        for (t in validLiked) addArtist(t.uploader, 3)
+        for (t in validHistory) addArtist(t.uploader, 1)
+
         val topArtists = artistFreq.entries
             .sortedByDescending { it.value }
-            .take(10)
+            .take(12)
             .map { it.key to it.value }
 
-        // --- Ключевые слова из названий ---
+        // --- Ключевые слова из названий треков ---
         val stopWords = setOf(
             "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
             "of", "with", "by", "from", "is", "it", "that", "this", "was", "are",
             "be", "has", "had", "have", "not", "no", "you", "i", "my", "me",
             "we", "us", "our", "his", "her", "she", "he", "they", "them",
             "official", "video", "audio", "remix", "feat", "ft", "live",
-            "clip", "hd", "4k", "mono", "stereo",
+            "clip", "hd", "4k", "mono", "stereo", "music", "музыка", "трек", "песня",
         )
         val keywordFreq = mutableMapOf<String, Int>()
-        for (t in tracks) {
-            val words = t.title.lowercase()
+        fun addKeywords(title: String, weight: Int) {
+            val words = title.lowercase()
                 .replace(Regex("[^a-zA-Zа-яёА-ЯЁ0-9\\s]"), " ")
                 .split("\\s+".toRegex())
-                .filter { it.length >= 2 && it !in stopWords }
+                .filter { it.length >= 3 && it !in stopWords }
             for (w in words) {
-                keywordFreq[w] = (keywordFreq[w] ?: 0) + 1
+                keywordFreq[w] = (keywordFreq[w] ?: 0) + weight
             }
         }
+
+        for (t in validLiked) addKeywords(t.title, 3)
+        for (t in validHistory) addKeywords(t.title, 1)
+
         val topKeywords = keywordFreq.entries
             .sortedByDescending { it.value }
             .take(15)
             .map { it.key to it.value }
 
         // --- Источники ---
-        val sourceDist = tracks.groupBy { it.source }.mapValues { it.value.size }
+        val allTracks = (validLiked + validHistory).distinctBy { it.url }
+        val sourceDist = allTracks.groupBy { it.source }.mapValues { it.value.size }
 
         // --- Средняя длительность ---
-        val avgDur = tracks.filter { it.durationSeconds > 0 }
+        val avgDur = allTracks.filter { it.durationSeconds > 0 }
             .map { it.durationSeconds }
             .average()
             .let { if (it.isNaN()) 0L else it.toLong() }
@@ -84,27 +100,15 @@ object TasteProfile {
     fun generateShelfSeeds(profile: Profile = build()): List<String> {
         val seeds = mutableListOf<String>()
 
-        // 1) По топ-артистам: "похоже на [артист]"
-        for ((artist, _) in profile.topArtists.take(3)) {
-            seeds.add("$artist похожие хиты")
+        // 1) По топ-артистам пользователя: "$artist треки"
+        for ((artist, _) in profile.topArtists.take(4)) {
+            seeds.add("$artist лучшие песни")
         }
 
-        // 2) По топ-ключевым словам: " [слово] музыка"
-        val kw = profile.topKeywords.take(3).map { it.first }
+        // 2) По ключевым словам и сочетаниям пользователя
+        val kw = profile.topKeywords.take(4).map { it.first }
         if (kw.isNotEmpty()) {
-            seeds.add("${kw.joinToString(" ")} музыка")
-        }
-
-        // 3) Жанровые комбинации
-        val allKw = profile.topKeywords.map { it.first }
-        if (allKw.contains("рэп") || allKw.contains("рэп")) {
-            seeds.add("русский рэп хиты")
-        }
-        if (allKw.any { it.contains("rock") || it.contains("рок") }) {
-            seeds.add("рок музыка хиты")
-        }
-        if (allKw.any { it.contains("lofi") || it.contains("chill") }) {
-            seeds.add("lofi chill музыка")
+            seeds.add("${kw.take(2).joinToString(" ")} music")
         }
 
         return seeds.distinct().take(6)

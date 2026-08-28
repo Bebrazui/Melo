@@ -26,7 +26,7 @@ object Recommender {
 
     /**
      * Генерирует список персонализированных полок для главного экрана.
-     * Каждая полка — это пара (заголовок, seed-запрос для shelf()).
+     * Каждая полка — это пара (заголовок, список треков).
      */
     suspend fun generatePersonalizedShelves(
         onLoadShelf: suspend (String) -> List<TrackItem>,
@@ -34,7 +34,9 @@ object Recommender {
     ): List<Pair<String, List<TrackItem>>> = withContext(Dispatchers.IO) {
         val profile = TasteProfile.build()
         val liked = FavoritesManager.getAll()
-        val heardUrls = HistoryManager.getAll().map { it.url }.toSet()
+        val history = HistoryManager.getAll()
+        val allUserTracks = (liked + history).distinctBy { it.url }
+        val heardUrls = history.map { it.url }.toSet()
         val likedUrls = liked.map { it.url }.toSet()
         val bannedUrls = SkipTracker.getBannedUrls()
 
@@ -42,10 +44,10 @@ object Recommender {
         val usedSeeds = mutableSetOf<String>()
 
         // 1) «Похоже на <артист>» — НАСТОЯЩИЕ рекомендации (радио YouTube Music)
-        //    от лайкнутого трека этого артиста, а не текстовый поиск по имени.
+        //    от любимого/прослушанного трека этого артиста.
         for ((artist, _) in profile.topArtists) {
-            if (shelves.size >= 3) break
-            val seed = liked.firstOrNull {
+            if (shelves.size >= 4) break
+            val seed = allUserTracks.firstOrNull {
                 val a = it.uploader?.lowercase()?.removeSuffix(" - topic")?.trim()
                 a != null && (a == artist || a.contains(artist)) && it.url !in usedSeeds
             } ?: continue
@@ -59,15 +61,15 @@ object Recommender {
                 .distinctBy { it.url }
                 .let { TasteProfile.rankByTaste(it, profile) }
                 .take(12)
-            if (filtered.size >= 4) {
-                shelves.add("Похоже на ${seed.uploader ?: artist}" to filtered)
+            if (filtered.size >= 3) {
+                val artistTitle = seed.uploader?.removeSuffix(" - Topic")?.removeSuffix(" - topic") ?: artist
+                shelves.add("Похоже на $artistTitle" to filtered)
             }
         }
 
-        // 2) Жанровые полки через поиск (без сломанных «похожих хитов») — для разнообразия.
-        if (shelves.size < 4) {
+        // 2) Полки по ключевым словам и сочетаниям пользователя
+        if (shelves.size < 4 && profile.topKeywords.isNotEmpty()) {
             val seeds = TasteProfile.generateShelfSeeds(profile)
-                .filterNot { it.contains("похож") }
             for (seed in seeds) {
                 if (shelves.size >= 4) break
                 val raw = runCatching { onLoadShelf(seed) }.getOrDefault(emptyList())
@@ -79,7 +81,89 @@ object Recommender {
             }
         }
 
+        // 3) Если данных о вкусе ещё мало — отдаём нейтральные качественные подборки
+        if (shelves.isEmpty()) {
+            val neutralSeeds = listOf("популярные новинки музыки", "electronic synthwave chill", "rock indie alternative")
+            for (seed in neutralSeeds) {
+                val raw = runCatching { onLoadShelf(seed) }.getOrDefault(emptyList())
+                val filtered = raw.filter { it.url !in bannedUrls }.take(10)
+                if (filtered.isNotEmpty()) shelves.add(seedToTitle(seed) to filtered)
+            }
+        }
+
         shelves
+    }
+
+    /**
+     * Формирует умный персональный микс для «Быстрого выбора» (Quick Picks):
+     * сочетание треков из истории/лайков + связанные с ними свежие находки.
+     */
+    suspend fun generateQuickPicks(
+        fallbackTracks: List<TrackItem> = emptyList(),
+        related: suspend (TrackItem) -> List<TrackItem> = { emptyList() },
+    ): List<TrackItem> = withContext(Dispatchers.IO) {
+        val liked = FavoritesManager.getAll()
+        val history = HistoryManager.getAll()
+        val bannedUrls = SkipTracker.getBannedUrls()
+        val profile = TasteProfile.build()
+
+        val validUserTracks = (liked + history)
+            .filter { it.url !in bannedUrls }
+            .distinctBy { it.url }
+
+        if (validUserTracks.isEmpty()) {
+            return@withContext fallbackTracks.take(12)
+        }
+
+        val pool = mutableListOf<TrackItem>()
+        // Добавляем любимые треки пользователя
+        pool.addAll(validUserTracks.take(8))
+
+        // Подмешиваем 4-6 похожих треков из радио
+        val seed = validUserTracks.shuffled().firstOrNull()
+        if (seed != null) {
+            val rel = runCatching { related(seed) }.getOrDefault(emptyList())
+            val fresh = rel.filter { it.kind == ItemKind.TRACK && it.url !in bannedUrls && it.url !in validUserTracks.map { u -> u.url } }
+            pool.addAll(fresh.take(4))
+        }
+
+        TasteProfile.rankByTaste(pool.distinctBy { it.url }, profile).take(12)
+    }
+
+    /**
+     * Формирует персональную ленту «Рекомендуем» на основе радио похожих треков к вкусу пользователя.
+     */
+    suspend fun generatePersonalizedRecommendations(
+        fallbackProvider: suspend () -> List<TrackItem>,
+        related: suspend (TrackItem) -> List<TrackItem>,
+    ): List<TrackItem> = withContext(Dispatchers.IO) {
+        val liked = FavoritesManager.getAll()
+        val history = HistoryManager.getAll()
+        val bannedUrls = SkipTracker.getBannedUrls()
+        val profile = TasteProfile.build()
+
+        val validSeeds = (liked + history).filter { it.url !in bannedUrls }.distinctBy { it.url }
+        if (validSeeds.isEmpty()) {
+            return@withContext fallbackProvider()
+        }
+
+        val results = mutableListOf<TrackItem>()
+        val excludeUrls = (bannedUrls + validSeeds.map { it.url }).toMutableSet()
+
+        // Берём до 3 разных треков пользователя и строим от них радио-поток
+        for (seed in validSeeds.shuffled().take(3)) {
+            val rel = runCatching { related(seed) }.getOrDefault(emptyList())
+            val fresh = rel.filter { it.kind == ItemKind.TRACK && it.url !in excludeUrls }
+            results.addAll(fresh)
+            excludeUrls.addAll(fresh.map { it.url })
+        }
+
+        if (results.size < 6) {
+            val fallback = runCatching { fallbackProvider() }.getOrDefault(emptyList())
+            results.addAll(fallback.filter { it.url !in excludeUrls })
+        }
+
+        TasteProfile.rankByTaste(results.distinctBy { it.url }, profile)
     }
 
     /**
@@ -91,8 +175,6 @@ object Recommender {
         profile: com.melo.music.recommend.TasteProfile.Profile = TasteProfile.build(),
     ): List<TrackItem> {
         val bannedUrls = SkipTracker.getBannedUrls()
-        val likedUrls = FavoritesManager.getAll().map { it.url }.toSet()
-
         return tracks
             .filter { it.url !in bannedUrls }
             .let { TasteProfile.rankByTaste(it, profile) }
@@ -121,6 +203,7 @@ object Recommender {
     private fun seedToTitle(seed: String): String {
         return seed
             .replace("похожие хиты", "Похоже на")
+            .replace("лучшие песни", "Лучшее")
             .replace("музыка", "Музыка")
             .replace("хиты", "Хиты")
             .trim()
