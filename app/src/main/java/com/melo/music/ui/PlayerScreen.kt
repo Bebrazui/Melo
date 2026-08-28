@@ -4337,7 +4337,7 @@ private fun SleepTimerControl(white: Color, accent: Color) {
 }
 
 @Composable
-private fun Artwork(url: String?, modifier: Modifier = Modifier) {
+fun Artwork(url: String?, modifier: Modifier = Modifier) {
     if (url != null) {
         AsyncImage(
             model = url,
@@ -4472,30 +4472,31 @@ private fun SpeedSelector(
     ) {
         options.forEach { (label, value) ->
             val selected = kotlin.math.abs(speed - value) < 0.01f
-            Box(
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = if (selected) accent.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.06f),
+                border = BorderStroke(
+                    width = if (selected) 1.5.dp else 1.dp,
+                    color = if (selected) accent else Color.White.copy(alpha = 0.15f),
+                ),
                 modifier = Modifier
                     .weight(1f)
-                    .height(40.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .border(
-                        width = if (selected) 1.6.dp else 1.dp,
-                        color = if (selected) accent else white.copy(alpha = 0.35f),
-                        shape = RoundedCornerShape(14.dp),
-                    )
-                    .background(if (selected) accent.copy(alpha = 0.12f) else Color.Transparent)
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(20.dp))
                     .combinedClickable(
                         onClick = { onSetSpeed(value) },
                         onLongClick = { if (value != 1f) onAddVariant(value) },
                     ),
-                contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (selected) accent else white,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    maxLines = 1,
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (selected) accent else white,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }
@@ -4548,10 +4549,11 @@ private fun FullPlayer(
 
     val hiRes = remember(item.thumbnailUrl) { upscaleThumb(item.thumbnailUrl, 600) }
     val white = Color.White
-    val whiteDim = Color.White.copy(alpha = 0.75f)
+    val whiteDim = Color.White.copy(alpha = 0.7f)
     val accent = Color(0xFFFF4D6D)
+    val cs = MaterialTheme.colorScheme
     val likeScale by animateFloatAsState(
-        targetValue = if (isLiked) 1.2f else 1f,
+        targetValue = if (isLiked) 1.25f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
         label = "likeScale",
     )
@@ -4637,52 +4639,107 @@ private fun FullPlayer(
                 Brush.verticalGradient(
                     listOf(
                         Color.Black.copy(alpha = 0.35f),
-                        Color.Black.copy(alpha = 0.55f),
-                        Color.Black.copy(alpha = 0.88f),
+                        Color.Black.copy(alpha = 0.58f),
+                        Color.Black.copy(alpha = 0.90f),
                     ),
                 ),
             ),
         )
 
         Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // Опускаем шапку ниже статус-бара.
             Spacer(Modifier.height(40.dp))
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onCollapse) {
-                    Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Свернуть", tint = white)
+
+            // 1. Верхний бар действий в стиле Material 3 Expressive
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.08f),
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onCollapse),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.KeyboardArrowDown,
+                            contentDescription = "Свернуть",
+                            tint = white,
+                        )
+                    }
                 }
+
                 Text(
                     text = if (showLyrics) "Текст песни" else "Сейчас играет",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     color = white,
-                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
                 )
-                IconButton(onClick = { com.melo.music.audio.VocalCutManager.toggle() }) {
+
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     val vocalCut = com.melo.music.audio.VocalCutManager.isEnabled
-                    Icon(
-                        imageVector = if (vocalCut) Icons.Rounded.MicOff else Icons.Rounded.Mic,
-                        contentDescription = if (vocalCut) "Вокал выключен (Караоке)" else "Убрать вокал",
-                        tint = if (vocalCut) accent else white,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-                IconButton(onClick = onShowQueue) {
-                    Icon(
-                        Icons.AutoMirrored.Rounded.QueueMusic,
-                        contentDescription = "Очередь",
-                        tint = white,
-                    )
-                }
-                IconButton(onClick = { showLyrics = !showLyrics }) {
-                    Icon(
-                        Icons.Rounded.Lyrics,
-                        contentDescription = "Текст",
-                        tint = if (showLyrics) accent else white,
-                    )
+                    Surface(
+                        shape = CircleShape,
+                        color = if (vocalCut) accent.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f),
+                        border = if (vocalCut) BorderStroke(1.dp, accent) else null,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .clickable { com.melo.music.audio.VocalCutManager.toggle() },
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (vocalCut) Icons.Rounded.MicOff else Icons.Rounded.Mic,
+                                contentDescription = if (vocalCut) "Вокал выключен (Караоке)" else "Убрать вокал",
+                                tint = if (vocalCut) accent else white,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.08f),
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .clickable(onClick = onShowQueue),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.AutoMirrored.Rounded.QueueMusic,
+                                contentDescription = "Очередь",
+                                tint = white,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = CircleShape,
+                        color = if (showLyrics) cs.primaryContainer else Color.White.copy(alpha = 0.08f),
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .clickable { showLyrics = !showLyrics },
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.Lyrics,
+                                contentDescription = "Текст",
+                                tint = if (showLyrics) cs.onPrimaryContainer else white,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
                 }
             }
 
@@ -4731,25 +4788,36 @@ private fun FullPlayer(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.offset { IntOffset(swipeX.value.roundToInt(), 0) },
                     ) {
+                        // 2. Обложка с выразительными скруглениями (32dp) и рамкой
                         Crossfade(
                             targetState = hiRes,
                             animationSpec = tween(500),
                             label = "art",
                             modifier = Modifier
-                                .fillMaxWidth(0.86f)
+                                .fillMaxWidth(0.88f)
                                 .aspectRatio(1f),
                         ) { art ->
-                            AsyncImage(
-                                model = art,
-                                contentDescription = null,
-                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            Surface(
+                                shape = RoundedCornerShape(32.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f)),
+                                shadowElevation = 12.dp,
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .clip(RoundedCornerShape(28.dp))
-                                    .background(Color.White.copy(alpha = 0.06f)),
-                            )
+                                    .clip(RoundedCornerShape(32.dp)),
+                            ) {
+                                AsyncImage(
+                                    model = art,
+                                    contentDescription = null,
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
                         }
-                        Spacer(Modifier.height(28.dp))
+
+                        Spacer(Modifier.height(30.dp))
+
+                        // 3. Заголовок трека и Лайк
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -4757,10 +4825,15 @@ private fun FullPlayer(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = item.title,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.headlineSmall.copy(
+                                        fontSize = 24.sp,
+                                        lineHeight = 28.sp,
+                                        letterSpacing = (-0.4).sp,
+                                    ),
+                                    fontWeight = FontWeight.ExtraBold,
                                     color = white,
                                     maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                                 item.uploader?.let {
                                     Spacer(Modifier.height(6.dp))
@@ -4769,6 +4842,7 @@ private fun FullPlayer(
                                         style = MaterialTheme.typography.titleMedium,
                                         color = whiteDim,
                                         maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                 }
                                 Spacer(Modifier.height(8.dp))
@@ -4782,18 +4856,29 @@ private fun FullPlayer(
                                     )
                                 }
                             }
-                            IconButton(onClick = onToggleLike) {
-                                Icon(
-                                    imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                                    contentDescription = "Нравится",
-                                    tint = heartColor,
-                                    modifier = Modifier.size(30.dp).scale(likeScale),
-                                )
+
+                            // Тактильная кнопка лайка
+                            Surface(
+                                shape = CircleShape,
+                                color = if (isLiked) accent.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f),
+                                border = if (isLiked) BorderStroke(1.dp, accent.copy(alpha = 0.4f)) else null,
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .clickable(onClick = onToggleLike),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                        contentDescription = "Нравится",
+                                        tint = heartColor,
+                                        modifier = Modifier.size(26.dp).scale(likeScale),
+                                    )
+                                }
                             }
                         }
 
-                        // Кнопки скорости/тона выезжают вверх под обложкой (по свайпу вверх).
-                        // expandVertically анимирует высоту → соседние элементы съезжают плавно.
+                        // Панель скорости / тона
                         AnimatedVisibility(
                             visible = showSpeed,
                             enter = expandVertically(animationSpec = tween(220)) + fadeIn(tween(220)),
@@ -4812,7 +4897,9 @@ private fun FullPlayer(
                 }
             }
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(26.dp))
+
+            // 4. Прогресс-бар воспроизведения
             val fraction = dragFraction
                 ?: if (duration > 0) position.toFloat() / duration else 0f
             Slider(
@@ -4828,7 +4915,7 @@ private fun FullPlayer(
                 colors = SliderDefaults.colors(
                     thumbColor = white,
                     activeTrackColor = white,
-                    inactiveTrackColor = Color.White.copy(alpha = 0.25f),
+                    inactiveTrackColor = Color.White.copy(alpha = 0.22f),
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -4844,73 +4931,125 @@ private fun FullPlayer(
                 )
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(18.dp))
+
+            // 5. Главный блок управления воспроизведением (Material 3 Expressive)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onToggleShuffle) {
-                    Icon(
-                        Icons.Rounded.Shuffle,
-                        contentDescription = "Перемешать",
-                        tint = if (shuffle) accent else white,
-                    )
-                }
-                IconButton(onClick = onPrev, modifier = Modifier.size(52.dp)) {
-                    Icon(
-                        Icons.Rounded.SkipPrevious,
-                        contentDescription = "Назад",
-                        tint = white,
-                        modifier = Modifier.size(40.dp),
-                    )
-                }
-                FilledIconButton(
-                    onClick = onTogglePlayPause,
-                    colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
-                        containerColor = white,
-                        contentColor = Color.Black,
-                    ),
-                    modifier = Modifier.size(78.dp),
+                Surface(
+                    shape = CircleShape,
+                    color = if (shuffle) accent.copy(alpha = 0.2f) else Color.Transparent,
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onToggleShuffle),
                 ) {
-                    if (resolving) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(30.dp),
-                            strokeWidth = 3.dp,
-                            color = Color.Black,
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.Shuffle,
+                            contentDescription = "Перемешать",
+                            tint = if (shuffle) accent else white,
+                            modifier = Modifier.size(24.dp),
                         )
-                    } else {
-                        AnimatedContent(targetState = isPlaying, label = "playPause") { playing ->
-                            Icon(
-                                imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                contentDescription = if (playing) "Пауза" else "Играть",
-                                modifier = Modifier.size(40.dp),
+                    }
+                }
+
+                Surface(
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.08f),
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onPrev),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.SkipPrevious,
+                            contentDescription = "Назад",
+                            tint = white,
+                            modifier = Modifier.size(34.dp),
+                        )
+                    }
+                }
+
+                // Крупная кнопка Play M3 Expressive (82dp)
+                Surface(
+                    shape = CircleShape,
+                    color = white,
+                    shadowElevation = 8.dp,
+                    modifier = Modifier
+                        .size(82.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onTogglePlayPause),
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (resolving) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(32.dp),
+                                strokeWidth = 3.dp,
+                                color = Color.Black,
                             )
+                        } else {
+                            AnimatedContent(targetState = isPlaying, label = "playPause") { playing ->
+                                Icon(
+                                    imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                    contentDescription = if (playing) "Пауза" else "Играть",
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(42.dp),
+                                )
+                            }
                         }
                     }
                 }
-                IconButton(onClick = onNext, modifier = Modifier.size(52.dp)) {
-                    Icon(
-                        Icons.Rounded.SkipNext,
-                        contentDescription = "Вперёд",
-                        tint = white,
-                        modifier = Modifier.size(40.dp),
-                    )
+
+                Surface(
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.08f),
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onNext),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.SkipNext,
+                            contentDescription = "Вперёд",
+                            tint = white,
+                            modifier = Modifier.size(34.dp),
+                        )
+                    }
                 }
-                IconButton(onClick = onToggleRepeat) {
-                    Icon(
-                        Icons.Rounded.Repeat,
-                        contentDescription = "Повтор",
-                        tint = if (repeatOne) accent else white,
-                    )
+
+                Surface(
+                    shape = CircleShape,
+                    color = if (repeatOne) accent.copy(alpha = 0.2f) else Color.Transparent,
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onToggleRepeat),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.Repeat,
+                            contentDescription = "Повтор",
+                            tint = if (repeatOne) accent else white,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
                 }
             }
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(8.dp))
             SleepTimerControl(white = white, accent = accent)
 
             error?.let {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
                 Text(
                     text = "Плеер: $it",
                     style = MaterialTheme.typography.bodySmall,
