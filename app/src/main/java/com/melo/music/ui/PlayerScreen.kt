@@ -2643,16 +2643,6 @@ private fun HomeFeed(
     topInset: androidx.compose.ui.unit.Dp = 0.dp,
     bottomInset: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
-    val moods = remember {
-        listOf(
-            "Заряд энергии" to "энергичная музыка",
-            "Спокойное" to "lofi chill спокойная музыка",
-            "В дороге" to "музыка в дорогу",
-            "Хип-хоп" to "русский рэп",
-            "Рок" to "рок музыка",
-            "Поп" to "поп музыка",
-        )
-    }
     val recTracks = recommendations.filter { it.kind == ItemKind.TRACK }.distinctBy { it.url }
 
     // Персонализированные полки из Taste Profile (с мгновенным кэшем при смене табов).
@@ -2681,27 +2671,6 @@ private fun HomeFeed(
         contentPadding = PaddingValues(top = topInset, bottom = 16.dp + bottomInset),
     ) {
         item(key = "home_greeting") { Greeting(onOpenAccount) }
-        item(key = "home_sea") {
-            val thumbs = remember(history, recommendations) {
-                (history + recommendations).mapNotNull { it.thumbnailUrl }.distinct().take(3)
-            }
-            val topArtists = remember(history) {
-                history.mapNotNull { it.uploader }.distinct().take(2).joinToString(", ")
-            }
-            SeaCard(
-                loading = seaLoading,
-                playingTitle = seaTitle,
-                playingArtist = seaArtist,
-                isPlaying = seaIsPlaying,
-                isLiked = seaIsLiked,
-                recentThumbs = thumbs,
-                topArtistsHint = topArtists,
-                onPlayPause = onSeaPlayPause,
-                onNext = onSeaNext,
-                onLike = onSeaLike,
-            )
-        }
-        item(key = "home_moods") { MoodChips(moods, onMood) }
 
         if (history.isNotEmpty()) {
             item(key = "home_history_title") { SectionTitle("Недавно слушали") }
@@ -4756,7 +4725,7 @@ private fun NowPlayingBar(
     ) {
         Box(
             modifier = Modifier
-                // Высокий волнистый непредсказуемый градиент и четкая матрица точек
+                // Сплошной мягкий волновой градиент (без резких стыков и масок) и точки
                 .drawBehind {
                     val w = size.width
                     val h = size.height
@@ -4764,80 +4733,87 @@ private fun NowPlayingBar(
                     // 1. Матовое стекло (база)
                     drawRect(color = Color(0xEB13110E))
 
-                    // 2. Высокий плавный волнистый градиент (Organic Wavy Flow)
+                    // 2. Сплошные мягкие волновые световые поля БЕЗ резких границ и масок
                     if (isPlaying) {
-                        val wavePath = androidx.compose.ui.graphics.Path()
-                        val steps = 36
-                        val stepX = w / steps
-
-                        val wavePoints = (0..steps).map { i ->
-                            val x = i * stepX
-                            val normX = i.toFloat() / steps
-                            val w1 = kotlin.math.sin(phase1.toDouble() + normX * 4.0).toFloat() * 12.dp.toPx()
-                            val w2 = kotlin.math.sin(phase2.toDouble() - normX * 7.0).toFloat() * 8.dp.toPx()
-                            val w3 = kotlin.math.cos(phase3.toDouble() + normX * 3.0).toFloat() * 6.dp.toPx()
-                            val crestY = (h * 0.28f) + w1 + w2 + w3
-                            Offset(x, crestY.coerceIn(0f, h))
-                        }
-
-                        wavePath.moveTo(wavePoints[0].x, wavePoints[0].y)
-                        for (i in 0 until wavePoints.size - 1) {
-                            val p0 = wavePoints[i]
-                            val p1 = wavePoints[i + 1]
-                            val midX = (p0.x + p1.x) / 2f
-                            val midY = (p0.y + p1.y) / 2f
-                            wavePath.quadraticTo(p0.x, p0.y, midX, midY)
-                        }
-                        val last = wavePoints.last()
-                        wavePath.lineTo(last.x, last.y)
-                        wavePath.lineTo(w, h)
-                        wavePath.lineTo(0f, h)
-                        wavePath.close()
-
-                        drawPath(
-                            path = wavePath,
-                            brush = Brush.verticalGradient(
+                        val cx1 = w * (0.28f + kotlin.math.sin(phase1.toDouble()).toFloat() * 0.18f)
+                        val cy1 = h * (0.65f + kotlin.math.cos(phase2.toDouble()).toFloat() * 0.20f)
+                        drawCircle(
+                            brush = Brush.radialGradient(
                                 colors = listOf(
-                                    Color.Transparent,
+                                    animatedTrackColor.copy(alpha = 0.55f),
                                     animatedTrackColor.copy(alpha = 0.22f),
-                                    animatedTrackColor.copy(alpha = 0.58f),
-                                    animatedTrackColor.copy(alpha = 0.90f),
+                                    Color.Transparent,
                                 ),
-                                startY = h * 0.15f,
-                                endY = h,
+                                center = Offset(cx1, cy1),
+                                radius = w * 0.42f,
                             ),
                         )
-                    } else {
-                        drawRect(
-                            brush = Brush.verticalGradient(
+
+                        val cx2 = w * (0.75f + kotlin.math.cos(phase2.toDouble()).toFloat() * 0.18f)
+                        val cy2 = h * (0.60f + kotlin.math.sin(phase3.toDouble()).toFloat() * 0.20f)
+                        drawCircle(
+                            brush = Brush.radialGradient(
                                 colors = listOf(
+                                    animatedTrackColor.copy(alpha = 0.50f),
+                                    animatedTrackColor.copy(alpha = 0.18f),
                                     Color.Transparent,
-                                    animatedTrackColor.copy(alpha = 0.15f),
-                                    animatedTrackColor.copy(alpha = 0.35f),
                                 ),
-                                startY = h * 0.40f,
-                                endY = h,
+                                center = Offset(cx2, cy2),
+                                radius = w * 0.48f,
+                            ),
+                        )
+
+                        val cx3 = w * (0.50f + kotlin.math.sin(phase3.toDouble()).toFloat() * 0.25f)
+                        val cy3 = h * (0.78f + kotlin.math.cos(phase1.toDouble()).toFloat() * 0.14f)
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    animatedTrackColor.copy(alpha = 0.65f),
+                                    animatedTrackColor.copy(alpha = 0.25f),
+                                    Color.Transparent,
+                                ),
+                                center = Offset(cx3, cy3),
+                                radius = w * 0.38f,
                             ),
                         )
                     }
 
-                    // 3. Четкая и яркая матрица точек с плавным затуханием к верху
+                    // Мягкий базовый вертикальный градиент
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                animatedTrackColor.copy(alpha = if (isPlaying) 0.12f else 0.04f),
+                                animatedTrackColor.copy(alpha = if (isPlaying) 0.45f else 0.14f),
+                            ),
+                            startY = 0f,
+                            endY = h,
+                        ),
+                    )
+
+                    // 3. Точки матрицы: сверху ПОЛНОСТЬЮ исчезают (alpha = 0), плавно нарастают книзу
                     val dotSpacing = 16.dp.toPx()
                     val dotRadius = 1.6.dp.toPx()
                     val cols = (w / dotSpacing).toInt() + 1
                     val rows = (h / dotSpacing).toInt() + 1
                     for (r in 0..rows) {
                         val yFactor = (r.toFloat() / rows.coerceAtLeast(1)).coerceIn(0f, 1f)
-                        val verticalAlpha = (0.08f + yFactor * yFactor * 0.75f) * if (isPlaying) 1.0f else 0.50f
-                        for (c in 0..cols) {
-                            drawCircle(
-                                color = lerp(Color(0xFFF5E6CC), animatedTrackColor, 0.75f).copy(alpha = verticalAlpha),
-                                radius = dotRadius,
-                                center = Offset(
-                                    x = c * dotSpacing + (dotSpacing / 2),
-                                    y = r * dotSpacing + (dotSpacing / 2),
-                                ),
-                            )
+                        // Сверху (первые 35% высоты) точки полностью отсутствуют
+                        if (yFactor > 0.35f) {
+                            val progress = ((yFactor - 0.35f) / 0.65f).coerceIn(0f, 1f)
+                            val verticalAlpha = (progress * progress * progress * 0.85f) * if (isPlaying) 1.0f else 0.45f
+                            if (verticalAlpha > 0.005f) {
+                                for (c in 0..cols) {
+                                    drawCircle(
+                                        color = lerp(Color(0xFFF5E6CC), animatedTrackColor, 0.75f).copy(alpha = verticalAlpha),
+                                        radius = dotRadius,
+                                        center = Offset(
+                                            x = c * dotSpacing + (dotSpacing / 2),
+                                            y = r * dotSpacing + (dotSpacing / 2),
+                                        ),
+                                    )
+                                }
+                            }
                         }
                     }
                 }
