@@ -2679,14 +2679,24 @@ private fun HomeFeed(
     ) {
         item(key = "home_greeting") { Greeting(onOpenAccount) }
 
-        item(key = "home_infinite_wave") {
-            InfiniteWaveCard(
+        item(key = "home_sea") {
+            val thumbs = remember(history, recommendations) {
+                (history + recommendations).mapNotNull { it.thumbnailUrl }.distinct().take(3)
+            }
+            val topArtists = remember(history) {
+                history.mapNotNull { it.uploader }.distinct().take(2).joinToString(", ")
+            }
+            SeaCard(
                 loading = seaLoading,
+                playingTitle = seaTitle,
+                playingArtist = seaArtist,
                 isPlaying = seaIsPlaying,
-                currentTitle = seaTitle,
-                currentArtist = seaArtist,
+                isLiked = seaIsLiked,
+                recentThumbs = thumbs,
+                topArtistsHint = topArtists,
                 onPlayPause = onSeaPlayPause,
                 onNext = onSeaNext,
+                onLike = onSeaLike,
             )
         }
 
@@ -2837,141 +2847,6 @@ private fun Greeting(onOpenAccount: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.65f),
             )
-        }
-    }
-}
-
-@Composable
-private fun InfiniteWaveCard(
-    loading: Boolean,
-    isPlaying: Boolean,
-    currentTitle: String?,
-    currentArtist: String?,
-    onPlayPause: () -> Unit,
-    onNext: () -> Unit,
-) {
-    val infiniteTransition = rememberInfiniteTransition(label = "waveGlow")
-    val pulse by infiniteTransition.animateFloat(
-        initialValue = 0.75f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "wavePulse",
-    )
-
-    Surface(
-        shape = RoundedCornerShape(26.dp),
-        color = Color(0xFF18151D),
-        border = BorderStroke(1.2.dp, Color(0xFFE88A3C).copy(alpha = if (isPlaying) 0.55f else 0.25f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(26.dp))
-            .clickable(onClick = onPlayPause),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .drawBehind {
-                    drawRect(
-                        brush = Brush.horizontalGradient(
-                            colors = listOf(
-                                Color(0xFFE88A3C).copy(alpha = if (isPlaying) 0.35f * pulse else 0.15f),
-                                Color(0xFF8A3CE8).copy(alpha = if (isPlaying) 0.28f * pulse else 0.10f),
-                                Color.Transparent,
-                            ),
-                        ),
-                    )
-                }
-                .padding(horizontal = 18.dp, vertical = 14.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Иконка волны
-                Surface(
-                    shape = CircleShape,
-                    color = Color(0xFFE88A3C).copy(alpha = 0.20f),
-                    border = BorderStroke(1.dp, Color(0xFFE88A3C).copy(alpha = 0.50f)),
-                    modifier = Modifier.size(48.dp),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        if (loading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(22.dp),
-                                color = Color(0xFFE88A3C),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Rounded.MusicNote,
-                                contentDescription = null,
-                                tint = Color(0xFFE88A3C),
-                                modifier = Modifier.size(26.dp),
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.width(14.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Моя волна",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 18.sp,
-                            letterSpacing = (-0.2).sp,
-                        ),
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                    )
-                    Text(
-                        text = if (isPlaying && !currentTitle.isNullOrBlank()) {
-                            "$currentTitle • ${currentArtist ?: "Melo"}"
-                        } else {
-                            "Бесконечный поток под твой вкус"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.70f),
-                        maxLines = 1,
-                    )
-                }
-
-                Spacer(Modifier.width(10.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (isPlaying) {
-                        IconButton(onClick = onNext) {
-                            Icon(
-                                Icons.Rounded.SkipNext,
-                                contentDescription = "Следующий трек",
-                                tint = Color.White.copy(alpha = 0.85f),
-                            )
-                        }
-                    }
-
-                    Surface(
-                        shape = CircleShape,
-                        color = Color(0xFFE88A3C),
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .clickable(onClick = onPlayPause),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                contentDescription = if (isPlaying) "Пауза" else "Слушать",
-                                tint = Color.Black,
-                                modifier = Modifier.size(24.dp),
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 }
