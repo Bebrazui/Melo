@@ -177,8 +177,12 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
@@ -1429,31 +1433,77 @@ private enum class MeloTab(val label: String) {
 
 @Composable
 private fun MeloBottomNav(selected: MeloTab, onSelect: (MeloTab) -> Unit) {
-    NavigationBar {
-        NavigationBarItem(
-            selected = selected == MeloTab.Home,
-            onClick = { onSelect(MeloTab.Home) },
-            icon = { Icon(Icons.Rounded.Home, contentDescription = null) },
-            label = { Text(MeloTab.Home.label) },
+    val cs = MaterialTheme.colorScheme
+    val tabs = remember {
+        listOf(
+            Triple(MeloTab.Home, Icons.Rounded.Home, MeloTab.Home.label),
+            Triple(MeloTab.Favorite, Icons.Rounded.Favorite, MeloTab.Favorite.label),
+            Triple(MeloTab.Map, Icons.Rounded.Map, MeloTab.Map.label),
+            Triple(MeloTab.Account, Icons.Rounded.AccountCircle, MeloTab.Account.label),
         )
-        NavigationBarItem(
-            selected = selected == MeloTab.Favorite,
-            onClick = { onSelect(MeloTab.Favorite) },
-            icon = { Icon(Icons.Rounded.Favorite, contentDescription = null) },
-            label = { Text(MeloTab.Favorite.label) },
-        )
-        NavigationBarItem(
-            selected = selected == MeloTab.Map,
-            onClick = { onSelect(MeloTab.Map) },
-            icon = { Icon(Icons.Rounded.Map, contentDescription = null) },
-            label = { Text(MeloTab.Map.label) },
-        )
-        NavigationBarItem(
-            selected = selected == MeloTab.Account,
-            onClick = { onSelect(MeloTab.Account) },
-            icon = { Icon(Icons.Rounded.AccountCircle, contentDescription = null) },
-            label = { Text(MeloTab.Account.label) },
-        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 20.dp, end = 20.dp, bottom = 12.dp, top = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(32.dp),
+            color = Color(0xF2141F19),
+            shadowElevation = 8.dp,
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier.fillMaxWidth().height(62.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceAround,
+            ) {
+                tabs.forEach { (tab, icon, label) ->
+                    val isSelected = selected == tab
+
+                    Surface(
+                        shape = CircleShape,
+                        color = if (isSelected) cs.primaryContainer else Color.Transparent,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { onSelect(tab) }
+                            .padding(vertical = 4.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.padding(horizontal = if (isSelected) 16.dp else 12.dp, vertical = 8.dp),
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = label,
+                                tint = if (isSelected) cs.onPrimaryContainer else Color.White.copy(alpha = 0.65f),
+                                modifier = Modifier.size(22.dp),
+                            )
+                            AnimatedVisibility(
+                                visible = isSelected,
+                                enter = fadeIn() + expandHorizontally(),
+                                exit = fadeOut() + shrinkHorizontally(),
+                            ) {
+                                Row {
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = cs.onPrimaryContainer,
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1998,38 +2048,18 @@ private fun SearchBar(
     }
 }
 
-// ── Главная: лента с полками ──────────────────────────────────────────────────
+// ── Главная: лента с полками (Material 3 Expressive) ──────────────────────────
 
-/** Лепестковая («cookie»/цветок) фигура из Material 3 expressive — N лепестков. */
-private class CookieShape(
-    private val petals: Int = 8,
-    private val amp: Float = 0.12f,
-) : androidx.compose.ui.graphics.Shape {
-    override fun createOutline(
-        size: androidx.compose.ui.geometry.Size,
-        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
-        density: androidx.compose.ui.unit.Density,
-    ): androidx.compose.ui.graphics.Outline {
-        val path = androidx.compose.ui.graphics.Path()
-        val cx = size.width / 2f
-        val cy = size.height / 2f
-        val rMax = minOf(cx, cy)
-        val base = rMax / (1f + amp)
-        val steps = petals * 24
-        val twoPi = (2.0 * Math.PI).toFloat()
-        for (i in 0..steps) {
-            val a = i.toFloat() / steps * twoPi
-            val r = base * (1f + amp * kotlin.math.cos(petals * a))
-            val x = cx + r * kotlin.math.cos(a)
-            val y = cy + r * kotlin.math.sin(a)
-            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-        }
-        path.close()
-        return androidx.compose.ui.graphics.Outline.Generic(path)
-    }
-}
-
-/** Карта «Sea» в виде цветка (системные цвета): запуск/управление бесконечной волной. */
+/**
+ * Выразительная карточка «Моя Волна» в стиле Material 3 Expressive.
+ *
+ * Особенности:
+ * 1. Крупная живая типографика: бейдж времени суток (Утренний вайб / Дневной поток / Ночной чилл)
+ *    + огромный акцентный заголовок «Твоя Волна» (38sp ExtraBold).
+ * 2. Органический кластер обложек (Living Wave Cluster):
+ *    Центральный суперэллипс (Squircle 26dp) с плавающими круглыми бабблами любимых артистов.
+ * 3. Крупная тактильная кнопка Play (74dp) с пружинным масштабированием и встроенным Like / Next.
+ */
 @Composable
 private fun SeaCard(
     loading: Boolean,
@@ -2037,143 +2067,301 @@ private fun SeaCard(
     playingArtist: String?,
     isPlaying: Boolean,
     isLiked: Boolean,
+    recentThumbs: List<String> = emptyList(),
+    topArtistsHint: String = "",
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onLike: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val outerShape = remember { CookieShape(8, 0.11f) }
-    val btnShape = remember { CookieShape(8, 0.16f) }
-    val innerColor = lerp(cs.secondaryContainer, Color.Black, 0.22f)
-    val onColor = Color.White
-
-    // Лепестки медленно крутятся при воспроизведении (на паузе замирают, без рывка).
-    val rotOuter = remember { Animatable(0f) }
-    val rotInner = remember { Animatable(0f) }
-    LaunchedEffect(isPlaying) {
-        if (!isPlaying) return@LaunchedEffect
-        launch { while (isActive) { rotOuter.animateTo(rotOuter.value + 360f, tween(28000, easing = LinearEasing)) } }
-        launch { while (isActive) { rotInner.animateTo(rotInner.value - 360f, tween(19000, easing = LinearEasing)) } }
+    val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
+    val (timeBadge, timeIcon) = remember(hour) {
+        when (hour) {
+            in 5..11 -> "Утренний заряд" to "🌅"
+            in 12..17 -> "Дневной поток" to "☀️"
+            in 18..22 -> "Вечерний вайб" to "🌆"
+            else -> "Ночной чилл" to "🌙"
+        }
     }
-    // Лёгкая пульсация лепестков.
-    val pulse = rememberInfiniteTransition(label = "seaPulse")
-    val pOuter by pulse.animateFloat(1f, 1.04f, infiniteRepeatable(tween(2200, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "po")
-    val pInner by pulse.animateFloat(1.03f, 0.98f, infiniteRepeatable(tween(1700, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "pi")
-    val sOuter = if (isPlaying) pOuter else 1f
-    val sInner = if (isPlaying) pInner else 1f
 
-    Box(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        contentAlignment = Alignment.Center,
+    val subtitle = remember(playingArtist, topArtistsHint) {
+        when {
+            !playingArtist.isNullOrBlank() -> playingArtist
+            topArtistsHint.isNotBlank() -> "В стиле $topArtistsHint"
+            else -> "Бесконечный персональный поток"
+        }
+    }
+
+    // Мягкая плавающая анимация бабблов при воспроизведении
+    val infiniteTransition = rememberInfiniteTransition(label = "bubbleFloat")
+    val floatY1 by infiniteTransition.animateFloat(
+        initialValue = -4f,
+        targetValue = 4f,
+        animationSpec = infiniteRepeatable(tween(2600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "fy1",
+    )
+    val floatY2 by infiniteTransition.animateFloat(
+        initialValue = 4f,
+        targetValue = -5f,
+        animationSpec = infiniteRepeatable(tween(3100, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "fy2",
+    )
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "pulse",
+    )
+
+    val currentFloat1 = if (isPlaying) floatY1 else 0f
+    val currentFloat2 = if (isPlaying) floatY2 else 0f
+    val currentPulse = if (isPlaying) pulseScale else 1.0f
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 6.dp),
     ) {
-        // Внешний лепесток (вращается в одну сторону).
-        Box(
-            modifier = Modifier
-                .size(300.dp)
-                .graphicsLayer { rotationZ = rotOuter.value; scaleX = sOuter; scaleY = sOuter }
-                .clip(outerShape)
-                .background(cs.secondaryContainer),
-        )
-        // Внутренний лепесток (вращается в другую сторону, чуть быстрее).
-        Box(
-            modifier = Modifier
-                .size(232.dp)
-                .graphicsLayer { rotationZ = rotInner.value; scaleX = sInner; scaleY = sInner }
-                .clip(outerShape)
-                .background(innerColor),
-        )
-        // Контент поверх — не вращается.
-        Box(modifier = Modifier.width(232.dp), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // 1. Верхний блок: Время суток + Заголовок + Большая кнопка Play
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                // Время суток бейдж
+                Surface(
+                    shape = CircleShape,
+                    color = cs.primaryContainer.copy(alpha = 0.6f),
+                    border = BorderStroke(1.dp, cs.primary.copy(alpha = 0.2f)),
+                    modifier = Modifier.clip(CircleShape),
+                ) {
                     Text(
-                        "Sea",
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = onColor,
+                        text = "$timeIcon $timeBadge",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = cs.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                     )
-                    Spacer(Modifier.height(10.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        // Лайк
-                        Box(
-                            modifier = Modifier
-                                .size(46.dp)
-                                .clip(btnShape)
-                                .background(cs.primaryContainer)
-                                .clickable(onClick = onLike),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                                contentDescription = "Нравится",
-                                tint = cs.onPrimaryContainer,
-                                modifier = Modifier.size(20.dp),
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Огромный выразительный заголовок M3 Expressive
+                Text(
+                    text = "Твоя\nВолна",
+                    style = MaterialTheme.typography.displaySmall.copy(
+                        fontSize = 38.sp,
+                        lineHeight = 38.sp,
+                        letterSpacing = (-0.5).sp,
+                    ),
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                )
+
+                Spacer(Modifier.height(6.dp))
+
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            // Крупная кнопка Play M3 Expressive (74dp)
+            val scaleBtn by animateFloatAsState(
+                targetValue = currentPulse,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                label = "btnScale",
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(74.dp)
+                    .graphicsLayer {
+                        scaleX = scaleBtn
+                        scaleY = scaleBtn
+                    }
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(
+                                cs.primaryContainer,
+                                cs.primary,
                             )
-                        }
-                        // Плей/пауза
-                        Box(
+                        )
+                    )
+                    .clickable(
+                        enabled = !loading,
+                        onClick = { onPlayPause() },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        strokeWidth = 3.dp,
+                        color = cs.onPrimary,
+                    )
+                } else {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = "Волна",
+                        tint = cs.onPrimary,
+                        modifier = Modifier.size(38.dp),
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // 2. Органический кластер обложек и управление
+        Surface(
+            shape = RoundedCornerShape(32.dp),
+            color = Color.White.copy(alpha = 0.05f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier.fillMaxWidth().height(164.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Кластер органических обложек (центральный сквиркл + плавающие круглые бабблы)
+                Box(
+                    modifier = Modifier
+                        .size(136.dp)
+                        .padding(end = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    // Главная центральная капсула / сквиркл
+                    Surface(
+                        shape = RoundedCornerShape(26.dp),
+                        color = cs.surfaceVariant,
+                        border = BorderStroke(1.5.dp, cs.primary.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .size(96.dp)
+                            .clip(RoundedCornerShape(26.dp)),
+                    ) {
+                        Artwork(
+                            url = recentThumbs.firstOrNull(),
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+
+                    // Баббл 1: Слева сверху
+                    if (recentThumbs.size > 1) {
+                        Surface(
+                            shape = CircleShape,
+                            color = cs.surfaceVariant,
+                            border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.3f)),
                             modifier = Modifier
-                                .size(58.dp)
-                                .clip(btnShape)
-                                .background(cs.primary)
-                                .clickable(enabled = !loading, onClick = onPlayPause),
-                            contentAlignment = Alignment.Center,
+                                .size(42.dp)
+                                .align(Alignment.TopStart)
+                                .offset(x = (-4).dp, y = currentFloat1.dp)
+                                .clip(CircleShape),
                         ) {
-                            if (loading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.5.dp,
-                                    color = cs.onPrimary,
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                    contentDescription = "Играть",
-                                    tint = cs.onPrimary,
-                                    modifier = Modifier.size(28.dp),
-                                )
-                            }
-                        }
-                        // Следующий
-                        Box(
-                            modifier = Modifier
-                                .size(46.dp)
-                                .clip(btnShape)
-                                .background(cs.primaryContainer)
-                                .clickable(onClick = onNext),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Rounded.SkipNext,
-                                contentDescription = "Дальше",
-                                tint = cs.onPrimaryContainer,
-                                modifier = Modifier.size(22.dp),
+                            Artwork(
+                                url = recentThumbs.getOrNull(1),
+                                modifier = Modifier.fillMaxSize(),
                             )
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
+
+                    // Баббл 2: Справа снизу
+                    if (recentThumbs.size > 2) {
+                        Surface(
+                            shape = CircleShape,
+                            color = cs.surfaceVariant,
+                            border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.3f)),
+                            modifier = Modifier
+                                .size(46.dp)
+                                .align(Alignment.BottomEnd)
+                                .offset(x = 6.dp, y = currentFloat2.dp)
+                                .clip(CircleShape),
+                        ) {
+                            Artwork(
+                                url = recentThumbs.getOrNull(2),
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.width(10.dp))
+
+                // Информация о треке и быстрые действия
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center,
+                ) {
                     Text(
-                        text = playingTitle ?: "Бесконечная волна",
+                        text = playingTitle ?: "Бесконечный поток",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = onColor,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 18.dp),
                     )
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        text = playingArtist ?: "под твой вкус",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = onColor.copy(alpha = 0.7f),
+                        text = playingArtist ?: "Персональные рекомендации",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.65f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 18.dp),
                     )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // Лайк капсула
+                        Surface(
+                            shape = CircleShape,
+                            color = if (isLiked) cs.primaryContainer else Color.White.copy(alpha = 0.1f),
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .clickable(onClick = onLike),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                    contentDescription = "Лайк",
+                                    tint = if (isLiked) cs.onPrimaryContainer else Color.White,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+
+                        // Следующий капсула
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.White.copy(alpha = 0.1f),
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .clickable(onClick = onNext),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.SkipNext,
+                                    contentDescription = "Дальше",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
                 }
+            }
         }
     }
 }
@@ -2239,12 +2427,20 @@ private fun HomeFeed(
     ) {
         item(key = "home_greeting") { Greeting(onOpenAccount) }
         item(key = "home_sea") {
+            val thumbs = remember(history, recommendations) {
+                (history + recommendations).mapNotNull { it.thumbnailUrl }.distinct().take(3)
+            }
+            val topArtists = remember(history) {
+                history.mapNotNull { it.uploader }.distinct().take(2).joinToString(", ")
+            }
             SeaCard(
                 loading = seaLoading,
                 playingTitle = seaTitle,
                 playingArtist = seaArtist,
                 isPlaying = seaIsPlaying,
                 isLiked = seaIsLiked,
+                recentThumbs = thumbs,
+                topArtistsHint = topArtists,
                 onPlayPause = onSeaPlayPause,
                 onNext = onSeaNext,
                 onLike = onSeaLike,
@@ -2288,7 +2484,6 @@ private fun HomeFeed(
             personalizedShelves.forEachIndexed { idx, (title, tracks) ->
                 item { SectionTitle(title) }
                 if (tracks.isEmpty()) {
-                    // Если данные ещё не загружены — показываем горизонтальную заглушку.
                     item {
                         HorizontalShelf(
                             title.lowercase(), shelfCache, onLoadShelf, nowPlayingUrl, isPlaying,
@@ -2315,7 +2510,7 @@ private fun HomeFeed(
                 }
             }
         } else {
-            // Fallback: нейтральные подборки без навязанного рэпа.
+            // Fallback
             item { SectionTitle("Новинки") }
             item {
                 HorizontalShelf(
@@ -2376,21 +2571,29 @@ private fun Greeting(onOpenAccount: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp),
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Avatar(
             com.melo.music.auth.AuthManager.avatarUrl,
-            44.dp,
-            Modifier.clickable(onClick = onOpenAccount),
+            46.dp,
+            Modifier.clip(CircleShape).clickable(onClick = onOpenAccount),
         )
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(greet, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(
-                "Что послушаем?",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = greet,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = 22.sp,
+                    letterSpacing = (-0.3).sp,
+                ),
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+            )
+            Text(
+                text = "Твоя музыка всегда с тобой",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.65f),
             )
         }
     }
@@ -2399,20 +2602,25 @@ private fun Greeting(onOpenAccount: () -> Unit) {
 @Composable
 private fun MoodChips(moods: List<Pair<String, String>>, onMood: (String) -> Unit) {
     LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = 18.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.padding(vertical = 4.dp),
     ) {
         items(moods) { (label, seed) ->
             Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable { onMood(seed) },
+                shape = RoundedCornerShape(22.dp),
+                color = Color.White.copy(alpha = 0.07f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(22.dp))
+                    .clickable { onMood(seed) },
             ) {
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White.copy(alpha = 0.9f),
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
                 )
             }
         }
@@ -2423,9 +2631,13 @@ private fun MoodChips(moods: List<Pair<String, String>>, onMood: (String) -> Uni
 private fun SectionTitle(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 10.dp),
+        style = MaterialTheme.typography.titleLarge.copy(
+            fontSize = 22.sp,
+            letterSpacing = (-0.3).sp,
+        ),
+        fontWeight = FontWeight.ExtraBold,
+        color = Color.White,
+        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 12.dp),
     )
 }
 
@@ -2450,7 +2662,7 @@ private fun QuickPickGrid(
     val grid = tracks.distinctBy { it.url }.take(12)
     LazyHorizontalGrid(
         rows = GridCells.Fixed(2),
-        modifier = Modifier.fillMaxWidth().height(148.dp),
+        modifier = Modifier.fillMaxWidth().height(156.dp),
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -2458,33 +2670,35 @@ private fun QuickPickGrid(
         gridItems(grid, key = { "qp_" + it.url }) { t ->
             Row(
                 modifier = Modifier
-                    .width(264.dp)
-                    .clip(ShapeCache.smooth12)
+                    .width(268.dp)
+                    .clip(RoundedCornerShape(20.dp))
                     .combinedClickable(
                         onClick = { onPlay(grid, grid.indexOf(t)) },
                         onLongClick = { onLongClick(t) },
                     )
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .background(Color.White.copy(alpha = 0.06f))
+                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)), RoundedCornerShape(20.dp))
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Artwork(
                     url = t.thumbnailUrl,
-                    modifier = Modifier.size(48.dp).clip(ShapeCache.smooth8),
+                    modifier = Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)),
                 )
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         t.title,
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
                         maxLines = 1,
                     )
                     t.uploader?.let {
                         Text(
                             it,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Color.White.copy(alpha = 0.65f),
                             maxLines = 1,
                         )
                     }
