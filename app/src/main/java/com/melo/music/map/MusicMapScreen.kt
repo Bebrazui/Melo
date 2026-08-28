@@ -177,60 +177,63 @@ fun MusicMapScreen(
 
     // Рендер маркеров с кластеризацией. Читает ms.drops и ms.userLocation.
     ms.render = render@{
-        val proj: Projection = mapView.projection ?: return@render
-        val clusters = clusterDrops(ms.drops, proj, context.px(64f))
-        mapView.overlays.clear()
+        runCatching {
+            if (mapView.repository == null) return@render
+            val proj: Projection = mapView.projection ?: return@render
+            val clusters = clusterDrops(ms.drops, proj, context.px(64f))
+            mapView.overlays.clear()
 
-        // Синяя точка — маркер местоположения самого пользователя
-        val uLoc = ms.userLocation
-        if (uLoc != null) {
-            val userMarker = Marker(mapView).apply {
-                position = uLoc
-                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                infoWindow = null
-                icon = BitmapDrawable(res, makeUserLocationBitmap(context))
-                setOnMarkerClickListener { _, _ -> true }
+            // Синяя точка — маркер местоположения самого пользователя
+            val uLoc = ms.userLocation
+            if (uLoc != null) {
+                val userMarker = Marker(mapView).apply {
+                    position = uLoc
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    infoWindow = null
+                    icon = BitmapDrawable(res, makeUserLocationBitmap(context))
+                    setOnMarkerClickListener { _, _ -> true }
+                }
+                mapView.overlays.add(userMarker)
             }
-            mapView.overlays.add(userMarker)
-        }
 
-        for (cl in clusters) {
-            if (cl.items.size == 1) {
-                val d = cl.items[0]
-                val m = Marker(mapView)
-                m.position = GeoPoint(d.lat, d.lng)
-                m.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                m.infoWindow = null
-                m.icon = BitmapDrawable(res, makePinBitmap(context, ms.artCache[d.thumbnailUrl], accent))
-                m.setOnMarkerClickListener { _, _ -> selected = d; true }
-                mapView.overlays.add(m)
-                val url = d.thumbnailUrl
-                if (!url.isNullOrBlank() && ms.artCache[url] == null) {
-                    scope.launch {
-                        val bmp = loadArtBitmap(context, url)
-                        if (bmp != null) {
-                            ms.artCache[url] = bmp
-                            m.icon = BitmapDrawable(res, makePinBitmap(context, bmp, accent))
-                            mapView.invalidate()
+            for (cl in clusters) {
+                if (cl.items.size == 1) {
+                    val d = cl.items[0]
+                    val m = Marker(mapView)
+                    m.position = GeoPoint(d.lat, d.lng)
+                    m.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    m.infoWindow = null
+                    m.icon = BitmapDrawable(res, makePinBitmap(context, ms.artCache[d.thumbnailUrl], accent))
+                    m.setOnMarkerClickListener { _, _ -> selected = d; true }
+                    mapView.overlays.add(m)
+                    val url = d.thumbnailUrl
+                    if (!url.isNullOrBlank() && ms.artCache[url] == null) {
+                        scope.launch {
+                            val bmp = loadArtBitmap(context, url)
+                            if (bmp != null) {
+                                ms.artCache[url] = bmp
+                                m.icon = BitmapDrawable(res, makePinBitmap(context, bmp, accent))
+                                mapView.invalidate()
+                            }
                         }
                     }
+                } else {
+                    val center = cl.center()
+                    val m = Marker(mapView)
+                    m.position = center
+                    m.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    m.infoWindow = null
+                    m.icon = BitmapDrawable(res, makeClusterBitmap(context, cl.items.size, accent))
+                    m.setOnMarkerClickListener { _, _ ->
+                        mapView.controller.animateTo(center)
+                        mapView.controller.setZoom(mapView.zoomLevelDouble + 2.2)
+                        true
+                    }
+                    mapView.overlays.add(m)
                 }
-            } else {
-                val center = cl.center()
-                val m = Marker(mapView)
-                m.position = center
-                m.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                m.infoWindow = null
-                m.icon = BitmapDrawable(res, makeClusterBitmap(context, cl.items.size, accent))
-                m.setOnMarkerClickListener { _, _ ->
-                    mapView.controller.animateTo(center)
-                    mapView.controller.setZoom(mapView.zoomLevelDouble + 2.2)
-                    true
-                }
-                mapView.overlays.add(m)
             }
+            mapView.invalidate()
         }
-        mapView.invalidate()
     }
 
     fun reload() {
