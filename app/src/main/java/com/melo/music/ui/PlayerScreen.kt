@@ -4714,25 +4714,34 @@ private fun NowPlayingBar(
         label = "miniPlayerAccentColor",
     )
 
-    // Плавная органичная пульсация свечения (без резких волн)
-    val infiniteTransition = rememberInfiniteTransition(label = "ambientGlowPulse")
-    val pulseGlow by infiniteTransition.animateFloat(
-        initialValue = 0.45f,
-        targetValue = 0.90f,
+    // Живые частотные фазы для динамического визуализатора спектра
+    val infiniteTransition = rememberInfiniteTransition(label = "audioSpectrumVisualizer")
+    val t1 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
+            animation = tween(durationMillis = 1350, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
         ),
-        label = "pulseGlow",
+        label = "t1",
     )
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.15f,
+    val t2 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
+            animation = tween(durationMillis = 850, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
         ),
-        label = "pulseScale",
+        label = "t2",
+    )
+    val t3 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2100, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "t3",
     )
 
     Surface(
@@ -4740,80 +4749,68 @@ private fun NowPlayingBar(
         color = Color(0xEB13110E),
         shape = RoundedCornerShape(42.dp),
         shadowElevation = 18.dp,
-        border = BorderStroke(1.2.dp, lerp(Color(0x44FFFFFF), animatedTrackColor, 0.35f)),
+        border = BorderStroke(1.2.dp, lerp(Color(0x55FFFFFF), animatedTrackColor, 0.45f)),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Box(
             modifier = Modifier
-                // Светящиеся круги, блюр и затухающая матрица точек
+                // Динамический визуализатор спектра и четкая матрица точек
                 .drawBehind {
                     val w = size.width
                     val h = size.height
 
-                    // 1. Матовое стекло
+                    // 1. Матовое стекло (база)
                     drawRect(color = Color(0xEB13110E))
 
-                    // 2. Мягкие светящиеся круги с радиальным размытием (Ambient Glowing Circles)
-                    if (isPlaying) {
-                        // Правый светящийся круг под кнопками управления
-                        drawCircle(
-                            brush = Brush.radialGradient(
+                    // 2. Многополосный живой эквалайзер-визуализатор (Multi-band Spectrum Glow)
+                    val bands = 24
+                    val bandWidth = w / bands
+                    for (i in 0 until bands) {
+                        val normX = i.toFloat() / bands
+                        val bandEnergy = if (isPlaying) {
+                            val s1 = kotlin.math.sin(t1.toDouble() * 2.2 + normX * 8.5).toFloat() * 0.35f
+                            val s2 = kotlin.math.sin(t2.toDouble() * 3.8 - normX * 14.0).toFloat() * 0.30f
+                            val s3 = kotlin.math.cos(t3.toDouble() * 1.6 + normX * 6.0).toFloat() * 0.35f
+                            (0.35f + s1 + s2 + s3).coerceIn(0.12f, 0.98f)
+                        } else 0.15f
+
+                        val colStartX = i * bandWidth
+                        val colHeight = h * bandEnergy
+                        drawRect(
+                            brush = Brush.verticalGradient(
                                 colors = listOf(
-                                    animatedTrackColor.copy(alpha = 0.45f * pulseGlow),
-                                    animatedTrackColor.copy(alpha = 0.18f * pulseGlow),
                                     Color.Transparent,
+                                    animatedTrackColor.copy(alpha = (bandEnergy * 0.55f).coerceIn(0.08f, 0.65f)),
+                                    animatedTrackColor.copy(alpha = (bandEnergy * 0.90f).coerceIn(0.15f, 0.95f)),
                                 ),
-                                center = Offset(w - 70.dp.toPx(), h / 2),
-                                radius = 90.dp.toPx() * pulseScale,
+                                startY = h - colHeight,
+                                endY = h,
                             ),
-                        )
-                        // Левый мягкий ореол под обложкой
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    animatedTrackColor.copy(alpha = 0.35f * pulseGlow),
-                                    Color.Transparent,
-                                ),
-                                center = Offset(45.dp.toPx(), h / 2),
-                                radius = 70.dp.toPx(),
-                            ),
+                            topLeft = Offset(colStartX, h - colHeight),
+                            size = androidx.compose.ui.geometry.Size(bandWidth + 1f, colHeight),
                         )
                     }
 
-                    // 3. Вертикальный градиент снизу
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                animatedTrackColor.copy(alpha = if (isPlaying) 0.12f * pulseGlow else 0.05f),
-                                animatedTrackColor.copy(alpha = if (isPlaying) 0.38f * pulseGlow else 0.12f),
-                            ),
-                            startY = h * 0.3f,
-                            endY = h,
-                        ),
-                    )
-
-                    // 4. Сетка точек, плавно затухающих к верху (прозрачнее к верху в цвет трека)
+                    // 3. Четкая и яркая матрица точек с плавным затуханием к верху
                     val dotSpacing = 16.dp.toPx()
-                    val dotRadius = 1.25.dp.toPx()
+                    val dotRadius = 1.6.dp.toPx()
                     val cols = (w / dotSpacing).toInt() + 1
                     val rows = (h / dotSpacing).toInt() + 1
                     for (r in 0..rows) {
                         val yFactor = (r.toFloat() / rows.coerceAtLeast(1)).coerceIn(0f, 1f)
-                        val verticalAlpha = (yFactor * yFactor * yFactor) * if (isPlaying) 0.28f else 0.14f
-                        if (verticalAlpha > 0.005f) {
-                            for (c in 0..cols) {
-                                drawCircle(
-                                    color = animatedTrackColor.copy(alpha = verticalAlpha),
-                                    radius = dotRadius,
-                                    center = Offset(
-                                        x = c * dotSpacing + (dotSpacing / 2),
-                                        y = r * dotSpacing + (dotSpacing / 2),
-                                    ),
-                                )
-                            }
+                        // Точки четко видны, плавно усиливаются книзу в цвет трека
+                        val verticalAlpha = (0.06f + yFactor * yFactor * 0.72f) * if (isPlaying) 1.0f else 0.50f
+                        for (c in 0..cols) {
+                            drawCircle(
+                                color = lerp(Color(0xFFF3E4CA), animatedTrackColor, 0.75f).copy(alpha = verticalAlpha),
+                                radius = dotRadius,
+                                center = Offset(
+                                    x = c * dotSpacing + (dotSpacing / 2),
+                                    y = r * dotSpacing + (dotSpacing / 2),
+                                ),
+                            )
                         }
                     }
                 }
