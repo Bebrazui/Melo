@@ -307,13 +307,16 @@ object NewPipeResolver {
             val exact = channels.firstOrNull { ch ->
                 normalizeArtistName(ch.name) == target
             }
-            exact?.url ?: channels.firstOrNull()?.url
+            exact?.url ?: channels.firstOrNull { ch ->
+                val norm = normalizeArtistName(ch.name)
+                norm == target || norm == "$target - topic" || norm == "$target official"
+            }?.url
         }.getOrNull()
     }
 
     /**
-     * Треки исполнителя: сперва официальная вкладка треков канала артиста,
-     * а затем точный поиск треков с фильтрацией по исполнителю.
+     * Треки исполнителя: ТОЛЬКО официальные треки с канала артиста.
+     * Поиск используется исключительно как запасной вариант, если канала нет.
      */
     suspend fun artistTracks(context: Context, artist: TrackItem): List<TrackItem> =
         withContext(Dispatchers.IO) {
@@ -337,7 +340,14 @@ object NewPipeResolver {
                 emptyList()
             }
 
-            // Поиск песен артиста (music_songs на YouTube Music либо tracks на SoundCloud)
+            // Если треки получены напрямую с официального канала артиста — возвращаем ТОЛЬКО их!
+            // Никаких сторонних треков из общего поиска не подмешивается.
+            if (viaChannel.isNotEmpty()) {
+                android.util.Log.e("MeloArtist", "artistTracks ${artist.title}: strictly viaChannel count=${viaChannel.size}")
+                return@withContext viaChannel
+            }
+
+            // Запасной поиск треков (только если у исполнителя нет доступного канала)
             val fromSearch = runCatching {
                 val raw = when (artist.source) {
                     Source.SOUNDCLOUD -> {
@@ -350,11 +360,8 @@ object NewPipeResolver {
                 raw.filter { artistMatches(it.uploader, artist.title, it.title) }
             }.getOrDefault(emptyList())
 
-            android.util.Log.e(
-                "MeloArtist",
-                "artistTracks ${artist.title.take(24)}: channel=${viaChannel.size} search=${fromSearch.size}",
-            )
-            (viaChannel + fromSearch).distinctBy { it.url }
+            android.util.Log.e("MeloArtist", "artistTracks ${artist.title}: fallback search count=${fromSearch.size}")
+            fromSearch.distinctBy { it.url }
         }
 
     /** Альбомы/релизы исполнителя (вкладка ALBUMS канала, иначе поиск music_albums). */
@@ -397,31 +404,28 @@ object NewPipeResolver {
             } else {
                 emptyList()
             }
-            if (viaChannel.isNotEmpty() || !isYouTube(channelUrl ?: artist.url)) return@withContext viaChannel
+            if (viaChannel.isNotEmpty()) return@withContext viaChannel
 
-            // Фолбэк для YouTube: поиск music_albums по имени
+            // Запасной поиск альбомов со строгой фильтрацией
             runCatching {
                 SearchInfo.getInfo(
                     ServiceList.YouTube,
                     ServiceList.YouTube.searchQHFactory.fromQuery(artist.title, listOf("music_albums"), ""),
                 ).relatedItems.filterIsInstance<PlaylistInfoItem>()
                     .map { it.toAlbumItem(Source.YOUTUBE_MUSIC) }
-                    .let { raw ->
-                        val mine = raw.filter { albumMatches(it.uploader, artist.title) }
-                        if (mine.isNotEmpty()) mine else raw.take(8)
-                    }
+                    .filter { albumMatches(it.uploader, artist.title) }
             }.getOrDefault(emptyList())
         }
 
-    /** Совпадение релиза с исполнителем (uploader может отсутствовать — тогда false). */
+    /** Совпадение релиза со строгим именем исполнителя. */
     private fun albumMatches(uploader: String?, artistName: String): Boolean {
-        val u = uploader?.lowercase()?.trim().takeUnless { it.isNullOrBlank() } ?: return false
+        val u = uploader?.let(::normalizeArtistName) ?: return false
         val n = normalizeArtistName(artistName)
-        if (n.isBlank()) return false
-        val uClean = normalizeArtistName(u)
-        if (uClean == n) return true
-        val pattern = Regex("\\b" + Regex.escape(n) + "\\b", RegexOption.IGNORE_CASE)
-        return pattern.containsMatchIn(uClean)
+        if (u.isBlank() || n.isBlank()) return false
+        if (u == n) return true
+        val parts = u.split(Regex("[,&/+]|\\b(feat\\.?|ft\\.?|featuring|vs\\.?|with|x|и)\\b", RegexOption.IGNORE_CASE))
+            .map { normalizeArtistName(it) }
+        return parts.any { it == n }
     }
 
     /** Извлекает video id из YouTube-ссылки (?v=ID или youtu.be/ID). */
