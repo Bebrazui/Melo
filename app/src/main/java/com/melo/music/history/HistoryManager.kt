@@ -15,6 +15,7 @@ object HistoryManager {
 
     private const val PREFS = "melo_history"
     private const val KEY = "recent"
+    private const val KEY_PLAYS = "plays"
     private const val CAP = 50
 
     private var prefs: SharedPreferences? = null
@@ -43,14 +44,49 @@ object HistoryManager {
         }.getOrDefault(emptyList())
     }
 
-    /** Добавляет трек в начало истории (убирая прежнее вхождение). */
+    /** Добавляет трек в начало истории (убирая прежнее вхождение) и инкрементирует счётчик. */
     fun add(item: TrackItem) {
         if (item.kind != ItemKind.TRACK) return
         val list = getAll().filterNot { it.url == item.url }.toMutableList()
         list.add(0, item)
         while (list.size > CAP) list.removeAt(list.size - 1)
         save(list)
+        bumpPlays(item.url)
     }
+
+    // ── Персональная статистика прослушиваний ───────────────────────────────
+
+    private fun plays(): MutableMap<String, Pair<Int, Long>> {
+        val json = prefs?.getString(KEY_PLAYS, null) ?: return mutableMapOf()
+        return runCatching {
+            val obj = JSONObject(json)
+            val map = mutableMapOf<String, Pair<Int, Long>>()
+            obj.keys().forEach { url ->
+                val o = obj.getJSONObject(url)
+                map[url] = o.getInt("count") to o.optLong("ts")
+            }
+            map
+        }.getOrDefault(mutableMapOf())
+    }
+
+    private fun bumpPlays(url: String) {
+        val map = plays()
+        val (count, _) = map[url] ?: (0 to 0L)
+        map[url] = count + 1 to System.currentTimeMillis()
+        // Ограничиваем размер: оставляем самые свежие/частые.
+        while (map.size > 500) map.remove(map.keys.first())
+        val obj = JSONObject()
+        map.forEach { (u, v) ->
+            obj.put(u, JSONObject().apply { put("count", v.first); put("ts", v.second) })
+        }
+        prefs?.edit()?.putString(KEY_PLAYS, obj.toString())?.apply()
+    }
+
+    /** Сколько раз пользователь слушал трек. */
+    fun playCount(url: String): Int = plays()[url]?.first ?: 0
+
+    /** Момент последнего прослушивания (epoch мс), 0 если не слушал. */
+    fun lastPlayedAt(url: String): Long = plays()[url]?.second ?: 0L
 
     private fun save(list: List<TrackItem>) {
         val arr = JSONArray()

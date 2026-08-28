@@ -8,6 +8,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import okhttp3.Cache
 import okhttp3.OkHttpClient
 import org.schabi.newpipe.extractor.NewPipe
@@ -284,12 +287,19 @@ object NewPipeResolver {
     suspend fun artistTracks(context: Context, artist: TrackItem): List<TrackItem> =
         withContext(Dispatchers.IO) {
             ensureInit(context)
-            val viaChannel = runCatching { channelTracks(artist.url) }.getOrDefault(emptyList())
-            if (viaChannel.isNotEmpty()) return@withContext viaChannel
+            val viaChannel = runCatching { channelTracks(artist.url) }
+                .onFailure {
+                    android.util.Log.e(
+                        "MeloArtist",
+                        "artistTracks viaChannel FAILED: ${it.javaClass.simpleName}: ${it.message}",
+                    )
+                }
+                .getOrDefault(emptyList())
 
-            // Фолбэк: ищем песни по имени исполнителя в его источнике
-            // и оставляем только его треки (иначе подмешиваются чужие).
-            runCatching {
+            // Фолбэк/дополнение: ищем песни по имени исполнителя в его источнике.
+            // Мержим с вкладкой канала (dedupe по url) — вкладка часто неполная,
+            // а поиск может не найти глубокий каталог; вместе покрывают лучше.
+            val fromSearch = runCatching {
                 val raw = when (artist.source) {
                     Source.SOUNDCLOUD -> {
                         SoundCloudFix.ensure(context)
@@ -298,23 +308,28 @@ object NewPipeResolver {
                     Source.BANDCAMP -> BandcampSearcher.search(artist.title)
                     else -> searchYouTube(artist.title).filter { it.kind == ItemKind.TRACK }
                 }
-                val mine = raw.filter { artistMatches(it.uploader, artist.title) }
-                mine.ifEmpty { raw }
+                raw.filter { artistMatches(it.uploader, artist.title) }
             }.getOrDefault(emptyList())
+
+            android.util.Log.e(
+                "MeloArtist",
+                "artistTracks ${artist.title.take(24)}: channel=${viaChannel.size} search=${fromSearch.size}",
+            )
+            (viaChannel + fromSearch).distinctBy { it.url }
         }
 
-    /** Альбомы/релизы исполнителя (вкладка ALBUMS канала). */
+    /** Альбомы/релизы исполнителя (вкладка ALBUMS канала, иначе поиск music_albums). */
     suspend fun artistAlbums(context: Context, artist: TrackItem): List<TrackItem> =
         withContext(Dispatchers.IO) {
             ensureInit(context)
-            runCatching {
+            val viaChannel = runCatching {
                 val service = serviceFor(artist.url)
                 val channel = ChannelInfo.getInfo(service, artist.url)
                 val tab = channel.tabs.firstOrNull { lh ->
                     lh.contentFilters.any { it == ChannelTabs.ALBUMS }
-                } ?: return@runCatching emptyList()
+                } ?: throw IllegalStateException("no ALBUMS tab, all=${channel.tabs.map { it.contentFilters }}")
                 ChannelTabInfo.getInfo(service, tab).relatedItems
-                    .filterIsInstance<org.schabi.newpipe.extractor.playlist.PlaylistInfoItem>()
+                    .filterIsInstance<PlaylistInfoItem>()
                     .map { pl ->
                         TrackItem(
                             title = pl.name,
@@ -327,12 +342,93 @@ object NewPipeResolver {
                             kind = ItemKind.ALBUM,
                         )
                     }
+            }.onFailure {
+                android.util.Log.e(
+                    "MeloArtist",
+                    "albums viaChannel FAILED: ${it.javaClass.simpleName}: ${it.message}",
+                )
+            }.getOrDefault(emptyList())
+            if (viaChannel.isNotEmpty() || !isYouTube(artist.url)) return@withContext viaChannel
+
+            // Фолбэк для YouTube: поиск music_albums по имени — не зависит от вкладок канала.
+            // Оставляем только релизы самого исполнителя (по uploader), но если фильтр
+            // всё выкинул — отдаём топ без фильтра.
+            runCatching {
+                SearchInfo.getInfo(
+                    ServiceList.YouTube,
+                    ServiceList.YouTube.searchQHFactory.fromQuery(artist.title, listOf("music_albums"), ""),
+                ).relatedItems.filterIsInstance<PlaylistInfoItem>()
+                    .map { it.toAlbumItem(Source.YOUTUBE_MUSIC) }
+                    .let { raw ->
+                        android.util.Log.e("MeloArtist", "albums search raw=${raw.size}")
+                        val mine = raw.filter { albumMatches(it.uploader, artist.title) }
+                        if (mine.isNotEmpty()) mine else raw.take(8)
+                    }
             }.getOrDefault(emptyList())
         }
 
-    /** Извлекает video id из YouTube-ссылки (?v=ID). */
+    /** Совпадение релиза с исполнителем (uploader может отсутствовать — тогда false). */
+    private fun albumMatches(uploader: String?, artistName: String): Boolean {
+        val u = uploader?.lowercase()?.trim().takeUnless { it.isNullOrBlank() } ?: return false
+        val n = normalizeArtistName(artistName)
+        if (n.isBlank()) return false
+        return u.contains(n) || n.contains(u)
+    }
+
+    /** Извлекает video id из YouTube-ссылки (?v=ID или youtu.be/ID). */
     private fun videoId(url: String): String? =
         Regex("[?&]v=([\\w-]+)").find(url)?.groupValues?.get(1)
+            ?: Regex("youtu\\.be/([\\w-]+)").find(url)?.groupValues?.get(1)
+
+    private fun watchUrlFor(url: String): String? =
+        videoId(url)?.let { "https://www.youtube.com/watch?v=$it" }
+
+    /**
+     * Статистика трека с YouTube: просмотры, лайки, число комментариев.
+     * null = источник не YouTube либо данные недоступны.
+     */
+    suspend fun trackStats(context: Context, item: TrackItem): TrackStats? =
+        withContext(Dispatchers.IO) {
+            ensureInit(context)
+            val watch = watchUrlFor(item.url) ?: return@withContext null
+            runCatching {
+                val info = StreamInfo.getInfo(ServiceList.YouTube, watch)
+                val commentsCount = runCatching {
+                    org.schabi.newpipe.extractor.comments.CommentsInfo
+                        .getInfo(ServiceList.YouTube, watch).commentsCount
+                }.getOrDefault(-1)
+                TrackStats(
+                    viewCount = info.viewCount,
+                    likeCount = if (info.likeCount > 0) info.likeCount else -1L,
+                    commentsCount = commentsCount,
+                )
+            }.onFailure {
+                android.util.Log.e("MeloArtist", "trackStats FAILED: ${it.javaClass.simpleName}: ${it.message}")
+            }.getOrNull()
+        }
+
+    /** Топ-комментарии к YouTube-треку. */
+    suspend fun trackComments(context: Context, item: TrackItem, maxCount: Int = 15): List<TrackComment> =
+        withContext(Dispatchers.IO) {
+            ensureInit(context)
+            val watch = watchUrlFor(item.url) ?: return@withContext emptyList()
+            runCatching {
+                val info = org.schabi.newpipe.extractor.comments.CommentsInfo
+                    .getInfo(ServiceList.YouTube, watch)
+                info.relatedItems.take(maxCount).map { c ->
+                    TrackComment(
+                        author = c.uploaderName ?: "",
+                        text = c.commentText?.content.orEmpty(),
+                        likeCount = c.likeCount,
+                        dateText = c.textualUploadDate,
+                        authorAvatar = c.uploaderAvatars.lastOrNull()?.url
+                            ?: c.uploaderAvatars.firstOrNull()?.url,
+                    )
+                }
+            }.onFailure {
+                android.util.Log.e("MeloArtist", "trackComments FAILED: ${it.javaClass.simpleName}: ${it.message}")
+            }.getOrDefault(emptyList())
+        }
 
     /**
      * НАСТОЯЩИЕ рекомендации: «похожее» к треку — основа волны «Sea».
@@ -367,6 +463,55 @@ object NewPipeResolver {
                     .filter { it.url != seed.url }
             }.getOrDefault(emptyList())
         }
+
+    /**
+     * Похожие исполнители: берём related-граф топ-трека исполнителя, собираем
+     * чужие имена uploaders и подтягиваем на каждого настоящего артиста
+     * (аватар + канал) через music_artists поиск. Максимум 4 запроса параллельно.
+     *
+     * [seedTracks] — уже загруженные треки исполнителя (чтобы не качать вкладку
+     * канала второй раз); если пусто, загрузим сами.
+     */
+    suspend fun similarArtists(
+        context: Context,
+        artist: TrackItem,
+        seedTracks: List<TrackItem>? = null,
+    ): List<TrackItem> =
+        withContext(Dispatchers.IO) {
+            ensureInit(context)
+            val own = seedTracks?.takeIf { it.isNotEmpty() }
+                ?: runCatching { artistTracks(context, artist) }.getOrDefault(emptyList())
+            val top = own.maxByOrNull { it.viewCount } ?: own.firstOrNull()
+                ?: return@withContext emptyList()
+            val related = runCatching { relatedTracks(context, top) }.getOrDefault(emptyList())
+            val self = normalizeArtistName(artist.title)
+            val names = related.asSequence()
+                .mapNotNull { it.uploader?.let(::normalizeArtistName) }
+                .filter { it.isNotBlank() && it != self }
+                .distinct()
+                .take(4)
+                .toList()
+            if (names.isEmpty()) return@withContext emptyList()
+            coroutineScope {
+                names.map { name ->
+                    async {
+                        runCatching {
+                            SearchInfo.getInfo(
+                                ServiceList.YouTube,
+                                ServiceList.YouTube.searchQHFactory.fromQuery(name, listOf("music_artists"), ""),
+                            ).relatedItems.filterIsInstance<ChannelInfoItem>()
+                                .firstOrNull()?.toArtistItem(Source.YOUTUBE_MUSIC)
+                        }.getOrNull()
+                    }
+                }.awaitAll().filterNotNull()
+                    .filter { normalizeArtistName(it.title) != self }
+                    .distinctBy { it.url }
+                    .take(6)
+            }
+        }
+
+    private fun normalizeArtistName(name: String): String =
+        name.lowercase().removeSuffix(" - topic").trim()
 
     /** Треки альбома/плейлиста по ссылке. */
     suspend fun albumTracks(context: Context, albumUrl: String): List<TrackItem> =
@@ -429,12 +574,40 @@ object NewPipeResolver {
             isBandcamp(channelUrl) -> Source.BANDCAMP
             else -> Source.YOUTUBE_MUSIC
         }
-        val channel = ChannelInfo.getInfo(service, channelUrl)
+        val channel = runCatching { ChannelInfo.getInfo(service, channelUrl) }
+            .onFailure {
+                android.util.Log.e(
+                    "MeloArtist",
+                    "ChannelInfo FAILED $channelUrl: ${it.javaClass.simpleName}: ${it.message}",
+                )
+            }
+            .getOrNull() ?: return emptyList()
         val tab = channel.tabs.firstOrNull { lh ->
             lh.contentFilters.any { it == ChannelTabs.TRACKS || it == ChannelTabs.VIDEOS }
-        } ?: channel.tabs.firstOrNull() ?: return emptyList()
+        } ?: channel.tabs.firstOrNull() ?: run {
+            android.util.Log.e("MeloArtist", "no usable tab, all=${channel.tabs.map { it.contentFilters }}")
+            return emptyList()
+        }
         val tabInfo = ChannelTabInfo.getInfo(service, tab)
-        return tabInfo.relatedItems.filterIsInstance<StreamInfoItem>().map { it.toTrackItem(source) }
+        val items = tabInfo.relatedItems.filterIsInstance<StreamInfoItem>().toMutableList()
+        android.util.Log.e("MeloArtist", "tab=${tab.contentFilters} firstPage=${items.size}")
+        // Пагинация вкладки канала: без этого видны только первые ~30 треков.
+        var page = tabInfo.nextPage
+        var guard = 0
+        while (org.schabi.newpipe.extractor.Page.isValid(page) && guard < 25) {
+            val result = runCatching {
+                ChannelTabInfo.getMoreItems(service, tab, page)
+            }.onFailure {
+                android.util.Log.e("MeloArtist", "page ${guard + 1} FAILED: ${it.javaClass.simpleName}: ${it.message}")
+            }.getOrNull() ?: break
+            val more = result.items.filterIsInstance<StreamInfoItem>()
+            if (more.isEmpty()) break
+            items += more
+            android.util.Log.e("MeloArtist", "page ${guard + 1}: +${more.size} (total ${items.size})")
+            page = if (result.hasNextPage()) result.nextPage else null
+            guard++
+        }
+        return items.distinctBy { it.url }.map { it.toTrackItem(source) }
     }
 
     private fun searchService(
@@ -505,6 +678,7 @@ object NewPipeResolver {
             ?: thumbnails.firstOrNull()?.url,
         source = source,
         kind = ItemKind.TRACK,
+        viewCount = runCatching { viewCount }.getOrDefault(0L),
     )
 
     private fun ChannelInfoItem.toArtistItem(source: Source) = TrackItem(
@@ -529,3 +703,21 @@ object NewPipeResolver {
         kind = ItemKind.ALBUM,
     )
 }
+
+/** Статистика трека с YouTube. */
+data class TrackStats(
+    val viewCount: Long,
+    /** -1 = лайки скрыты или недоступны. */
+    val likeCount: Long,
+    /** -1 = число комментариев неизвестно. */
+    val commentsCount: Int,
+)
+
+/** Комментарий под YouTube-треком. */
+data class TrackComment(
+    val author: String,
+    val text: String,
+    val likeCount: Int,
+    val dateText: String?,
+    val authorAvatar: String?,
+)

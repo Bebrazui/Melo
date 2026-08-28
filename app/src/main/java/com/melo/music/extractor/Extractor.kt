@@ -40,6 +40,8 @@ data class TrackItem(
     val kind: ItemKind = ItemKind.TRACK,
     /** Скорость/тон воспроизведения (1.0 = оригинал). Сохранённые «slowed/sped up» версии. */
     val speed: Float = 1f,
+    /** Просмотры (ранжирование «Популярного» на экране исполнителя); 0 если неизвестно. */
+    val viewCount: Long = 0,
 )
 
 /** Определяет источник по URL (для Deezer/Tidal, которые идут через yt-dlp). */

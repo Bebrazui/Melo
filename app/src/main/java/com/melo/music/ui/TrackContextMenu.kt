@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.AlertDialog
@@ -76,6 +77,11 @@ fun TrackContextMenu(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showPlaylistPicker by remember { mutableStateOf(false) }
+    var showInfo by remember { mutableStateOf(false) }
+
+    if (showInfo) {
+        TrackInfoSheet(item = item, onDismiss = { showInfo = false })
+    }
 
     if (showPlaylistPicker) {
         val playlists = remember { PlaylistManager.getAll() }
@@ -219,6 +225,12 @@ fun TrackContextMenu(
                     onDismiss()
                     shareTrack(context, item)
                 },
+            )
+            ContextMenuItem(
+                icon = Icons.Rounded.Info,
+                label = "Подробнее",
+                subtitle = "Просмотры, лайки, комментарии",
+                onClick = { showInfo = true },
             )
             ContextMenuItem(
                 icon = Icons.Rounded.Add,

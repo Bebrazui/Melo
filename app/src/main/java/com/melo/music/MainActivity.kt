@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
                     onLoadRecommendations = { NewPipeResolver.recommendations(this) },
                     onLoadArtistTracks = { artist -> NewPipeResolver.artistTracks(this, artist) },
                     onLoadArtistAlbums = { artist -> NewPipeResolver.artistAlbums(this, artist) },
+                    onLoadSimilarArtists = { artist, seed -> NewPipeResolver.similarArtists(this, artist, seed) },
                     onLoadAlbumTracks = { url -> NewPipeResolver.albumTracks(this, url) },
                     onLoadShelf = { seed -> NewPipeResolver.shelf(this, seed) },
                     onRelatedTracks = { track -> NewPipeResolver.relatedTracks(this, track) },

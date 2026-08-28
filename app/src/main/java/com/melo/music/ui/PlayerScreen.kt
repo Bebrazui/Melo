@@ -225,6 +225,7 @@ fun PlayerScreen(
     onLoadRecommendations: suspend () -> List<TrackItem>,
     onLoadArtistTracks: suspend (TrackItem) -> List<TrackItem>,
     onLoadArtistAlbums: suspend (TrackItem) -> List<TrackItem>,
+    onLoadSimilarArtists: suspend (TrackItem, List<TrackItem>) -> List<TrackItem> = { _, _ -> emptyList() },
     onLoadAlbumTracks: suspend (String) -> List<TrackItem>,
     onLoadShelf: suspend (String) -> List<TrackItem>,
     onRelatedTracks: suspend (TrackItem) -> List<TrackItem> = { emptyList() },
@@ -1066,6 +1067,7 @@ fun PlayerScreen(
                     artist = artist,
                     onLoadTracks = { onLoadArtistTracks(artist) },
                     onLoadAlbums = { onLoadArtistAlbums(artist) },
+                    onLoadSimilar = { seed -> onLoadSimilarArtists(artist, seed) },
                     nowPlayingUrl = nowPlaying?.url,
                     isPlaying = isPlaying,
                     resolvingUrl = resolvingUrl,
@@ -1077,6 +1079,7 @@ fun PlayerScreen(
                     },
                     onLoadAlbumTracks = { url -> onLoadAlbumTracks(url) },
                     onTrackLongClick = { contextMenuTrack = it },
+                    onOpenSimilar = { artistOpen = it },
                     onClose = { artistOpen = null },
                 )
             }
@@ -3230,6 +3233,7 @@ private fun ArtistScreen(
     artist: TrackItem,
     onLoadTracks: suspend () -> List<TrackItem>,
     onLoadAlbums: suspend () -> List<TrackItem>,
+    onLoadSimilar: suspend (List<TrackItem>) -> List<TrackItem>,
     nowPlayingUrl: String?,
     isPlaying: Boolean,
     resolvingUrl: String?,
@@ -3238,11 +3242,13 @@ private fun ArtistScreen(
     onShuffle: (List<TrackItem>) -> Unit,
     onLoadAlbumTracks: suspend (String) -> List<TrackItem>,
     onTrackLongClick: (TrackItem) -> Unit,
+    onOpenSimilar: (TrackItem) -> Unit,
     onClose: () -> Unit,
 ) {
     BackHandler(onBack = onClose)
     var tracks by remember(artist.url) { mutableStateOf<List<TrackItem>>(emptyList()) }
     var albums by remember(artist.url) { mutableStateOf<List<TrackItem>>(emptyList()) }
+    var similar by remember(artist.url) { mutableStateOf<List<TrackItem>>(emptyList()) }
     var loading by remember(artist.url) { mutableStateOf(true) }
     var error by remember(artist.url) { mutableStateOf<String?>(null) }
     LaunchedEffect(artist.url) {
@@ -3254,8 +3260,20 @@ private fun ArtistScreen(
         loading = false
     }
     LaunchedEffect(artist.url) {
+        // Альбомы грузим параллельно с треками — не ждём друг друга.
         albums = runCatching { onLoadAlbums() }.getOrDefault(emptyList())
     }
+    // Похожие исполнители — только когда треки готовы (переиспользуем их как сид,
+    // чтобы не качать вкладку канала второй раз и не душить прокси).
+    LaunchedEffect(tracks) {
+        if (tracks.isEmpty() || similar.isNotEmpty()) return@LaunchedEffect
+        similar = runCatching { onLoadSimilar(tracks) }.getOrDefault(emptyList())
+    }
+
+    // Топ-5 по просмотрам, остальное — «Все треки».
+    val popular = remember(tracks) { tracks.sortedByDescending { it.viewCount }.take(5) }
+    val popularUrls = remember(popular) { popular.map { it.url }.toSet() }
+    val otherTracks = tracks.filter { it.url !in popularUrls }
 
     val hiRes = remember(artist.thumbnailUrl) { upscaleThumb(artist.thumbnailUrl, 600) }
     val white = Color.White
@@ -3366,14 +3384,78 @@ private fun ArtistScreen(
                 }
             }
 
+            if (popular.isNotEmpty()) {
+                item(key = "popular_header") {
+                    Text(
+                        "Популярное",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = white,
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 6.dp),
+                    )
+                }
+                itemsIndexed(popular, key = { _, t -> "pop_" + t.url }) { i, t ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .combinedClickable(
+                                onClick = { onPlay(tracks, tracks.indexOf(t)) },
+                                onLongClick = { onTrackLongClick(t) },
+                            )
+                            .padding(horizontal = 20.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "${i + 1}",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = white.copy(alpha = 0.45f),
+                            modifier = Modifier.width(26.dp),
+                        )
+                        Artwork(t.thumbnailUrl, Modifier.size(48.dp).clip(ShapeCache.smooth8))
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                t.title,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = white,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = if (nowPlayingUrl == t.url) FontWeight.Bold else FontWeight.Normal,
+                            )
+                            val sub = listOfNotNull(
+                                formatViews(t.viewCount).takeIf { it.isNotBlank() },
+                                formatDuration(t.durationSeconds).takeIf { it.isNotBlank() },
+                                HistoryManager.playCount(t.url).takeIf { it > 0 }?.let { "слушали $it раз" },
+                            ).joinToString(" · ")
+                            if (sub.isNotBlank()) {
+                                Text(
+                                    sub,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = white.copy(alpha = 0.6f),
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                        if (resolvingUrl == t.url) {
+                            CircularProgressIndicator(color = white, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else if (nowPlayingUrl == t.url && isPlaying) {
+                            Icon(
+                                Icons.Rounded.MusicNote, contentDescription = null,
+                                tint = accent, modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                }
+            }
+
             if (albums.isNotEmpty()) {
-                item {
+                item(key = "albums_header") {
                     Text(
                         "Альбомы",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = white,
-                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 10.dp),
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 10.dp),
                     )
                 }
                 items(albums.distinctBy { it.url }, key = { it.url }) { al ->
@@ -3392,49 +3474,80 @@ private fun ArtistScreen(
                         )
                     }
                 }
-                if (tracks.isNotEmpty()) {
-                    item {
-                        Text(
-                            "Треки",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = white,
-                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 6.dp),
-                        )
-                    }
-                }
             }
 
             when {
-                loading -> item {
+                loading -> item(key = "tracks_loading") {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = white)
                     }
                 }
-                error != null && tracks.isEmpty() -> item {
+                error != null && tracks.isEmpty() -> item(key = "tracks_error") {
                     Text(
                         text = "Не удалось загрузить треки: $error",
                         color = white.copy(alpha = 0.8f),
                         modifier = Modifier.padding(24.dp),
                     )
                 }
-                tracks.isEmpty() -> item {
+                tracks.isEmpty() -> item(key = "tracks_empty") {
                     Text(
                         text = "Треки не найдены",
                         color = white.copy(alpha = 0.8f),
                         modifier = Modifier.padding(24.dp),
                     )
                 }
-                else -> itemsIndexed(tracks, key = { i, it -> "$i:${it.url}" }) { index, t ->
-                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        TrackCard(
-                            item = t,
-                            resolving = resolvingUrl == t.url,
-                            playing = nowPlayingUrl == t.url && isPlaying,
-                            onClick = { onPlay(tracks, index) },
-                            onLongClick = { onTrackLongClick(t) },
-                            containerColor = cardTint,
+                otherTracks.isNotEmpty() -> {
+                    item(key = "all_tracks_header") {
+                        Text(
+                            "Все треки",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = white,
+                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 6.dp),
                         )
+                    }
+                    // Плотная 2-колоночная сетка плиток — разнообразнее плоского списка.
+                    val rows = otherTracks.chunked(2)
+                    itemsIndexed(rows, key = { i, row -> i.toString() + row.joinToString("|") { it.url } }) { _, row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            row.forEach { t ->
+                                ArtistTrackTile(
+                                    item = t,
+                                    playing = nowPlayingUrl == t.url,
+                                    resolving = resolvingUrl == t.url,
+                                    accent = accent,
+                                    onClick = { onPlay(tracks, tracks.indexOf(t)) },
+                                    onLongClick = { onTrackLongClick(t) },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                            if (row.size == 1) Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+
+            if (similar.isNotEmpty()) {
+                item(key = "similar_header") {
+                    Text(
+                        "Похожие исполнители",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = white,
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 10.dp),
+                    )
+                }
+                item(key = "similar_row") {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        itemsIndexed(similar, key = { _, a -> "sim_" + a.url }) { _, a ->
+                            SimilarArtistTile(item = a, onClick = { onOpenSimilar(a) })
+                        }
                     }
                 }
             }
@@ -3581,10 +3694,102 @@ private fun AlbumCard(
     }
 }
 
+/** Плитка трека в сетке «Все треки» на экране исполнителя (тёмная тема). */
+@Composable
+private fun ArtistTrackTile(
+    item: TrackItem,
+    playing: Boolean,
+    resolving: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val white = Color.White
+    Row(
+        modifier = modifier
+            .clip(ShapeCache.smooth12)
+            .background(accent.copy(alpha = 0.16f))
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box {
+            Artwork(item.thumbnailUrl, Modifier.size(46.dp).clip(ShapeCache.smooth8))
+            if (resolving) {
+                Box(
+                    modifier = Modifier.size(46.dp).background(Color.Black.copy(alpha = 0.45f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(color = white, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                }
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                item.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (playing) FontWeight.Bold else FontWeight.Medium,
+                color = white,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            item.uploader?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = white.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        if (playing) {
+            Icon(
+                Icons.Rounded.MusicNote, contentDescription = null,
+                tint = accent, modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+}
+
+/** Круглая плитка похожего исполнителя на тёмном экране артиста. */
+@Composable
+private fun SimilarArtistTile(item: TrackItem, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(96.dp)
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Artwork(
+            url = item.thumbnailUrl,
+            modifier = Modifier.size(96.dp).clip(CircleShape),
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = item.title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.White,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** Короткий формат просмотров: 1234567 → «1,2 млн». */
+private fun formatViews(v: Long): String = when {
+    v >= 1_000_000 -> String.format(Locale.getDefault(), "%.1f млн", v / 1_000_000.0)
+    v >= 1_000 -> String.format(Locale.getDefault(), "%.0f тыс.", v / 1_000.0)
+    v > 0 -> v.toString()
+    else -> ""
+}
+
 @Composable
 private fun PlaylistScreen(
-    playlist: Playlist,
-    nowPlayingUrl: String?,
+    playlist: Playlist,    nowPlayingUrl: String?,
     nowPlayingSpeed: Float,
     isPlaying: Boolean,
     resolvingUrl: String?,
