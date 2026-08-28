@@ -5,9 +5,10 @@ import android.content.SharedPreferences
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.PresetReverb
+import android.media.audiofx.Virtualizer
 
 /**
- * Аудио-эффекты: эквалайзер + усиление (gain) + реверберация (reverb).
+ * Аудио-эффекты: эквалайзер + усиление (gain) + реверберация (reverb) + пространственный звук 3D (spatial audio).
  * Обёртка над android.media.audiofx.*. Привязывается к audioSessionId плеера,
  * сохраняет настройки в SharedPreferences.
  */
@@ -19,6 +20,8 @@ object EqualizerManager {
     private const val KEY_BANDS = "bands"
     private const val KEY_GAIN = "gain_mb"
     private const val KEY_REVERB = "reverb_preset"
+    private const val KEY_SPATIAL = "spatial_audio"
+    private const val KEY_SPATIAL_STRENGTH = "spatial_strength"
 
     /** Максимальное усиление (мДб) = +20 dB. */
     const val MAX_GAIN_MB = 2000
@@ -32,6 +35,7 @@ object EqualizerManager {
     private var prefs: SharedPreferences? = null
     private var equalizer: Equalizer? = null
     private var loudness: LoudnessEnhancer? = null
+    private var virtualizer: Virtualizer? = null
 
     // Реверберация — ГЛОБАЛЬНЫЙ вспомогательный (auxiliary) эффект на сессии 0.
     // Плеер шлёт в него звук через setAuxEffectInfo (вставка insert-реверба
@@ -74,7 +78,7 @@ object EqualizerManager {
     }
 
     /**
-     * Привязать эквалайзер к сессии плеера. Вызывать при старте воспроизведения.
+     * Привязать эквалайзер и пространственный звук к сессии плеера. Вызывать при старте воспроизведения.
      */
     @Synchronized
     fun attach(audioSessionId: Int) {
@@ -116,6 +120,20 @@ object EqualizerManager {
         } catch (_: Exception) {
             loudness = null
         }
+
+        // ── Пространственный звук (3D Spatial Virtualizer) ──
+        try {
+            val virt = Virtualizer(0, audioSessionId)
+            val spatialEnabled = prefs?.getBoolean(KEY_SPATIAL, false) ?: false
+            val strength = prefs?.getInt(KEY_SPATIAL_STRENGTH, 850) ?: 850
+            if (virt.strengthSupported) {
+                virt.setStrength(strength.toShort())
+            }
+            virt.enabled = spatialEnabled
+            virtualizer = virt
+        } catch (_: Exception) {
+            virtualizer = null
+        }
     }
 
     @Synchronized
@@ -124,7 +142,32 @@ object EqualizerManager {
         equalizer = null
         loudness?.release()
         loudness = null
+        virtualizer?.release()
+        virtualizer = null
         // auxReverb НЕ освобождаем — он глобальный, живёт всё время.
+    }
+
+    // ── Пространственный звук 3D (Spatial Audio) ──────────────────────────────
+
+    fun isSpatialEnabled(): Boolean = prefs?.getBoolean(KEY_SPATIAL, false) ?: false
+
+    fun getSpatialStrength(): Int = prefs?.getInt(KEY_SPATIAL_STRENGTH, 850) ?: 850
+
+    @Synchronized
+    fun setSpatialEnabled(enabled: Boolean) {
+        virtualizer?.let { runCatching { it.enabled = enabled } }
+        prefs?.edit()?.putBoolean(KEY_SPATIAL, enabled)?.apply()
+    }
+
+    @Synchronized
+    fun setSpatialStrength(strength: Int) {
+        val s = strength.coerceIn(0, 1000)
+        virtualizer?.let {
+            runCatching {
+                if (it.strengthSupported) it.setStrength(s.toShort())
+            }
+        }
+        prefs?.edit()?.putInt(KEY_SPATIAL_STRENGTH, s)?.apply()
     }
 
     // ── Усиление (gain) ───────────────────────────────────────────────────────

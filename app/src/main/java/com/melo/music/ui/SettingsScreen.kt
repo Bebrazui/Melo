@@ -32,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Waves
@@ -122,6 +123,11 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(16.dp))
 
+        // ── 🎧 Пространственный звук 3D (Bento Card) ──────────────
+        SpatialAudioSection()
+
+        Spacer(Modifier.height(16.dp))
+
         // ── 🔊 Усиление и Реверберация (Bento Card) ──────────────
         GainReverbSection()
 
@@ -186,6 +192,120 @@ fun SettingsScreen(
         IconPickerSection()
 
         Spacer(Modifier.height(36.dp))
+    }
+}
+
+@Composable
+private fun SpatialAudioSection() {
+    var enabled by remember { mutableStateOf(EqualizerManager.isSpatialEnabled()) }
+    var strength by remember { mutableIntStateOf(EqualizerManager.getSpatialStrength()) }
+    val cs = MaterialTheme.colorScheme
+
+    Surface(
+        shape = RoundedCornerShape(28.dp),
+        color = Color.White.copy(alpha = 0.05f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = cs.primaryContainer,
+                    modifier = Modifier.size(46.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.Headphones,
+                            contentDescription = null,
+                            tint = cs.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Пространственный звук 3D",
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        if (enabled) "Melo 3D Surround активен" else "Выключен",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (enabled) cs.primary else Color.White.copy(alpha = 0.5f),
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = {
+                        enabled = it
+                        EqualizerManager.setSpatialEnabled(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = cs.onPrimary,
+                        checkedTrackColor = cs.primary,
+                    ),
+                )
+            }
+
+            AnimatedVisibility(
+                visible = enabled,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
+                Column {
+                    Spacer(Modifier.height(18.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            "Глубина виртуализации сцены",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.weight(1f),
+                        )
+                        Surface(
+                            shape = CircleShape,
+                            color = cs.primaryContainer.copy(alpha = 0.7f),
+                        ) {
+                            Text(
+                                "${strength / 10}%",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = cs.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Slider(
+                        value = strength.toFloat(),
+                        onValueChange = {
+                            strength = it.toInt()
+                            EqualizerManager.setSpatialStrength(strength)
+                        },
+                        valueRange = 0f..1000f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = cs.primary,
+                            activeTrackColor = cs.primary,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.1f),
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
     }
 }
 

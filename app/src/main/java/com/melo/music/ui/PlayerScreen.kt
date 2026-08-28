@@ -4667,28 +4667,74 @@ private fun NowPlayingBar(
     val scallopedBtn = remember { ScallopedShape(petals = 8, depth = 0.15f) }
     val scallopedArt = remember { ScallopedShape(petals = 10, depth = 0.12f) }
 
+    // Анимация градиента в бит музыки (динамический подъем янтарного свечения)
+    val infiniteTransition = rememberInfiniteTransition(label = "beatSyncTransition")
+    val beatGlow by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 520, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "beatGlowHeight",
+    )
+    val beatAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 400, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "beatGlowAlpha",
+    )
+
     Surface(
-        // Твердый глубокий теплый капсульный контейнер (как на фото пользователя)
-        color = Color(0xFF191612),
+        // Твердый глубокий капсульный контейнер (как на фото)
+        color = Color(0xFF0F0D0A),
         shape = RoundedCornerShape(42.dp),
-        shadowElevation = 16.dp,
+        shadowElevation = 18.dp,
         border = BorderStroke(1.2.dp, Color(0xFF382E22)),
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 10.dp)
-            .clickable(onClick = onClick),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Box(
             modifier = Modifier
                 .background(
-                    Brush.horizontalGradient(
-                        listOf(
-                            Color(0xFF181511),
-                            Color(0xFF261F18),
-                            Color(0xFF1C1712),
-                        )
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF0A0806),
+                            Color(0xFF19130C),
+                            if (isPlaying) {
+                                Color(0xFF8A5512).copy(alpha = beatAlpha)
+                            } else {
+                                Color(0xFF4A3212).copy(alpha = 0.5f)
+                            },
+                        ),
+                        startY = 0f,
+                        endY = Float.POSITIVE_INFINITY,
                     )
                 )
+                // Сетка аккуратных фоновых точек (как на скриншоте)
+                .drawBehind {
+                    val dotSpacing = 16.dp.toPx()
+                    val dotRadius = 1.3.dp.toPx()
+                    val cols = (size.width / dotSpacing).toInt() + 1
+                    val rows = (size.height / dotSpacing).toInt() + 1
+                    val dotColor = Color(0xFFD4A853).copy(alpha = if (isPlaying) 0.18f else 0.10f)
+                    for (r in 0..rows) {
+                        for (c in 0..cols) {
+                            drawCircle(
+                                color = dotColor,
+                                radius = dotRadius,
+                                center = Offset(
+                                    x = c * dotSpacing + (dotSpacing / 2),
+                                    y = r * dotSpacing + (dotSpacing / 2),
+                                ),
+                            )
+                        }
+                    }
+                }
         ) {
             Row(
                 modifier = Modifier
@@ -4696,73 +4742,81 @@ private fun NowPlayingBar(
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Обложка в фигурной волнистой рамке со значком ноты
-                Box(
-                    modifier = Modifier.size(54.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    // Волнистый контур обложки
-                    Surface(
-                        shape = scallopedArt,
-                        color = Color(0xFF2A2219),
-                        border = BorderStroke(1.8.dp, Color(0xFFD4A853)),
-                        modifier = Modifier.size(52.dp),
-                    ) {
-                        Artwork(
-                            url = item.thumbnailUrl,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(scallopedArt),
-                        )
-                    }
-                    // Круглый золотистый бейдж ноты снизу справа
-                    Surface(
-                        shape = CircleShape,
-                        color = Color(0xFFD4A853),
-                        modifier = Modifier
-                            .size(20.dp)
-                            .align(Alignment.BottomEnd),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Rounded.MusicNote,
-                                contentDescription = null,
-                                tint = Color(0xFF191612),
-                                modifier = Modifier.size(13.dp),
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.width(12.dp))
-
-                // Название трека и автор в теплых песочно-бронзовых тонах
-                Column(
+                // Левая зона (обложка + название + автор) — при тапе раскрывает полный плеер
+                Row(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(end = 6.dp),
+                        .clip(RoundedCornerShape(32.dp))
+                        .clickable(onClick = onClick),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = item.title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 17.sp,
-                            letterSpacing = (-0.2).sp,
-                        ),
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFF3E2C8),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(1.dp))
-                    Text(
-                        text = "by — ${item.uploader ?: "Unknown"}",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 13.sp,
-                        ),
-                        color = Color(0xFFBA9E76),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    // Обложка в фигурной волнистой рамке со значком ноты
+                    Box(
+                        modifier = Modifier.size(54.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Surface(
+                            shape = scallopedArt,
+                            color = Color(0xFF2A2219),
+                            border = BorderStroke(1.8.dp, Color(0xFFD4A853)),
+                            modifier = Modifier.size(52.dp),
+                        ) {
+                            Artwork(
+                                url = item.thumbnailUrl,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(scallopedArt),
+                            )
+                        }
+                        // Круглый золотистый бейдж ноты снизу справа
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFFD4A853),
+                            modifier = Modifier
+                                .size(20.dp)
+                                .align(Alignment.BottomEnd),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Rounded.MusicNote,
+                                    contentDescription = null,
+                                    tint = Color(0xFF191612),
+                                    modifier = Modifier.size(13.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.width(12.dp))
+
+                    // Название трека и автор в теплых песочно-бронзовых тонах
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 6.dp),
+                    ) {
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 17.sp,
+                                letterSpacing = (-0.2).sp,
+                            ),
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFF3E2C8),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(1.dp))
+                        Text(
+                            text = "by — ${item.uploader ?: "Unknown"}",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 13.sp,
+                            ),
+                            color = Color(0xFFBA9E76),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
 
                 // Кнопки управления в виде фигурных звездочек / лепестков
