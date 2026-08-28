@@ -2322,16 +2322,6 @@ private fun SeaCard(
     onLike: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
-    val (timeBadge, timeIcon) = remember(hour) {
-        when (hour) {
-            in 5..11 -> "Утренний заряд" to Icons.Rounded.WbSunny
-            in 12..17 -> "Дневной поток" to Icons.Rounded.WbSunny
-            in 18..22 -> "Вечерний вайб" to Icons.Rounded.Bedtime
-            else -> "Ночной чилл" to Icons.Rounded.Bedtime
-        }
-    }
-
     val subtitle = remember(playingArtist, topArtistsHint) {
         when {
             !playingArtist.isNullOrBlank() -> playingArtist
@@ -2370,42 +2360,13 @@ private fun SeaCard(
             .fillMaxWidth()
             .padding(horizontal = 18.dp, vertical = 6.dp),
     ) {
-        // 1. Верхний блок: Время суток + Заголовок + Большая кнопка Play
+        // 1. Верхний блок: Заголовок + Большая кнопка Play
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                // Время суток бейдж с Material Icon
-                Surface(
-                    shape = CircleShape,
-                    color = cs.primaryContainer.copy(alpha = 0.7f),
-                    border = BorderStroke(1.dp, cs.primary.copy(alpha = 0.25f)),
-                    modifier = Modifier.clip(CircleShape),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                    ) {
-                        Icon(
-                            imageVector = timeIcon,
-                            contentDescription = null,
-                            tint = cs.onPrimaryContainer,
-                            modifier = Modifier.size(15.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = timeBadge,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = cs.onPrimaryContainer,
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
                 // Огромный выразительный заголовок M3 Expressive
                 Text(
                     text = "Твоя\nВолна",
