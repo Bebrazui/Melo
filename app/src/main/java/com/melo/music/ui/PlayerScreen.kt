@@ -203,6 +203,8 @@ import com.melo.music.playlists.PlaylistManager
 import com.melo.music.ui.theme.Motion
 import com.melo.music.ui.theme.ShapeCache
 import com.melo.music.ui.theme.pressScale
+import com.melo.music.ui.theme.carouselCenterItemEffect
+import com.melo.music.ui.theme.bouncyOverscroll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
@@ -937,7 +939,7 @@ fun PlayerScreen(
                         )
                     } else {
                         LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier.fillMaxSize().bouncyOverscroll(),
                             contentPadding = PaddingValues(bottom = 12.dp + playerInset),
                         ) {
                             item {
@@ -994,8 +996,18 @@ fun PlayerScreen(
           )
         }
 
-        // Карта — отдельный слой во весь экран (рисуется под статус-баром).
-        if (selectedTab == MeloTab.Map) {
+        // Карта — отдельный слой во весь экран с плавной анимацией открытия.
+        AnimatedVisibility(
+            visible = selectedTab == MeloTab.Map,
+            enter = slideInVertically(
+                animationSpec = tween(Motion.TRANSITION_MS, easing = Motion.EmphasizedDecelerate),
+                initialOffsetY = { it / 3 },
+            ) + fadeIn(tween(Motion.FADE_MS)) + scaleIn(tween(Motion.TRANSITION_MS, easing = Motion.EmphasizedDecelerate), initialScale = 0.94f),
+            exit = slideOutVertically(
+                animationSpec = tween(280, easing = Motion.EmphasizedAccelerate),
+                targetOffsetY = { it / 3 },
+            ) + fadeOut(tween(160)) + scaleOut(tween(280), targetScale = 0.94f),
+        ) {
             com.melo.music.map.MusicMapScreen(
                 onSearch = onSearch,
                 onPlay = { track -> playAt(listOf(track), 0) },
@@ -1157,7 +1169,17 @@ fun PlayerScreen(
         )
     }
 
-    if (homeSettings) {
+    AnimatedVisibility(
+        visible = homeSettings,
+        enter = slideInHorizontally(
+            animationSpec = tween(Motion.TRANSITION_MS, easing = Motion.EmphasizedDecelerate),
+            initialOffsetX = { it },
+        ) + fadeIn(tween(Motion.FADE_MS)),
+        exit = slideOutHorizontally(
+            animationSpec = tween(280, easing = Motion.EmphasizedAccelerate),
+            targetOffsetX = { it },
+        ) + fadeOut(tween(160)),
+    ) {
         SettingsScreen(
             scGetId = scGetId,
             onScSetManual = onScSetManual,
@@ -1166,16 +1188,31 @@ fun PlayerScreen(
         )
     }
 
-    profileOpen?.let { p ->
-        ProfileScreen(
-            profile = p,
-            onPlay = { list, index -> playAt(list, index) },
-            onClose = { profileOpen = null },
-        )
+    AnimatedVisibility(
+        visible = profileOpen != null,
+        enter = slideInHorizontally(
+            animationSpec = tween(Motion.TRANSITION_MS, easing = Motion.EmphasizedDecelerate),
+            initialOffsetX = { it },
+        ) + fadeIn(tween(Motion.FADE_MS)),
+        exit = slideOutHorizontally(
+            animationSpec = tween(280, easing = Motion.EmphasizedAccelerate),
+            targetOffsetX = { it },
+        ) + fadeOut(tween(160)),
+    ) {
+        profileOpen?.let { p ->
+            ProfileScreen(
+                profile = p,
+                onPlay = { list, index -> playAt(list, index) },
+                onClose = { profileOpen = null },
+            )
+        }
     }
 
-
-    if (authVisible) {
+    AnimatedVisibility(
+        visible = authVisible,
+        enter = fadeIn(tween(240)) + scaleIn(tween(240, easing = Motion.EmphasizedDecelerate), initialScale = 0.92f),
+        exit = fadeOut(tween(180)) + scaleOut(tween(180), targetScale = 0.92f),
+    ) {
         WelcomeScreen(
             onLogin = { e, p -> com.melo.music.auth.AuthManager.login(e, p) },
             onStartRegister = { e, p, n -> com.melo.music.auth.AuthManager.startEmailRegister(e, p, n) },
@@ -1570,6 +1607,7 @@ private fun AccountTab(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .bouncyOverscroll()
             .verticalScroll(rememberScrollState())
             .padding(start = 20.dp, end = 20.dp)
             .padding(bottom = bottomInset),
@@ -2173,16 +2211,26 @@ private fun PlaylistCard(
     }
 }
 
-/** Стилизованный диалог в духе приложения (скруглённый, с тенью). */
+/** Стилизованный диалог в духе приложения (скруглённый, с тенью и пружинистой анимацией). */
 @Composable
 private fun MeloDialog(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
-            tonalElevation = 6.dp,
+        val animState = remember { androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true } }
+        AnimatedVisibility(
+            visibleState = animState,
+            enter = scaleIn(
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+                initialScale = 0.84f,
+            ) + fadeIn(tween(180)),
+            exit = scaleOut(tween(140), targetScale = 0.84f) + fadeOut(tween(140)),
         ) {
-            Column(modifier = Modifier.padding(24.dp), content = content)
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
+                tonalElevation = 6.dp,
+            ) {
+                Column(modifier = Modifier.padding(24.dp), content = content)
+            }
         }
     }
 }
@@ -2639,7 +2687,7 @@ private fun HomeFeed(
     val shelfCache = remember { mutableStateMapOf<String, List<TrackItem>>() }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().bouncyOverscroll(),
         contentPadding = PaddingValues(top = topInset, bottom = 16.dp + bottomInset),
     ) {
         item(key = "home_greeting") { Greeting(onOpenAccount) }
@@ -2668,17 +2716,20 @@ private fun HomeFeed(
         if (history.isNotEmpty()) {
             item(key = "home_history_title") { SectionTitle("Недавно слушали") }
             item(key = "home_history_row") {
+                val histRowState = rememberLazyListState()
                 LazyRow(
+                    state = histRowState,
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    itemsIndexed(history.take(20), key = { idx, t -> "hist_${idx}_${t.url}" }) { _, t ->
+                    itemsIndexed(history.take(20), key = { idx, t -> "hist_${idx}_${t.url}" }) { index, t ->
                         ShelfCard(
                             item = t,
                             playing = nowPlayingUrl == t.url && isPlaying,
                             resolving = resolvingUrl == t.url,
                             onClick = { onPlay(history, history.indexOf(t)) },
                             onLongClick = { onTrackLongClick(t) },
+                            modifier = Modifier.carouselCenterItemEffect(histRowState, index),
                         )
                     }
                 }
@@ -2709,7 +2760,9 @@ private fun HomeFeed(
                     }
                 } else {
                     item(key = "pers_shelf_$idx") {
+                        val persRowState = rememberLazyListState()
                         LazyRow(
+                            state = persRowState,
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
@@ -2720,6 +2773,7 @@ private fun HomeFeed(
                                     resolving = resolvingUrl == t.url,
                                     onClick = { onPlay(tracks, index) },
                                     onLongClick = { onTrackLongClick(t) },
+                                    modifier = Modifier.carouselCenterItemEffect(persRowState, index),
                                 )
                             }
                         }
@@ -2927,17 +2981,20 @@ private fun HorizontalShelf(
     }
     if (tracks.isEmpty()) return
 
+    val shelfRowState = rememberLazyListState()
     LazyRow(
+        state = shelfRowState,
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        items(tracks, key = { it.url }) { t ->
+        itemsIndexed(tracks, key = { _, t -> t.url }) { index, t ->
             ShelfCard(
                 item = t,
                 playing = nowPlayingUrl == t.url && isPlaying,
                 resolving = resolvingUrl == t.url,
                 onClick = { onPlay(tracks, tracks.indexOf(t)) },
                 onLongClick = { onLongClick(t) },
+                modifier = Modifier.carouselCenterItemEffect(shelfRowState, index),
             )
         }
     }
@@ -2950,10 +3007,11 @@ private fun ShelfCard(
     resolving: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val pressSource = remember { MutableInteractionSource() }
     Column(
-        modifier = Modifier
+        modifier = modifier
             .width(150.dp)
             .pressScale(pressedScale = 0.95f, interactionSource = pressSource)
             .combinedClickable(
@@ -3207,7 +3265,7 @@ private fun SearchResultsScreen(
 
     LazyColumn(
         state = state,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().bouncyOverscroll(),
         contentPadding = PaddingValues(top = topInset + 4.dp, bottom = 16.dp + bottomInset),
     ) {
         if (users.isNotEmpty()) {
@@ -3704,7 +3762,7 @@ private fun ArtistScreen(
 
     Box(modifier = Modifier.fillMaxSize().background(pageBg)) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().bouncyOverscroll(),
             contentPadding = PaddingValues(bottom = 36.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -4044,12 +4102,19 @@ private fun ArtistScreen(
                     )
                 }
                 item(key = "similar_row") {
+                    val simRowState = rememberLazyListState()
                     LazyRow(
+                        state = simRowState,
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        itemsIndexed(similar, key = { _, a -> "sim_" + a.url }) { _, a ->
-                            SimilarArtistTile(item = a, accent = animatedAccent, onClick = { onOpenSimilar(a) })
+                        itemsIndexed(similar, key = { _, a -> "sim_" + a.url }) { index, a ->
+                            SimilarArtistTile(
+                                item = a,
+                                accent = animatedAccent,
+                                onClick = { onOpenSimilar(a) },
+                                modifier = Modifier.carouselCenterItemEffect(simRowState, index),
+                            )
                         }
                     }
                 }
@@ -4284,9 +4349,14 @@ private fun ArtistTrackTile(
 
 /** Круглая выразительная плитка похожего артиста с неоновым обрамлением. */
 @Composable
-private fun SimilarArtistTile(item: TrackItem, accent: Color, onClick: () -> Unit) {
+private fun SimilarArtistTile(
+    item: TrackItem,
+    accent: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .width(100.dp)
             .clip(RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
@@ -4358,7 +4428,7 @@ private fun PlaylistScreen(
         )
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().bouncyOverscroll(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {

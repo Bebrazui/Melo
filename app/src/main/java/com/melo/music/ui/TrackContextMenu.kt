@@ -86,12 +86,24 @@ fun TrackContextMenu(
     if (showPlaylistPicker) {
         val playlists = remember { PlaylistManager.getAll() }
         Dialog(onDismissRequest = { showPlaylistPicker = false }) {
-            Surface(
-                shape = RoundedCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
-                tonalElevation = 6.dp,
+            val animState = remember { androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true } }
+            androidx.compose.animation.AnimatedVisibility(
+                visibleState = animState,
+                enter = androidx.compose.animation.scaleIn(
+                    animationSpec = androidx.compose.animation.core.spring(
+                        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                        stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
+                    ),
+                    initialScale = 0.84f,
+                ) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180)),
+                exit = androidx.compose.animation.scaleOut(androidx.compose.animation.core.tween(140), targetScale = 0.84f) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(140)),
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
+                    tonalElevation = 6.dp,
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
                     Text(
                         "В плейлист",
                         style = MaterialTheme.typography.titleLarge,
@@ -173,6 +185,7 @@ fun TrackContextMenu(
             }
         }
     }
+}
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

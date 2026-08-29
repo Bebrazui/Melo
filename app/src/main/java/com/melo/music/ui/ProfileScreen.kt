@@ -22,8 +22,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.melo.music.ui.theme.bouncyOverscroll
+import com.melo.music.ui.theme.carouselCenterItemEffect
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Build
@@ -379,7 +383,7 @@ fun ProfileScreen(
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().bouncyOverscroll(),
             contentPadding = PaddingValues(bottom = 36.dp),
         ) {
             item {
@@ -591,16 +595,19 @@ private fun LaneHeader(title: String, onFull: () -> Unit) {
 /** Горизонтальная лента треков в стиле Material 3 Expressive. */
 @Composable
 private fun TrackLane(tracks: List<TrackItem>, onPlay: (List<TrackItem>, Int) -> Unit) {
+    val laneState = rememberLazyListState()
     LazyRow(
+        state = laneState,
         contentPadding = PaddingValues(horizontal = 18.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        items(tracks, key = { it.url + "@" + it.speed }) { t ->
+        itemsIndexed(tracks, key = { _, it -> it.url + "@" + it.speed }) { index, t ->
             Column(
                 modifier = Modifier
+                    .carouselCenterItemEffect(laneState, index)
                     .width(148.dp)
                     .clip(RoundedCornerShape(22.dp))
-                    .clickable { onPlay(tracks, tracks.indexOf(t)) },
+                    .clickable { onPlay(tracks, index) },
             ) {
                 Surface(
                     shape = RoundedCornerShape(22.dp),
