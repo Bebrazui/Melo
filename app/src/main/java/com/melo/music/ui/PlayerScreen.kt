@@ -2,6 +2,7 @@ package com.melo.music.ui
 
 import android.Manifest
 import android.content.Context
+import android.content.res.Configuration
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -50,6 +51,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -185,6 +187,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.Color
@@ -5639,618 +5642,716 @@ private fun FullPlayer(
             ),
         )
 
-        Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            // Опускаем шапку ниже статус-бара.
-            Spacer(Modifier.height(40.dp))
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val isWide = (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) || (maxWidth > maxHeight)
 
-            // 1. Верхний бар действий в стиле Material 3 Expressive
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.08f),
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .clickable(onClick = onCollapse),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Rounded.KeyboardArrowDown,
-                            contentDescription = "Свернуть",
-                            tint = white,
-                        )
-                    }
+            val art3dModifier = Modifier
+                .graphicsLayer {
+                    rotationY = tiltRoll * 14f
+                    rotationX = -tiltPitch * 14f
+                    translationX = tiltRoll * 12.dp.toPx()
+                    translationY = tiltPitch * 12.dp.toPx()
+                    cameraDistance = 14f * density
+                    shadowElevation = (14f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 8f).dp.toPx()
                 }
 
-                Text(
-                    text = if (showLyrics) "Текст песни" else "Сейчас играет",
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontSize = 14.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 0.1.sp,
-                    ),
-                    color = white,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val vocalCut = com.melo.music.audio.VocalCutManager.isEnabled
+            // ── Компонент обложки или видеоклипа ──
+            @Composable
+            fun RenderArtwork(boxModifier: Modifier) {
+                if (showVideo && videoUrl != null) {
                     Surface(
-                        shape = CircleShape,
-                        color = if (vocalCut) accent.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f),
-                        border = if (vocalCut) BorderStroke(1.dp, accent) else null,
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .clickable { com.melo.music.audio.VocalCutManager.toggle() },
+                        shape = RoundedCornerShape(32.dp),
+                        color = Color.Black,
+                        border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f)),
+                        shadowElevation = 12.dp,
+                        modifier = boxModifier
+                            .then(art3dModifier)
+                            .clip(RoundedCornerShape(32.dp)),
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = if (vocalCut) Icons.Rounded.MicOff else Icons.Rounded.Mic,
-                                contentDescription = if (vocalCut) "Вокал выключен (Караоке)" else "Убрать вокал",
-                                tint = if (vocalCut) accent else white,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
-
-                    Surface(
-                        shape = CircleShape,
-                        color = Color.White.copy(alpha = 0.08f),
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .clickable(onClick = onShowQueue),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.AutoMirrored.Rounded.QueueMusic,
-                                contentDescription = "Очередь",
-                                tint = white,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
-
-                    if (videoUrl != null || videoLoading) {
-                        Surface(
-                            shape = CircleShape,
-                            color = if (showVideo) cs.primaryContainer else Color.White.copy(alpha = 0.08f),
-                            modifier = Modifier
-                                .size(42.dp)
-                                .clip(CircleShape)
-                                .clickable(enabled = !videoLoading && videoUrl != null) {
-                                    val next = !showVideo
-                                    showVideo = next
-                                    if (next) {
-                                        showLyrics = false
-                                        videoUrl?.let { vUrl ->
-                                            com.melo.music.playback.PlaybackService.switchToVideo(vUrl)
-                                        }
-                                    } else {
-                                        com.melo.music.playback.PlaybackService.switchToAudio()
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            AndroidView(
+                                factory = { ctx ->
+                                    androidx.media3.ui.PlayerView(ctx).apply {
+                                        useController = false
+                                        resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                        player = com.melo.music.playback.PlaybackService.activePlayer
                                     }
                                 },
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                if (videoLoading) {
-                                    CircularProgressIndicator(
-                                        color = white,
-                                        modifier = Modifier.size(18.dp),
-                                        strokeWidth = 2.dp,
-                                    )
-                                } else {
+                                update = { view ->
+                                    if (view.player == null) {
+                                        view.player = com.melo.music.playback.PlaybackService.activePlayer
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            Surface(
+                                shape = CircleShape,
+                                color = Color.Black.copy(alpha = 0.6f),
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(12.dp)
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .clickable { isFullscreenVideo = true },
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        Icons.Rounded.Videocam,
-                                        contentDescription = "Клип",
-                                        tint = if (showVideo) cs.onPrimaryContainer else white,
+                                        Icons.Rounded.Fullscreen,
+                                        contentDescription = "Полный экран",
+                                        tint = Color.White,
                                         modifier = Modifier.size(20.dp),
                                     )
                                 }
                             }
                         }
                     }
-                }
-            }
-
-            Spacer(Modifier.weight(1f))
-
-            AnimatedContent(targetState = showLyrics, label = "lyricsToggle") { lyricsMode ->
-                if (lyricsMode) {
-                    val lyr = lyrics
-                    when {
-                        lyricsLoading -> Box(
-                            modifier = Modifier.fillMaxWidth().height(300.dp),
-                            contentAlignment = Alignment.Center,
-                        ) { CircularProgressIndicator(color = white) }
-
-                        lyr == null || lyr.isEmpty -> Box(
-                            modifier = Modifier.fillMaxWidth().height(300.dp),
-                            contentAlignment = Alignment.Center,
-                        ) { Text("Текст не найден", color = whiteDim, textAlign = TextAlign.Center) }
-
-                        lyr.isSynced -> SyncedLyrics(
-                            lines = lyr.lines!!,
-                            positionMs = position,
-                            onSeek = onSeek,
-                            white = white,
-                            dim = whiteDim,
-                        )
-
-                        else -> Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 240.dp, max = 360.dp)
-                                .verticalScroll(rememberScrollState()),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(
-                                text = lyr.plain ?: "",
-                                color = white,
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                    }
                 } else {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.offset { IntOffset(swipeX.value.roundToInt(), 0) },
-                    ) {
-                        // 2. Обложка или видеоклип с выразительными скруглениями (32dp) и живым 3D-наклоном
-                        val art3dModifier = Modifier
-                            .fillMaxWidth(0.88f)
-                            .aspectRatio(1f)
-                            .graphicsLayer {
-                                rotationY = tiltRoll * 14f
-                                rotationX = -tiltPitch * 14f
-                                translationX = tiltRoll * 12.dp.toPx()
-                                translationY = tiltPitch * 12.dp.toPx()
-                                cameraDistance = 14f * density
-                                shadowElevation = (14f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 8f).dp.toPx()
-                            }
-
-                        if (showVideo && videoUrl != null) {
-                            Surface(
-                                shape = RoundedCornerShape(32.dp),
-                                color = Color.Black,
-                                border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f)),
-                                shadowElevation = 12.dp,
-                                modifier = art3dModifier
-                                    .clip(RoundedCornerShape(32.dp)),
-                            ) {
-                                Box(modifier = Modifier.fillMaxSize()) {
-                                    AndroidView(
-                                        factory = { ctx ->
-                                            androidx.media3.ui.PlayerView(ctx).apply {
-                                                useController = false
-                                                resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                                                player = com.melo.music.playback.PlaybackService.activePlayer
-                                            }
-                                        },
-                                        update = { view ->
-                                            if (view.player == null) {
-                                                view.player = com.melo.music.playback.PlaybackService.activePlayer
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxSize(),
-                                    )
-
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = Color.Black.copy(alpha = 0.6f),
-                                        modifier = Modifier
-                                            .align(Alignment.BottomEnd)
-                                            .padding(12.dp)
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .clickable { isFullscreenVideo = true },
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                Icons.Rounded.Fullscreen,
-                                                contentDescription = "Полный экран",
-                                                tint = Color.White,
-                                                modifier = Modifier.size(20.dp),
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            Crossfade(
-                                targetState = hiRes,
-                                animationSpec = tween(500),
-                                label = "art",
-                                modifier = art3dModifier,
-                            ) { art ->
-                                Surface(
-                                    shape = RoundedCornerShape(32.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                    border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f)),
-                                    shadowElevation = 12.dp,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(RoundedCornerShape(32.dp)),
-                                ) {
-                                    Box(modifier = Modifier.fillMaxSize()) {
-                                        AsyncImage(
-                                            model = art,
-                                            contentDescription = null,
-                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize(),
-                                        )
-
-                                        // Живой динамический 3D-блик на стеклянной поверхности обложки при наклоне
-                                        Canvas(modifier = Modifier.fillMaxSize()) {
-                                            val sheenAlpha = (0.24f + tiltRoll * 0.10f - tiltPitch * 0.10f).coerceIn(0.04f, 0.38f)
-                                            val sheenCenterX = size.width * (0.45f + tiltRoll * 0.40f)
-                                            val sheenCenterY = size.height * (0.45f + tiltPitch * 0.40f)
-                                            drawCircle(
-                                                brush = Brush.radialGradient(
-                                                    colors = listOf(
-                                                        Color.White.copy(alpha = sheenAlpha),
-                                                        Color.White.copy(alpha = sheenAlpha * 0.3f),
-                                                        Color.Transparent,
-                                                    ),
-                                                    center = Offset(sheenCenterX, sheenCenterY),
-                                                    radius = size.width * 0.85f,
-                                                ),
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(24.dp))
-
-                        // 3. Заголовок трека, исполнитель и кнопка Текста (M3 Expressive)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                    Crossfade(
+                        targetState = hiRes,
+                        animationSpec = tween(500),
+                        label = "art",
+                        modifier = boxModifier.then(art3dModifier),
+                    ) { art ->
+                        Surface(
+                            shape = RoundedCornerShape(32.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f)),
+                            shadowElevation = 12.dp,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(32.dp)),
                         ) {
-                            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                                Text(
-                                    text = item.title,
-                                    style = MaterialTheme.typography.headlineSmall.copy(
-                                        fontSize = 24.sp,
-                                        lineHeight = 28.sp,
-                                        letterSpacing = (-0.4).sp,
-                                    ),
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = white,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                AsyncImage(
+                                    model = art,
+                                    contentDescription = null,
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize(),
                                 )
-                                item.uploader?.let { artistName ->
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        text = artistName.uppercase(Locale.getDefault()),
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = 0.6.sp,
+
+                                // Живой динамический 3D-глянцевый блик на всей площади квадратной обложки
+                                Canvas(modifier = Modifier.fillMaxSize()) {
+                                    val w = size.width
+                                    val h = size.height
+                                    val sweepShift = tiltRoll * 0.45f + tiltPitch * 0.35f
+                                    val basePos = (0.5f + sweepShift).coerceIn(0.1f, 0.9f)
+                                    val sheenAlpha = (0.28f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 0.12f).coerceIn(0.06f, 0.45f)
+
+                                    drawRect(
+                                        brush = Brush.linearGradient(
+                                            0.0f to Color.Transparent,
+                                            (basePos - 0.25f).coerceIn(0f, 1f) to Color.White.copy(alpha = sheenAlpha * 0.08f),
+                                            (basePos - 0.08f).coerceIn(0f, 1f) to Color.White.copy(alpha = sheenAlpha * 0.70f),
+                                            basePos to Color.White.copy(alpha = sheenAlpha),
+                                            (basePos + 0.08f).coerceIn(0f, 1f) to Color.White.copy(alpha = sheenAlpha * 0.70f),
+                                            (basePos + 0.25f).coerceIn(0f, 1f) to Color.White.copy(alpha = sheenAlpha * 0.08f),
+                                            1.0f to Color.Transparent,
+                                            start = Offset(0f, h),
+                                            end = Offset(w, 0f),
                                         ),
-                                        color = whiteDim,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.clickable {
-                                            val artistItem = TrackItem(
-                                                title = artistName,
-                                                uploader = artistName,
-                                                url = "artist:$artistName",
-                                                durationSeconds = 0L,
-                                                thumbnailUrl = item.thumbnailUrl,
-                                                source = item.source,
-                                                kind = ItemKind.ARTIST,
-                                            )
-                                            onOpenArtist(artistItem)
-                                        },
+                                        size = size,
                                     )
                                 }
                             }
-
-                            // Круглая кнопка Текста (Lyrics) как на референсе
-                            Surface(
-                                shape = CircleShape,
-                                color = if (showLyrics) cs.primaryContainer else Color.White.copy(alpha = 0.10f),
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(CircleShape)
-                                    .clickable { showLyrics = !showLyrics },
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Rounded.Lyrics,
-                                        contentDescription = "Текст песни",
-                                        tint = if (showLyrics) cs.onPrimaryContainer else white,
-                                        modifier = Modifier.size(22.dp),
-                                    )
-                                }
-                            }
-                        }
-
-                        // Панель скорости / тона
-                        AnimatedVisibility(
-                            visible = showSpeed,
-                            enter = expandVertically(animationSpec = tween(220)) + fadeIn(tween(220)),
-                            exit = shrinkVertically(animationSpec = tween(180)) + fadeOut(tween(140)),
-                        ) {
-                            SpeedSelector(
-                                speed = speed,
-                                onSetSpeed = onSetSpeed,
-                                onAddVariant = onAddSpeedVariant,
-                                accent = accent,
-                                white = white,
-                                modifier = Modifier.padding(top = 18.dp),
-                            )
                         }
                     }
                 }
             }
 
-            Spacer(Modifier.height(20.dp))
-
-            // 4. Wavy/Squiggly Прогресс-бар в стиле Android 14/15 Media Player
-            val fraction = dragFraction
-                ?: if (duration > 0) position.toFloat() / duration else 0f
-
-            WavySlider(
-                value = fraction.coerceIn(0f, 1f),
-                onValueChange = { dragFraction = it },
-                onValueChangeFinished = {
-                    val f = dragFraction
-                    if (f != null && duration > 0) {
-                        onSeek((f * duration).toLong())
-                    }
-                    dragFraction = null
-                },
-                isPlaying = isPlaying,
-                activeColor = white,
-                inactiveColor = Color.White.copy(alpha = 0.24f),
-                thumbColor = white,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            // Временные метки и плашка качества звука
-            val qualityLabel = remember(item.source, item.url) {
-                when (item.source) {
-                    Source.YOUTUBE_MUSIC -> "44.1 kHz • 256 kbps • Opus"
-                    Source.SOUNDCLOUD -> "44.1 kHz • 160 kbps • MP3"
-                    Source.BANDCAMP -> "44.1 kHz • 320 kbps • MP3"
-                    Source.LOCAL -> "44.1 kHz • Lossless • FLAC"
-                    else -> "44.1 kHz • 320 kbps • MP3"
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    formatMillis(position),
-                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                    color = whiteDim,
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color.White.copy(alpha = 0.08f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
-                    modifier = Modifier.height(26.dp),
-                ) {
-                    Box(
+            // ── Компонент текста песни / караоке ──
+            @Composable
+            fun RenderLyrics(boxModifier: Modifier) {
+                val lyr = lyrics
+                when {
+                    lyricsLoading -> Box(
+                        modifier = boxModifier.height(280.dp),
                         contentAlignment = Alignment.Center,
-                        modifier = Modifier.padding(horizontal = 12.dp),
+                    ) { CircularProgressIndicator(color = white) }
+
+                    lyr == null || lyr.isEmpty -> Box(
+                        modifier = boxModifier.height(280.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { Text("Текст не найден", color = whiteDim, textAlign = TextAlign.Center) }
+
+                    lyr.isSynced -> SyncedLyrics(
+                        lines = lyr.lines!!,
+                        positionMs = position,
+                        onSeek = onSeek,
+                        white = white,
+                        dim = whiteDim,
+                    )
+
+                    else -> Column(
+                        modifier = boxModifier
+                            .heightIn(min = 220.dp, max = 340.dp)
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text(
-                            text = qualityLabel,
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            text = lyr.plain ?: "",
+                            color = white,
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+
+            // ── Компонент управления (название, слайдер, кнопки, капсула) с 3D-параллаксом ──
+            @Composable
+            fun RenderControls(isLandscape: Boolean) {
+                // 3. Заголовок трека, исполнитель и кнопка Текста (3D-параллакс)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            translationX = tiltRoll * 8.dp.toPx()
+                            translationY = tiltPitch * 8.dp.toPx()
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 10.dp)) {
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.headlineSmall.copy(
+                                fontSize = if (isLandscape) 20.sp else 24.sp,
+                                lineHeight = if (isLandscape) 24.sp else 28.sp,
+                                letterSpacing = (-0.4).sp,
+                            ),
+                            fontWeight = FontWeight.ExtraBold,
+                            color = white,
+                            maxLines = if (isLandscape) 1 else 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        item.uploader?.let { artistName ->
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                text = artistName.uppercase(Locale.getDefault()),
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontSize = if (isLandscape) 13.sp else 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.6.sp,
+                                ),
+                                color = whiteDim,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.clickable {
+                                    val artistItem = TrackItem(
+                                        title = artistName,
+                                        uploader = artistName,
+                                        url = "artist:$artistName",
+                                        durationSeconds = 0L,
+                                        thumbnailUrl = item.thumbnailUrl,
+                                        source = item.source,
+                                        kind = ItemKind.ARTIST,
+                                    )
+                                    onOpenArtist(artistItem)
+                                },
+                            )
+                        }
+                    }
+
+                    // Круглая кнопка Текста (Lyrics) с 3D-наклоном
+                    Surface(
+                        shape = CircleShape,
+                        color = if (showLyrics) cs.primaryContainer else Color.White.copy(alpha = 0.10f),
+                        modifier = Modifier
+                            .size(if (isLandscape) 42.dp else 48.dp)
+                            .clip(CircleShape)
+                            .graphicsLayer {
+                                rotationY = tiltRoll * 10f
+                                rotationX = -tiltPitch * 10f
+                                translationX = tiltRoll * 6.dp.toPx()
+                                translationY = tiltPitch * 6.dp.toPx()
+                                cameraDistance = 14f * density
+                            }
+                            .clickable { showLyrics = !showLyrics },
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.Lyrics,
+                                contentDescription = "Текст песни",
+                                tint = if (showLyrics) cs.onPrimaryContainer else white,
+                                modifier = Modifier.size(if (isLandscape) 20.dp else 22.dp),
+                            )
+                        }
+                    }
+                }
+
+                if (!isLandscape) {
+                    Spacer(Modifier.height(18.dp))
+                }
+
+                // 4. Wavy/Squiggly Прогресс-бар с 3D-параллаксом
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            translationX = tiltRoll * 5.dp.toPx()
+                            translationY = tiltPitch * 5.dp.toPx()
+                        },
+                ) {
+                    val fraction = dragFraction
+                        ?: if (duration > 0) position.toFloat() / duration else 0f
+
+                    WavySlider(
+                        value = fraction.coerceIn(0f, 1f),
+                        onValueChange = { dragFraction = it },
+                        onValueChangeFinished = {
+                            val f = dragFraction
+                            if (f != null && duration > 0) {
+                                onSeek((f * duration).toLong())
+                            }
+                            dragFraction = null
+                        },
+                        isPlaying = isPlaying,
+                        activeColor = white,
+                        inactiveColor = Color.White.copy(alpha = 0.24f),
+                        thumbColor = white,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    val qualityLabel = remember(item.source, item.url) {
+                        when (item.source) {
+                            Source.YOUTUBE_MUSIC -> "44.1 kHz • 256 kbps • Opus"
+                            Source.SOUNDCLOUD -> "44.1 kHz • 160 kbps • MP3"
+                            Source.BANDCAMP -> "44.1 kHz • 320 kbps • MP3"
+                            Source.LOCAL -> "44.1 kHz • Lossless • FLAC"
+                            else -> "44.1 kHz • 320 kbps • MP3"
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            formatMillis(position),
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                            color = whiteDim,
+                        )
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.White.copy(alpha = 0.08f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+                            modifier = Modifier.height(24.dp),
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 10.dp),
+                            ) {
+                                Text(
+                                    text = qualityLabel,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = whiteDim,
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = if (duration > 0) formatMillis(duration) else "--:--",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                             color = whiteDim,
                         )
                     }
                 }
 
-                Text(
-                    text = if (duration > 0) formatMillis(duration) else "--:--",
-                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                    color = whiteDim,
-                )
-            }
-
-            Spacer(Modifier.height(22.dp))
-
-            // 5. Главный блок воспроизведения: асимметричный Expressive Shape Trio в цвет обложки
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Предыдущий трек: круг в цвет обложки (66dp)
-                Surface(
-                    shape = CircleShape,
-                    color = sideBtnColor,
-                    modifier = Modifier
-                        .size(66.dp)
-                        .clip(CircleShape)
-                        .clickable(onClick = onPrev),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Rounded.SkipPrevious,
-                            contentDescription = "Назад",
-                            tint = iconTint,
-                            modifier = Modifier.size(32.dp),
-                        )
-                    }
+                if (!isLandscape) {
+                    Spacer(Modifier.height(20.dp))
                 }
 
-                Spacer(Modifier.width(18.dp))
-
-                // Play / Pause: сквиркл в цвет обложки с вытягиванием в длину при нажатии (96dp * scaleX, 74dp)
-                Surface(
-                    shape = RoundedCornerShape(26.dp),
-                    color = playBtnColor,
-                    shadowElevation = 8.dp,
+                // 5. Главный блок воспроизведения: асимметричный Expressive Shape Trio в цвет обложки с 3D
+                Row(
                     modifier = Modifier
-                        .width(96.dp * playScaleX)
-                        .height(74.dp)
-                        .clip(RoundedCornerShape(26.dp))
-                        .clickable(
-                            interactionSource = playInteractionSource,
-                            indication = ripple(bounded = true),
-                            onClick = {
-                                gestureScope.launch {
-                                    playBounceAnim.snapTo(1.25f)
-                                    playBounceAnim.animateTo(
-                                        targetValue = 1f,
-                                        animationSpec = spring(
-                                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                                            stiffness = Spring.StiffnessMediumLow,
-                                        ),
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            rotationY = tiltRoll * 8f
+                            rotationX = -tiltPitch * 8f
+                            translationX = tiltRoll * 7.dp.toPx()
+                            translationY = tiltPitch * 7.dp.toPx()
+                            cameraDistance = 14f * density
+                        },
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Предыдущий трек: круг в цвет обложки
+                    Surface(
+                        shape = CircleShape,
+                        color = sideBtnColor,
+                        modifier = Modifier
+                            .size(if (isLandscape) 56.dp else 66.dp)
+                            .clip(CircleShape)
+                            .clickable(onClick = onPrev),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.SkipPrevious,
+                                contentDescription = "Назад",
+                                tint = iconTint,
+                                modifier = Modifier.size(if (isLandscape) 28.dp else 32.dp),
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.width(if (isLandscape) 14.dp else 18.dp))
+
+                    // Play / Pause: сквиркл в цвет обложки с вытягиванием в длину
+                    Surface(
+                        shape = RoundedCornerShape(26.dp),
+                        color = playBtnColor,
+                        shadowElevation = 8.dp,
+                        modifier = Modifier
+                            .width((if (isLandscape) 84.dp else 96.dp) * playScaleX)
+                            .height(if (isLandscape) 64.dp else 74.dp)
+                            .clip(RoundedCornerShape(26.dp))
+                            .clickable(
+                                interactionSource = playInteractionSource,
+                                indication = ripple(bounded = true),
+                                onClick = {
+                                    gestureScope.launch {
+                                        playBounceAnim.snapTo(1.25f)
+                                        playBounceAnim.animateTo(
+                                            targetValue = 1f,
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                stiffness = Spring.StiffnessMediumLow,
+                                            ),
+                                        )
+                                    }
+                                    onTogglePlayPause()
+                                },
+                            ),
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (resolving) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(28.dp),
+                                    strokeWidth = 3.dp,
+                                    color = iconTint,
+                                )
+                            } else {
+                                AnimatedContent(targetState = isPlaying, label = "playPause") { playing ->
+                                    Icon(
+                                        imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                        contentDescription = if (playing) "Пауза" else "Играть",
+                                        tint = iconTint,
+                                        modifier = Modifier.size(if (isLandscape) 34.dp else 40.dp),
                                     )
                                 }
-                                onTogglePlayPause()
-                            },
-                        ),
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (resolving) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(32.dp),
-                                strokeWidth = 3.dp,
-                                color = iconTint,
-                            )
-                        } else {
-                            AnimatedContent(targetState = isPlaying, label = "playPause") { playing ->
-                                Icon(
-                                    imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                    contentDescription = if (playing) "Пауза" else "Играть",
-                                    tint = iconTint,
-                                    modifier = Modifier.size(40.dp),
-                                )
                             }
+                        }
+                    }
+
+                    Spacer(Modifier.width(if (isLandscape) 14.dp else 18.dp))
+
+                    // Следующий трек: круг в цвет обложки
+                    Surface(
+                        shape = CircleShape,
+                        color = sideBtnColor,
+                        modifier = Modifier
+                            .size(if (isLandscape) 56.dp else 66.dp)
+                            .clip(CircleShape)
+                            .clickable(onClick = onNext),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.SkipNext,
+                                contentDescription = "Вперёд",
+                                tint = iconTint,
+                                modifier = Modifier.size(if (isLandscape) 28.dp else 32.dp),
+                            )
                         }
                     }
                 }
 
-                Spacer(Modifier.width(18.dp))
+                if (!isLandscape) {
+                    Spacer(Modifier.height(20.dp))
+                }
 
-                // Следующий трек: круг в цвет обложки (66dp)
+                // 6. Нижний сегментированный остров действий с 3D-параллаксом
                 Surface(
-                    shape = CircleShape,
-                    color = sideBtnColor,
+                    shape = RoundedCornerShape(32.dp),
+                    color = Color.Black.copy(alpha = 0.38f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
                     modifier = Modifier
-                        .size(66.dp)
-                        .clip(CircleShape)
-                        .clickable(onClick = onNext),
+                        .fillMaxWidth(if (isLandscape) 0.95f else 0.88f)
+                        .height(if (isLandscape) 52.dp else 60.dp)
+                        .clip(RoundedCornerShape(32.dp))
+                        .graphicsLayer {
+                            rotationY = tiltRoll * 6f
+                            rotationX = -tiltPitch * 6f
+                            translationX = tiltRoll * 4.dp.toPx()
+                            translationY = tiltPitch * 4.dp.toPx()
+                            cameraDistance = 14f * density
+                        },
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Rounded.SkipNext,
-                            contentDescription = "Вперёд",
-                            tint = iconTint,
-                            modifier = Modifier.size(32.dp),
-                        )
-                    }
-                }
-            }
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = onToggleShuffle) {
+                            Icon(
+                                Icons.Rounded.Shuffle,
+                                contentDescription = "Перемешать",
+                                tint = if (shuffle) accent else whiteDim,
+                                modifier = Modifier.size(if (isLandscape) 20.dp else 24.dp),
+                            )
+                        }
 
-            Spacer(Modifier.height(22.dp))
-
-            // 6. Нижний сегментированный остров действий (Pill Island: Shuffle • Repeat • Like)
-            Surface(
-                shape = RoundedCornerShape(32.dp),
-                color = Color.Black.copy(alpha = 0.38f),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
-                modifier = Modifier
-                    .fillMaxWidth(0.88f)
-                    .height(60.dp)
-                    .clip(RoundedCornerShape(32.dp)),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Перемешать
-                    IconButton(onClick = onToggleShuffle) {
-                        Icon(
-                            Icons.Rounded.Shuffle,
-                            contentDescription = "Перемешать",
-                            tint = if (shuffle) accent else whiteDim,
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(24.dp)
-                            .background(Color.White.copy(alpha = 0.10f)),
-                    )
-
-                    // Повтор
-                    IconButton(onClick = onToggleRepeat) {
-                        Icon(
-                            imageVector = if (repeatOne) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
-                            contentDescription = "Повтор",
-                            tint = if (repeatOne) accent else whiteDim,
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(24.dp)
-                            .background(Color.White.copy(alpha = 0.10f)),
-                    )
-
-                    // Лайк / Избранное
-                    IconButton(onClick = onToggleLike) {
-                        Icon(
-                            imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                            contentDescription = "Нравится",
-                            tint = heartColor,
+                        Box(
                             modifier = Modifier
-                                .size(26.dp)
-                                .scale(likeScale),
+                                .width(1.dp)
+                                .height(20.dp)
+                                .background(Color.White.copy(alpha = 0.10f)),
                         )
+
+                        IconButton(onClick = onToggleRepeat) {
+                            Icon(
+                                imageVector = if (repeatOne) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                                contentDescription = "Повтор",
+                                tint = if (repeatOne) accent else whiteDim,
+                                modifier = Modifier.size(if (isLandscape) 20.dp else 24.dp),
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(20.dp)
+                                .background(Color.White.copy(alpha = 0.10f)),
+                        )
+
+                        IconButton(onClick = onToggleLike) {
+                            Icon(
+                                imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                contentDescription = "Нравится",
+                                tint = heartColor,
+                                modifier = Modifier
+                                    .size(if (isLandscape) 22.dp else 26.dp)
+                                    .scale(likeScale),
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
-            SleepTimerControl(white = white, accent = accent)
+            // ── Верхний бар действий ──
+            @Composable
+            fun RenderTopBar(isLandscape: Boolean) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(if (isLandscape) 36.dp else 42.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.08f),
+                        modifier = Modifier
+                            .size(if (isLandscape) 36.dp else 42.dp)
+                            .clip(CircleShape)
+                            .clickable(onClick = onCollapse),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.KeyboardArrowDown,
+                                contentDescription = "Свернуть",
+                                tint = white,
+                                modifier = Modifier.size(if (isLandscape) 20.dp else 24.dp),
+                            )
+                        }
+                    }
 
-            error?.let {
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = "Плеер: $it",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    textAlign = TextAlign.Center,
-                )
+                    Text(
+                        text = if (showLyrics) "Текст песни" else "Сейчас играет",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = if (isLandscape) 13.5.sp else 14.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.1.sp,
+                        ),
+                        color = white,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        val vocalCut = com.melo.music.audio.VocalCutManager.isEnabled
+                        Surface(
+                            shape = CircleShape,
+                            color = if (vocalCut) accent.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f),
+                            border = if (vocalCut) BorderStroke(1.dp, accent) else null,
+                            modifier = Modifier
+                                .size(if (isLandscape) 36.dp else 42.dp)
+                                .clip(CircleShape)
+                                .clickable { com.melo.music.audio.VocalCutManager.toggle() },
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (vocalCut) Icons.Rounded.MicOff else Icons.Rounded.Mic,
+                                    contentDescription = if (vocalCut) "Вокал выключен (Караоке)" else "Убрать вокал",
+                                    tint = if (vocalCut) accent else white,
+                                    modifier = Modifier.size(if (isLandscape) 18.dp else 20.dp),
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.White.copy(alpha = 0.08f),
+                            modifier = Modifier
+                                .size(if (isLandscape) 36.dp else 42.dp)
+                                .clip(CircleShape)
+                                .clickable(onClick = onShowQueue),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.AutoMirrored.Rounded.QueueMusic,
+                                    contentDescription = "Очередь",
+                                    tint = white,
+                                    modifier = Modifier.size(if (isLandscape) 18.dp else 20.dp),
+                                )
+                            }
+                        }
+
+                        if (videoUrl != null || videoLoading) {
+                            Surface(
+                                shape = CircleShape,
+                                color = if (showVideo) cs.primaryContainer else Color.White.copy(alpha = 0.08f),
+                                modifier = Modifier
+                                    .size(if (isLandscape) 36.dp else 42.dp)
+                                    .clip(CircleShape)
+                                    .clickable(enabled = !videoLoading && videoUrl != null) {
+                                        val next = !showVideo
+                                        showVideo = next
+                                        if (next) {
+                                            showLyrics = false
+                                            videoUrl?.let { vUrl ->
+                                                com.melo.music.playback.PlaybackService.switchToVideo(vUrl)
+                                            }
+                                        } else {
+                                            com.melo.music.playback.PlaybackService.switchToAudio()
+                                        }
+                                    },
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    if (videoLoading) {
+                                        CircularProgressIndicator(
+                                            color = white,
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Rounded.Videocam,
+                                            contentDescription = "Клип",
+                                            tint = if (showVideo) cs.onPrimaryContainer else white,
+                                            modifier = Modifier.size(if (isLandscape) 18.dp else 20.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
-            Spacer(Modifier.weight(1f))
+            // ── РАСКЛАДКА: Горизонтальный режим (автомагнитолы, планшеты, ландшафт) ──
+            if (isWide) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp, vertical = 6.dp),
+                ) {
+                    RenderTopBar(isLandscape = true)
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // Левая колонка: обложка 3D (или караоке/видео)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (showLyrics) {
+                                RenderLyrics(Modifier.fillMaxSize())
+                            } else {
+                                RenderArtwork(Modifier.fillMaxHeight(0.92f).aspectRatio(1f))
+                            }
+                        }
+
+                        Spacer(Modifier.width(20.dp))
+
+                        // Правая колонка: управление воспроизведением
+                        Column(
+                            modifier = Modifier
+                                .weight(1.35f)
+                                .fillMaxHeight(),
+                            verticalArrangement = Arrangement.SpaceEvenly,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            RenderControls(isLandscape = true)
+                        }
+                    }
+                }
+            } else {
+                // ── РАСКЛАДКА: Вертикальный режим (Portrait) ──
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Spacer(Modifier.height(40.dp))
+                    RenderTopBar(isLandscape = false)
+
+                    Spacer(Modifier.weight(1f))
+
+                    Box(
+                        modifier = Modifier
+                            .weight(4.5f, fill = false)
+                            .offset { IntOffset(swipeX.value.roundToInt(), 0) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (showLyrics) {
+                            RenderLyrics(Modifier.fillMaxWidth())
+                        } else {
+                            RenderArtwork(Modifier.fillMaxWidth(0.88f).aspectRatio(1f))
+                        }
+                    }
+
+                    Spacer(Modifier.weight(1f))
+
+                    RenderControls(isLandscape = false)
+
+                    Spacer(Modifier.height(8.dp))
+                    SleepTimerControl(white = white, accent = accent)
+
+                    error?.let {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = "Плеер: $it",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+
+                    Spacer(Modifier.weight(1f))
+                }
+            }
         }
     }
 
