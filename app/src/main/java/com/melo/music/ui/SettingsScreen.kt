@@ -656,15 +656,10 @@ private fun IconPickerSection() {
                 IconPreset.entries.forEach { preset ->
                     val isSelected = current == preset.id
                     val iconRes = when (preset) {
-                        IconPreset.DEFAULT -> com.melo.music.R.mipmap.ic_launcher
-                        IconPreset.THORNS -> com.melo.music.R.mipmap.ic_launcher_thorns
-                        IconPreset.INVERTED -> com.melo.music.R.mipmap.ic_launcher_inverted
-                        IconPreset.IOS6 -> com.melo.music.R.mipmap.ic_launcher_ios6
-                    }
-                    val bitmap = remember(iconRes) {
-                        try {
-                            BitmapFactory.decodeResource(context.resources, iconRes)?.asImageBitmap()
-                        } catch (_: Exception) { null }
+                        IconPreset.DEFAULT -> com.melo.music.R.drawable.ic_preview_classic
+                        IconPreset.THORNS -> com.melo.music.R.drawable.ic_preview_thorns
+                        IconPreset.INVERTED -> com.melo.music.R.drawable.ic_preview_inverted
+                        IconPreset.IOS6 -> com.melo.music.R.drawable.ic_preview_ios6
                     }
 
                     Column(
@@ -692,14 +687,12 @@ private fun IconPickerSection() {
                                 ),
                                 modifier = Modifier.size(64.dp),
                             ) {
-                                if (bitmap != null) {
-                                    Image(
-                                        bitmap = bitmap,
-                                        contentDescription = preset.label,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
-                                    )
-                                }
+                                Image(
+                                    painter = androidx.compose.ui.res.painterResource(iconRes),
+                                    contentDescription = preset.label,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
+                                )
                             }
                             if (isSelected) {
                                 Surface(
