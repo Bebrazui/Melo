@@ -35,6 +35,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
@@ -5224,6 +5225,14 @@ private fun WavySlider(
     var dragProgress by remember { mutableFloatStateOf(value) }
     val currentFraction = if (isDragging) dragProgress else value
 
+    // Плавное выпрямление волны в прямую линию при паузе и обратный подъем при игре
+    val targetWaveFactor = if (isPlaying && !isDragging) 1f else 0f
+    val animatedWaveFactor by animateFloatAsState(
+        targetValue = targetWaveFactor,
+        animationSpec = tween(550, easing = FastOutSlowInEasing),
+        label = "waveAmplitude",
+    )
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -5267,7 +5276,7 @@ private fun WavySlider(
             val thumbX = (currentFraction * width).coerceIn(0f, width)
 
             val wavelength = 38.dp.toPx()
-            val amplitude = 4.5.dp.toPx()
+            val amplitude = 4.5.dp.toPx() * animatedWaveFactor
             val strokeWidth = 3.5.dp.toPx()
             val thumbRadius = 7.dp.toPx()
 
@@ -5390,6 +5399,60 @@ private fun FullPlayer(
         label = "likeScale",
     )
     val heartColor by animateColorAsState(if (isLiked) accent else white, label = "heart")
+    // ── Извлечение палитры обложки для кнопок Material 3 Expressive ──
+    var artColor by remember(item.thumbnailUrl) { mutableStateOf(Color(0xFF90CEFF)) }
+    LaunchedEffect(item.thumbnailUrl) {
+        val url = item.thumbnailUrl ?: return@LaunchedEffect
+        runCatching {
+            val req = coil.request.ImageRequest.Builder(playerContext)
+                .data(url)
+                .allowHardware(false)
+                .size(128)
+                .build()
+            val drawable = coil.Coil.imageLoader(playerContext).execute(req).drawable
+            val bmp = (drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+            if (bmp != null) {
+                val palette = androidx.palette.graphics.Palette.from(bmp).generate()
+                val swatch = palette.vibrantSwatch
+                    ?: palette.dominantSwatch
+                    ?: palette.lightVibrantSwatch
+                    ?: palette.mutedSwatch
+                if (swatch != null) {
+                    artColor = Color(swatch.rgb)
+                }
+            }
+        }
+    }
+
+    val playBtnColor by animateColorAsState(
+        targetValue = if (artColor.luminance() < 0.2f) lerp(artColor, Color.White, 0.65f) else lerp(artColor, Color.White, 0.42f),
+        animationSpec = tween(500),
+        label = "playBtnColor",
+    )
+    val sideBtnColor by animateColorAsState(
+        targetValue = if (artColor.luminance() < 0.2f) lerp(artColor, Color.White, 0.50f) else lerp(artColor, Color.White, 0.26f),
+        animationSpec = tween(500),
+        label = "sideBtnColor",
+    )
+    val iconTint by animateColorAsState(
+        targetValue = if (playBtnColor.luminance() > 0.45f) Color(0xFF0F1E28) else Color.White,
+        animationSpec = tween(500),
+        label = "iconTint",
+    )
+
+    // Анимация вытягивания кнопки Play/Pause при нажатии
+    val playInteractionSource = remember { MutableInteractionSource() }
+    val isPlayPressed by playInteractionSource.collectIsPressedAsState()
+    val playBounceAnim = remember { Animatable(1f) }
+
+    val playScaleX by animateFloatAsState(
+        targetValue = if (isPlayPressed) 1.24f else playBounceAnim.value,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "playScaleX",
+    )
 
     // Жесты: вниз → свернуть, вверх → панель скорости, вправо/влево → пред/след трек.
     var dragOffset by remember { mutableStateOf(0f) }
@@ -5521,10 +5584,16 @@ private fun FullPlayer(
 
                 Text(
                     text = if (showLyrics) "Текст песни" else "Сейчас играет",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 14.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.1.sp,
+                    ),
                     color = white,
                     textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -5907,18 +5976,18 @@ private fun FullPlayer(
 
             Spacer(Modifier.height(22.dp))
 
-            // 5. Главный блок воспроизведения: асимметричный Expressive Shape Trio (Круг - Сквиркл - Круг)
+            // 5. Главный блок воспроизведения: асимметричный Expressive Shape Trio в цвет обложки
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Предыдущий трек: небесно-голубой круг
+                // Предыдущий трек: круг в цвет обложки (66dp)
                 Surface(
                     shape = CircleShape,
-                    color = Color(0xFF90CEFF),
+                    color = sideBtnColor,
                     modifier = Modifier
-                        .size(68.dp)
+                        .size(66.dp)
                         .clip(CircleShape)
                         .clickable(onClick = onPrev),
                 ) {
@@ -5926,21 +5995,40 @@ private fun FullPlayer(
                         Icon(
                             Icons.Rounded.SkipPrevious,
                             contentDescription = "Назад",
-                            tint = Color(0xFF003355),
-                            modifier = Modifier.size(34.dp),
+                            tint = iconTint,
+                            modifier = Modifier.size(32.dp),
                         )
                     }
                 }
 
-                // Play / Pause: лавандово-голубой сквиркл M3 Expressive
+                Spacer(Modifier.width(18.dp))
+
+                // Play / Pause: сквиркл в цвет обложки с вытягиванием в длину при нажатии (96dp * scaleX, 74dp)
                 Surface(
                     shape = RoundedCornerShape(26.dp),
-                    color = Color(0xFFBAC7FF),
+                    color = playBtnColor,
                     shadowElevation = 8.dp,
                     modifier = Modifier
-                        .size(82.dp)
+                        .width(96.dp * playScaleX)
+                        .height(74.dp)
                         .clip(RoundedCornerShape(26.dp))
-                        .clickable(onClick = onTogglePlayPause),
+                        .clickable(
+                            interactionSource = playInteractionSource,
+                            indication = ripple(bounded = true),
+                            onClick = {
+                                gestureScope.launch {
+                                    playBounceAnim.snapTo(1.25f)
+                                    playBounceAnim.animateTo(
+                                        targetValue = 1f,
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                                            stiffness = Spring.StiffnessMediumLow,
+                                        ),
+                                    )
+                                }
+                                onTogglePlayPause()
+                            },
+                        ),
                 ) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -5950,27 +6038,29 @@ private fun FullPlayer(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(32.dp),
                                 strokeWidth = 3.dp,
-                                color = Color(0xFF003355),
+                                color = iconTint,
                             )
                         } else {
                             AnimatedContent(targetState = isPlaying, label = "playPause") { playing ->
                                 Icon(
                                     imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                                     contentDescription = if (playing) "Пауза" else "Играть",
-                                    tint = Color(0xFF003355),
-                                    modifier = Modifier.size(42.dp),
+                                    tint = iconTint,
+                                    modifier = Modifier.size(40.dp),
                                 )
                             }
                         }
                     }
                 }
 
-                // Следующий трек: небесно-голубой круг
+                Spacer(Modifier.width(18.dp))
+
+                // Следующий трек: круг в цвет обложки (66dp)
                 Surface(
                     shape = CircleShape,
-                    color = Color(0xFF90CEFF),
+                    color = sideBtnColor,
                     modifier = Modifier
-                        .size(68.dp)
+                        .size(66.dp)
                         .clip(CircleShape)
                         .clickable(onClick = onNext),
                 ) {
@@ -5978,8 +6068,8 @@ private fun FullPlayer(
                         Icon(
                             Icons.Rounded.SkipNext,
                             contentDescription = "Вперёд",
-                            tint = Color(0xFF003355),
-                            modifier = Modifier.size(34.dp),
+                            tint = iconTint,
+                            modifier = Modifier.size(32.dp),
                         )
                     }
                 }
