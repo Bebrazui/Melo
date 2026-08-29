@@ -37,7 +37,9 @@ import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Arrangement
@@ -100,6 +102,7 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Lock
@@ -166,6 +169,10 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
@@ -5182,6 +5189,128 @@ private fun SpeedSelector(
     }
 }
 
+/**
+ * Wavy/Squiggly Progress Bar в стиле Android 13/14/15 Media Player (Material 3 Expressive):
+ * Проигранная часть — живая синусоидальная волна с кругляшом-ползунком на конце,
+ * оставшаяся часть — прямая полупрозрачная линия. При воспроизведении волна мягко колышется!
+ */
+@Composable
+private fun WavySlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit,
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier,
+    activeColor: Color = Color.White,
+    inactiveColor: Color = Color.White.copy(alpha = 0.25f),
+    thumbColor: Color = Color.White,
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "waveAnim")
+    val wavePhase by if (isPlaying) {
+        infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = (2 * Math.PI).toFloat(),
+            animationSpec = infiniteRepeatable(
+                animation = tween(1400, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "wavePhase",
+        )
+    } else {
+        remember { mutableFloatStateOf(0f) }
+    }
+
+    var isDragging by remember { mutableStateOf(false) }
+    var dragProgress by remember { mutableFloatStateOf(value) }
+    val currentFraction = if (isDragging) dragProgress else value
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(38.dp)
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    val newF = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
+                    onValueChange(newF)
+                    onValueChangeFinished()
+                }
+            }
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        isDragging = true
+                        val newF = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
+                        dragProgress = newF
+                        onValueChange(newF)
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        val newF = (change.position.x / size.width.toFloat()).coerceIn(0f, 1f)
+                        dragProgress = newF
+                        onValueChange(newF)
+                    },
+                    onDragEnd = {
+                        isDragging = false
+                        onValueChangeFinished()
+                    },
+                    onDragCancel = {
+                        isDragging = false
+                    },
+                )
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val width = size.width
+            val height = size.height
+            val centerY = height / 2f
+            val thumbX = (currentFraction * width).coerceIn(0f, width)
+
+            val wavelength = 38.dp.toPx()
+            val amplitude = 4.5.dp.toPx()
+            val strokeWidth = 3.5.dp.toPx()
+            val thumbRadius = 7.dp.toPx()
+
+            // 1. Волнистая линия пройденной части трека
+            if (thumbX > 1f) {
+                val wavePath = Path()
+                wavePath.moveTo(0f, centerY)
+                var x = 0f
+                val step = 2f
+                while (x <= thumbX) {
+                    val damp = if (thumbX - x < wavelength * 0.45f) (thumbX - x) / (wavelength * 0.45f) else 1f
+                    val y = centerY + kotlin.math.sin((x / wavelength) * 2 * Math.PI.toFloat() - wavePhase) * amplitude * damp
+                    wavePath.lineTo(x, y)
+                    x += step
+                }
+                drawPath(
+                    path = wavePath,
+                    color = activeColor,
+                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round),
+                )
+            }
+
+            // 2. Ползунок (Thumb)
+            drawCircle(
+                color = thumbColor,
+                radius = thumbRadius,
+                center = Offset(thumbX, centerY),
+            )
+
+            // 3. Прямая линия непроигранной части
+            if (thumbX < width - 1f) {
+                drawLine(
+                    color = inactiveColor,
+                    start = Offset(thumbX + thumbRadius, centerY),
+                    end = Offset(width, centerY),
+                    strokeWidth = 3.dp.toPx(),
+                    cap = StrokeCap.Round,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun FullPlayer(
     item: TrackItem,
@@ -5619,14 +5748,15 @@ private fun FullPlayer(
                             }
                         }
 
-                        Spacer(Modifier.height(30.dp))
+                        Spacer(Modifier.height(24.dp))
 
-                        // 3. Заголовок трека и Лайк
+                        // 3. Заголовок трека, исполнитель и кнопка Текста (M3 Expressive)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                                 Text(
                                     text = item.title,
                                     style = MaterialTheme.typography.headlineSmall.copy(
@@ -5640,76 +5770,47 @@ private fun FullPlayer(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 item.uploader?.let { artistName ->
-                                    Spacer(Modifier.height(6.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = Color.White.copy(alpha = 0.08f),
-                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .clickable {
-                                                val artistItem = TrackItem(
-                                                    title = artistName,
-                                                    uploader = artistName,
-                                                    url = "artist:$artistName",
-                                                    durationSeconds = 0L,
-                                                    thumbnailUrl = item.thumbnailUrl,
-                                                    source = item.source,
-                                                    kind = ItemKind.ARTIST,
-                                                )
-                                                onOpenArtist(artistItem)
-                                            },
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                        ) {
-                                            Text(
-                                                text = artistName,
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = whiteDim,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                            )
-                                            Spacer(Modifier.width(4.dp))
-                                            Icon(
-                                                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                                                contentDescription = "Страница артиста",
-                                                tint = whiteDim.copy(alpha = 0.7f),
-                                                modifier = Modifier.size(14.dp),
-                                            )
-                                        }
-                                    }
-                                }
-                                Spacer(Modifier.height(8.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    SourceBadge(item.source, Modifier.size(16.dp))
-                                    Spacer(Modifier.width(6.dp))
+                                    Spacer(Modifier.height(4.dp))
                                     Text(
-                                        text = sourceLabel(item.source),
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        text = artistName.uppercase(Locale.getDefault()),
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 0.6.sp,
+                                        ),
                                         color = whiteDim,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.clickable {
+                                            val artistItem = TrackItem(
+                                                title = artistName,
+                                                uploader = artistName,
+                                                url = "artist:$artistName",
+                                                durationSeconds = 0L,
+                                                thumbnailUrl = item.thumbnailUrl,
+                                                source = item.source,
+                                                kind = ItemKind.ARTIST,
+                                            )
+                                            onOpenArtist(artistItem)
+                                        },
                                     )
                                 }
                             }
 
-                            // Тактильная кнопка лайка
+                            // Круглая кнопка Текста (Lyrics) как на референсе
                             Surface(
                                 shape = CircleShape,
-                                color = if (isLiked) accent.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f),
-                                border = if (isLiked) BorderStroke(1.dp, accent.copy(alpha = 0.4f)) else null,
+                                color = if (showLyrics) cs.primaryContainer else Color.White.copy(alpha = 0.10f),
                                 modifier = Modifier
                                     .size(48.dp)
                                     .clip(CircleShape)
-                                    .clickable(onClick = onToggleLike),
+                                    .clickable { showLyrics = !showLyrics },
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                                        contentDescription = "Нравится",
-                                        tint = heartColor,
-                                        modifier = Modifier.size(26.dp).scale(likeScale),
+                                        Icons.Rounded.Lyrics,
+                                        contentDescription = "Текст песни",
+                                        tint = if (showLyrics) cs.onPrimaryContainer else white,
+                                        modifier = Modifier.size(22.dp),
                                     )
                                 }
                             }
@@ -5734,12 +5835,13 @@ private fun FullPlayer(
                 }
             }
 
-            Spacer(Modifier.height(26.dp))
+            Spacer(Modifier.height(20.dp))
 
-            // 4. Прогресс-бар воспроизведения
+            // 4. Wavy/Squiggly Прогресс-бар в стиле Android 14/15 Media Player
             val fraction = dragFraction
                 ?: if (duration > 0) position.toFloat() / duration else 0f
-            Slider(
+
+            WavySlider(
                 value = fraction.coerceIn(0f, 1f),
                 onValueChange = { dragFraction = it },
                 onValueChangeFinished = {
@@ -5749,56 +5851,74 @@ private fun FullPlayer(
                     }
                     dragFraction = null
                 },
-                colors = SliderDefaults.colors(
-                    thumbColor = white,
-                    activeTrackColor = white,
-                    inactiveTrackColor = Color.White.copy(alpha = 0.22f),
-                ),
+                isPlaying = isPlaying,
+                activeColor = white,
+                inactiveColor = Color.White.copy(alpha = 0.24f),
+                thumbColor = white,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(formatMillis(position), style = MaterialTheme.typography.bodySmall, color = whiteDim)
-                Text(
-                    text = if (duration > 0) formatMillis(duration) else "--:--",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = whiteDim,
-                )
+
+            // Временные метки и плашка качества звука
+            val qualityLabel = remember(item.source, item.url) {
+                when (item.source) {
+                    Source.YOUTUBE_MUSIC -> "44.1 kHz • 256 kbps • Opus"
+                    Source.SOUNDCLOUD -> "44.1 kHz • 160 kbps • MP3"
+                    Source.BANDCAMP -> "44.1 kHz • 320 kbps • MP3"
+                    Source.LOCAL -> "44.1 kHz • Lossless • FLAC"
+                    else -> "44.1 kHz • 320 kbps • MP3"
+                }
             }
 
-            Spacer(Modifier.height(18.dp))
-
-            // 5. Главный блок управления воспроизведением (Material 3 Expressive)
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Text(
+                    formatMillis(position),
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                    color = whiteDim,
+                )
+
                 Surface(
-                    shape = CircleShape,
-                    color = if (shuffle) accent.copy(alpha = 0.2f) else Color.Transparent,
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(CircleShape)
-                        .clickable(onClick = onToggleShuffle),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color.White.copy(alpha = 0.08f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+                    modifier = Modifier.height(26.dp),
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Rounded.Shuffle,
-                            contentDescription = "Перемешать",
-                            tint = if (shuffle) accent else white,
-                            modifier = Modifier.size(24.dp),
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    ) {
+                        Text(
+                            text = qualityLabel,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = whiteDim,
                         )
                     }
                 }
 
+                Text(
+                    text = if (duration > 0) formatMillis(duration) else "--:--",
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                    color = whiteDim,
+                )
+            }
+
+            Spacer(Modifier.height(22.dp))
+
+            // 5. Главный блок воспроизведения: асимметричный Expressive Shape Trio (Круг - Сквиркл - Круг)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Предыдущий трек: небесно-голубой круг
                 Surface(
                     shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.08f),
+                    color = Color(0xFF90CEFF),
                     modifier = Modifier
-                        .size(54.dp)
+                        .size(68.dp)
                         .clip(CircleShape)
                         .clickable(onClick = onPrev),
                 ) {
@@ -5806,20 +5926,20 @@ private fun FullPlayer(
                         Icon(
                             Icons.Rounded.SkipPrevious,
                             contentDescription = "Назад",
-                            tint = white,
+                            tint = Color(0xFF003355),
                             modifier = Modifier.size(34.dp),
                         )
                     }
                 }
 
-                // Крупная кнопка Play M3 Expressive (82dp)
+                // Play / Pause: лавандово-голубой сквиркл M3 Expressive
                 Surface(
-                    shape = CircleShape,
-                    color = white,
+                    shape = RoundedCornerShape(26.dp),
+                    color = Color(0xFFBAC7FF),
                     shadowElevation = 8.dp,
                     modifier = Modifier
                         .size(82.dp)
-                        .clip(CircleShape)
+                        .clip(RoundedCornerShape(26.dp))
                         .clickable(onClick = onTogglePlayPause),
                 ) {
                     Box(
@@ -5830,14 +5950,14 @@ private fun FullPlayer(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(32.dp),
                                 strokeWidth = 3.dp,
-                                color = Color.Black,
+                                color = Color(0xFF003355),
                             )
                         } else {
                             AnimatedContent(targetState = isPlaying, label = "playPause") { playing ->
                                 Icon(
                                     imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                                     contentDescription = if (playing) "Пауза" else "Играть",
-                                    tint = Color.Black,
+                                    tint = Color(0xFF003355),
                                     modifier = Modifier.size(42.dp),
                                 )
                             }
@@ -5845,11 +5965,12 @@ private fun FullPlayer(
                     }
                 }
 
+                // Следующий трек: небесно-голубой круг
                 Surface(
                     shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.08f),
+                    color = Color(0xFF90CEFF),
                     modifier = Modifier
-                        .size(54.dp)
+                        .size(68.dp)
                         .clip(CircleShape)
                         .clickable(onClick = onNext),
                 ) {
@@ -5857,26 +5978,73 @@ private fun FullPlayer(
                         Icon(
                             Icons.Rounded.SkipNext,
                             contentDescription = "Вперёд",
-                            tint = white,
+                            tint = Color(0xFF003355),
                             modifier = Modifier.size(34.dp),
                         )
                     }
                 }
+            }
 
-                Surface(
-                    shape = CircleShape,
-                    color = if (repeatOne) accent.copy(alpha = 0.2f) else Color.Transparent,
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(CircleShape)
-                        .clickable(onClick = onToggleRepeat),
+            Spacer(Modifier.height(22.dp))
+
+            // 6. Нижний сегментированный остров действий (Pill Island: Shuffle • Repeat • Like)
+            Surface(
+                shape = RoundedCornerShape(32.dp),
+                color = Color.Black.copy(alpha = 0.38f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                modifier = Modifier
+                    .fillMaxWidth(0.88f)
+                    .height(60.dp)
+                    .clip(RoundedCornerShape(32.dp)),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    // Перемешать
+                    IconButton(onClick = onToggleShuffle) {
                         Icon(
-                            Icons.Rounded.Repeat,
-                            contentDescription = "Повтор",
-                            tint = if (repeatOne) accent else white,
+                            Icons.Rounded.Shuffle,
+                            contentDescription = "Перемешать",
+                            tint = if (shuffle) accent else whiteDim,
                             modifier = Modifier.size(24.dp),
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(24.dp)
+                            .background(Color.White.copy(alpha = 0.10f)),
+                    )
+
+                    // Повтор
+                    IconButton(onClick = onToggleRepeat) {
+                        Icon(
+                            imageVector = if (repeatOne) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                            contentDescription = "Повтор",
+                            tint = if (repeatOne) accent else whiteDim,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(24.dp)
+                            .background(Color.White.copy(alpha = 0.10f)),
+                    )
+
+                    // Лайк / Избранное
+                    IconButton(onClick = onToggleLike) {
+                        Icon(
+                            imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                            contentDescription = "Нравится",
+                            tint = heartColor,
+                            modifier = Modifier
+                                .size(26.dp)
+                                .scale(likeScale),
                         )
                     }
                 }
