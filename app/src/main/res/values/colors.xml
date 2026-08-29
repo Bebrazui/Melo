@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#CBD1CD</color>
-    <color name="ic_launcher_background_thorns">#A3CBFE</color>
-    <color name="ic_launcher_background_inverted">#352C31</color>
-    <color name="ic_launcher_background_ios6">#E0E6E3</color>
+    <color name="ic_launcher_background">#C0C9C4</color>
+    <color name="ic_launcher_background_thorns">#A2CBFF</color>
+    <color name="ic_launcher_background_inverted">#3F363B</color>
+    <color name="ic_launcher_background_ios6">#E3E9E5</color>
 </resources>
