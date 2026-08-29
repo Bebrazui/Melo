@@ -5761,12 +5761,12 @@ private fun FullPlayer(
                 val lyr = lyrics
                 when {
                     lyricsLoading -> Box(
-                        modifier = boxModifier.height(280.dp),
+                        modifier = boxModifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
                     ) { CircularProgressIndicator(color = white) }
 
                     lyr == null || lyr.isEmpty -> Box(
-                        modifier = boxModifier.height(280.dp),
+                        modifier = boxModifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
                     ) { Text("Текст не найден", color = whiteDim, textAlign = TextAlign.Center) }
 
@@ -5776,11 +5776,12 @@ private fun FullPlayer(
                         onSeek = onSeek,
                         white = white,
                         dim = whiteDim,
+                        modifier = boxModifier.fillMaxSize(),
                     )
 
                     else -> Column(
                         modifier = boxModifier
-                            .heightIn(min = 220.dp, max = 340.dp)
+                            .fillMaxSize()
                             .verticalScroll(rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
@@ -5789,7 +5790,7 @@ private fun FullPlayer(
                             color = white,
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
                         )
                     }
                 }
@@ -6313,22 +6314,31 @@ private fun FullPlayer(
                     Spacer(Modifier.height(40.dp))
                     RenderTopBar(isLandscape = false)
 
-                    Spacer(Modifier.weight(1f))
-
-                    Box(
-                        modifier = Modifier
-                            .weight(4.5f, fill = false)
-                            .offset { IntOffset(swipeX.value.roundToInt(), 0) },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (showLyrics) {
-                            RenderLyrics(Modifier.fillMaxWidth())
-                        } else {
-                            RenderArtwork(Modifier.fillMaxWidth(0.88f).aspectRatio(1f))
+                    if (showLyrics) {
+                        // Режим текста: отдаём тексту максимум свободного пространства
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            RenderLyrics(Modifier.fillMaxSize())
                         }
+                    } else {
+                        // Режим обложки: центрируем обложку между шапкой и кнопками
+                        Spacer(Modifier.weight(1f))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.88f)
+                                .aspectRatio(1f)
+                                .offset { IntOffset(swipeX.value.roundToInt(), 0) },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            RenderArtwork(Modifier.fillMaxSize())
+                        }
+                        Spacer(Modifier.weight(1f))
                     }
-
-                    Spacer(Modifier.weight(1f))
 
                     RenderControls(isLandscape = false)
 
@@ -6336,7 +6346,7 @@ private fun FullPlayer(
                     SleepTimerControl(white = white, accent = accent)
 
                     error?.let {
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(8.dp))
                         Text(
                             text = "Плеер: $it",
                             style = MaterialTheme.typography.bodySmall,
@@ -6345,7 +6355,8 @@ private fun FullPlayer(
                         )
                     }
 
-                    Spacer(Modifier.weight(1f))
+                    // Комфортный отступ снизу без лишней пустоты
+                    Spacer(Modifier.height(14.dp))
                 }
             }
         }
@@ -6471,6 +6482,7 @@ private fun SyncedLyrics(
     onSeek: (Long) -> Unit,
     white: Color,
     dim: Color,
+    modifier: Modifier = Modifier.fillMaxSize(),
 ) {
     val activeIndex = remember(positionMs, lines) {
         lines.indexOfLast { it.timeMs <= positionMs }.coerceAtLeast(0)
@@ -6499,9 +6511,9 @@ private fun SyncedLyrics(
     }
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxWidth().height(320.dp),
+        modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        contentPadding = PaddingValues(vertical = 130.dp),
+        contentPadding = PaddingValues(vertical = 110.dp),
     ) {
         val karaoke = com.melo.music.settings.AppSettings.karaoke
         itemsIndexed(lines) { i, line ->
