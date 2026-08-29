@@ -5624,10 +5624,10 @@ private fun FullPlayer(
                 .fillMaxSize()
                 .graphicsLayer {
                     // Контр-параллакс фона при наклоне устройства для создания ощущения глубины
-                    translationX = -tiltRoll * 14.dp.toPx()
-                    translationY = -tiltPitch * 14.dp.toPx()
-                    scaleX = 1.08f
-                    scaleY = 1.08f
+                    translationX = -tiltRoll * 4.dp.toPx()
+                    translationY = -tiltPitch * 4.dp.toPx()
+                    scaleX = 1.03f
+                    scaleY = 1.03f
                 },
         )
         Box(
@@ -5647,12 +5647,12 @@ private fun FullPlayer(
 
             val art3dModifier = Modifier
                 .graphicsLayer {
-                    rotationY = tiltRoll * 14f
-                    rotationX = -tiltPitch * 14f
-                    translationX = tiltRoll * 12.dp.toPx()
-                    translationY = tiltPitch * 12.dp.toPx()
-                    cameraDistance = 14f * density
-                    shadowElevation = (14f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 8f).dp.toPx()
+                    rotationY = tiltRoll * 5f
+                    rotationX = -tiltPitch * 5f
+                    translationX = tiltRoll * 4.dp.toPx()
+                    translationY = tiltPitch * 4.dp.toPx()
+                    cameraDistance = 20f * density
+                    shadowElevation = (10f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 2f).dp.toPx()
                 }
 
             // ── Компонент обложки или видеоклипа ──
@@ -5730,25 +5730,21 @@ private fun FullPlayer(
                                     modifier = Modifier.fillMaxSize(),
                                 )
 
-                                // Живой динамический 3D-глянцевый блик на всей площади квадратной обложки
+                                // Едва заметный, мягкий круглый блик света
                                 Canvas(modifier = Modifier.fillMaxSize()) {
-                                    val w = size.width
-                                    val h = size.height
-                                    val sweepShift = tiltRoll * 0.45f + tiltPitch * 0.35f
-                                    val basePos = (0.5f + sweepShift).coerceIn(0.1f, 0.9f)
-                                    val sheenAlpha = (0.28f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 0.12f).coerceIn(0.06f, 0.45f)
+                                    val sheenAlpha = (0.10f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 0.04f).coerceIn(0.02f, 0.14f)
+                                    val cx = size.width * (0.45f + tiltRoll * 0.25f)
+                                    val cy = size.height * (0.40f + tiltPitch * 0.25f)
+                                    val maxDim = kotlin.math.max(size.width, size.height)
 
                                     drawRect(
-                                        brush = Brush.linearGradient(
-                                            0.0f to Color.Transparent,
-                                            (basePos - 0.25f).coerceIn(0f, 1f) to Color.White.copy(alpha = sheenAlpha * 0.08f),
-                                            (basePos - 0.08f).coerceIn(0f, 1f) to Color.White.copy(alpha = sheenAlpha * 0.70f),
-                                            basePos to Color.White.copy(alpha = sheenAlpha),
-                                            (basePos + 0.08f).coerceIn(0f, 1f) to Color.White.copy(alpha = sheenAlpha * 0.70f),
-                                            (basePos + 0.25f).coerceIn(0f, 1f) to Color.White.copy(alpha = sheenAlpha * 0.08f),
+                                        brush = Brush.radialGradient(
+                                            0.0f to Color.White.copy(alpha = sheenAlpha),
+                                            0.35f to Color.White.copy(alpha = sheenAlpha * 0.45f),
+                                            0.70f to Color.White.copy(alpha = sheenAlpha * 0.10f),
                                             1.0f to Color.Transparent,
-                                            start = Offset(0f, h),
-                                            end = Offset(w, 0f),
+                                            center = Offset(cx, cy),
+                                            radius = maxDim * 0.95f,
                                         ),
                                         size = size,
                                     )
@@ -5807,8 +5803,8 @@ private fun FullPlayer(
                     modifier = Modifier
                         .fillMaxWidth()
                         .graphicsLayer {
-                            translationX = tiltRoll * 8.dp.toPx()
-                            translationY = tiltPitch * 8.dp.toPx()
+                            translationX = tiltRoll * 2.5.dp.toPx()
+                            translationY = tiltPitch * 2.5.dp.toPx()
                         },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -5862,11 +5858,11 @@ private fun FullPlayer(
                             .size(if (isLandscape) 42.dp else 48.dp)
                             .clip(CircleShape)
                             .graphicsLayer {
-                                rotationY = tiltRoll * 10f
-                                rotationX = -tiltPitch * 10f
-                                translationX = tiltRoll * 6.dp.toPx()
-                                translationY = tiltPitch * 6.dp.toPx()
-                                cameraDistance = 14f * density
+                                rotationY = tiltRoll * 3.5f
+                                rotationX = -tiltPitch * 3.5f
+                                translationX = tiltRoll * 1.5.dp.toPx()
+                                translationY = tiltPitch * 1.5.dp.toPx()
+                                cameraDistance = 20f * density
                             }
                             .clickable { showLyrics = !showLyrics },
                     ) {
@@ -5890,8 +5886,8 @@ private fun FullPlayer(
                     modifier = Modifier
                         .fillMaxWidth()
                         .graphicsLayer {
-                            translationX = tiltRoll * 5.dp.toPx()
-                            translationY = tiltPitch * 5.dp.toPx()
+                            translationX = tiltRoll * 1.8.dp.toPx()
+                            translationY = tiltPitch * 1.8.dp.toPx()
                         },
                 ) {
                     val fraction = dragFraction
@@ -5970,11 +5966,11 @@ private fun FullPlayer(
                     modifier = Modifier
                         .fillMaxWidth()
                         .graphicsLayer {
-                            rotationY = tiltRoll * 8f
-                            rotationX = -tiltPitch * 8f
-                            translationX = tiltRoll * 7.dp.toPx()
-                            translationY = tiltPitch * 7.dp.toPx()
-                            cameraDistance = 14f * density
+                            rotationY = tiltRoll * 3.5f
+                            rotationX = -tiltPitch * 3.5f
+                            translationX = tiltRoll * 2.dp.toPx()
+                            translationY = tiltPitch * 2.dp.toPx()
+                            cameraDistance = 20f * density
                         },
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
@@ -6086,11 +6082,11 @@ private fun FullPlayer(
                         .height(if (isLandscape) 52.dp else 60.dp)
                         .clip(RoundedCornerShape(32.dp))
                         .graphicsLayer {
-                            rotationY = tiltRoll * 6f
-                            rotationX = -tiltPitch * 6f
-                            translationX = tiltRoll * 4.dp.toPx()
-                            translationY = tiltPitch * 4.dp.toPx()
-                            cameraDistance = 14f * density
+                            rotationY = tiltRoll * 2.5f
+                            rotationX = -tiltPitch * 2.5f
+                            translationX = tiltRoll * 1.2.dp.toPx()
+                            translationY = tiltPitch * 1.2.dp.toPx()
+                            cameraDistance = 20f * density
                         },
                 ) {
                     Row(
