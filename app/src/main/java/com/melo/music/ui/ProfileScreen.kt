@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.melo.music.ui.theme.bouncyOverscroll
+import com.melo.music.ui.theme.bouncyHorizontalOverscroll
 import com.melo.music.ui.theme.carouselCenterItemEffect
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -598,6 +599,7 @@ private fun TrackLane(tracks: List<TrackItem>, onPlay: (List<TrackItem>, Int) ->
     val laneState = rememberLazyListState()
     LazyRow(
         state = laneState,
+        modifier = Modifier.bouncyHorizontalOverscroll(),
         contentPadding = PaddingValues(horizontal = 18.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {

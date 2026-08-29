@@ -111,6 +111,29 @@ class PlaybackService : MediaSessionService() {
         /** Остаток до засыпания (мс), 0 если по минутам не задан. */
         fun sleepRemainingMs(): Long =
             if (sleepEndAt > 0L) (sleepEndAt - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L) else 0L
+
+        @Volatile var activePlayerProvider: (() -> ExoPlayer?)? = null
+        val activePlayer: ExoPlayer? get() = activePlayerProvider?.invoke()
+
+        @Volatile var currentAudioStreamUrl: String? = null
+
+        var switchStreamUrlCmd: ((url: String, positionMs: Long) -> Unit)? = null
+        fun switchStream(url: String, positionMs: Long) {
+            switchStreamUrlCmd?.invoke(url, positionMs)
+        }
+
+        fun switchToVideo(videoUrl: String) {
+            val player = activePlayer ?: return
+            val pos = player.currentPosition
+            switchStream(videoUrl, pos)
+        }
+
+        fun switchToAudio() {
+            val player = activePlayer ?: return
+            val audio = currentAudioStreamUrl ?: return
+            val pos = player.currentPosition
+            switchStream(audio, pos)
+        }
     }
 
     private var mediaSession: MediaSession? = null
@@ -234,6 +257,19 @@ class PlaybackService : MediaSessionService() {
 
         playerA = buildPlayer()
         playerB = buildPlayer()
+
+        activePlayerProvider = { active }
+        switchStreamUrlCmd = { streamUrl, pos ->
+            handler.post {
+                val curMeta = active.mediaMetadata
+                active.setMediaItem(
+                    MediaItem.Builder().setUri(streamUrl).setMediaMetadata(curMeta).build(),
+                    pos,
+                )
+                active.prepare()
+                active.play()
+            }
+        }
 
         active.addListener(endListener)
 
@@ -432,6 +468,7 @@ class PlaybackService : MediaSessionService() {
             .setAlbumArtist(artist ?: "")
             .setSubtitle(artist ?: "")
         artwork?.let { meta.setArtworkUri(android.net.Uri.parse(it)) }
+        currentAudioStreamUrl = url
         toP.setMediaItem(
             MediaItem.Builder()
                 .setUri(url)
@@ -508,6 +545,8 @@ class PlaybackService : MediaSessionService() {
         mediaSession?.release()
         runCatching { playerA.release() }
         runCatching { playerB.release() }
+        activePlayerProvider = null
+        switchStreamUrlCmd = null
         mediaSession = null
         super.onDestroy()
     }

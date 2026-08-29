@@ -107,6 +107,10 @@ import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Videocam
+import androidx.compose.material.icons.rounded.Fullscreen
+import androidx.compose.ui.viewinterop.AndroidView
+import com.melo.music.extractor.NewPipeResolver
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -205,6 +209,7 @@ import com.melo.music.ui.theme.ShapeCache
 import com.melo.music.ui.theme.pressScale
 import com.melo.music.ui.theme.carouselCenterItemEffect
 import com.melo.music.ui.theme.bouncyOverscroll
+import com.melo.music.ui.theme.bouncyHorizontalOverscroll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
@@ -310,6 +315,7 @@ fun PlayerScreen(
 
     val scope = rememberCoroutineScope()
     var selectedTab by rememberSaveable { mutableStateOf(MeloTab.Home) }
+    var previousTab by rememberSaveable { mutableStateOf(MeloTab.Home) }
     var playerExpanded by rememberSaveable { mutableStateOf(false) }
     var artistOpen by rememberSaveable(stateSaver = TrackSaver.singleSaver()) { mutableStateOf<TrackItem?>(null) }
     var playlistOpen by remember { mutableStateOf<Playlist?>(null) }
@@ -744,11 +750,12 @@ fun PlayerScreen(
         }
     }
 
-    // Назад: закрыть плеер → закрыть артиста → выйти.
-    BackHandler(enabled = playerExpanded || artistOpen != null || searchMode) {
+    // Назад: закрыть плеер → закрыть артиста → выйти из карты/поиска.
+    BackHandler(enabled = playerExpanded || artistOpen != null || searchMode || selectedTab == MeloTab.Map) {
         when {
             playerExpanded -> playerExpanded = false
             artistOpen != null -> artistOpen = null
+            selectedTab == MeloTab.Map -> selectedTab = previousTab
             searchMode -> {
                 searchMode = false
                 query = ""
@@ -802,7 +809,15 @@ fun PlayerScreen(
         containerColor = Color.Transparent,
         contentColor = onBg,
         bottomBar = {
-            MeloBottomNav(selected = selectedTab, onSelect = { selectedTab = it })
+            MeloBottomNav(
+                selected = selectedTab,
+                onSelect = {
+                    if (it != selectedTab) {
+                        previousTab = selectedTab
+                        selectedTab = it
+                    }
+                },
+            )
         },
     ) { innerPadding ->
       Box(modifier = Modifier.fillMaxSize()) {
@@ -996,22 +1011,23 @@ fun PlayerScreen(
           )
         }
 
-        // Карта — отдельный слой во весь экран с плавной анимацией открытия.
+        // Карта — отдельный слой во весь экран с направленным боковым выездом (смотря откуда перешли).
+        val mapFromLeft = previousTab.ordinal < MeloTab.Map.ordinal
         AnimatedVisibility(
             visible = selectedTab == MeloTab.Map,
-            enter = slideInVertically(
+            enter = slideInHorizontally(
                 animationSpec = tween(Motion.TRANSITION_MS, easing = Motion.EmphasizedDecelerate),
-                initialOffsetY = { it / 3 },
-            ) + fadeIn(tween(Motion.FADE_MS)) + scaleIn(tween(Motion.TRANSITION_MS, easing = Motion.EmphasizedDecelerate), initialScale = 0.94f),
-            exit = slideOutVertically(
+                initialOffsetX = { if (mapFromLeft) it else -it },
+            ) + fadeIn(tween(Motion.FADE_MS)),
+            exit = slideOutHorizontally(
                 animationSpec = tween(280, easing = Motion.EmphasizedAccelerate),
-                targetOffsetY = { it / 3 },
-            ) + fadeOut(tween(160)) + scaleOut(tween(280), targetScale = 0.94f),
+                targetOffsetX = { if (mapFromLeft) it else -it },
+            ) + fadeOut(tween(160)),
         ) {
             com.melo.music.map.MusicMapScreen(
                 onSearch = onSearch,
                 onPlay = { track -> playAt(listOf(track), 0) },
-                onClose = { selectedTab = MeloTab.Home },
+                onClose = { selectedTab = previousTab },
                 topInset = innerPadding.calculateTopPadding(),
                 bottomInset = innerPadding.calculateBottomPadding(),
                 nowPlayingBar = {
@@ -2719,6 +2735,7 @@ private fun HomeFeed(
                 val histRowState = rememberLazyListState()
                 LazyRow(
                     state = histRowState,
+                    modifier = Modifier.bouncyHorizontalOverscroll(),
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -2763,6 +2780,7 @@ private fun HomeFeed(
                         val persRowState = rememberLazyListState()
                         LazyRow(
                             state = persRowState,
+                            modifier = Modifier.bouncyHorizontalOverscroll(),
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
@@ -2984,6 +3002,7 @@ private fun HorizontalShelf(
     val shelfRowState = rememberLazyListState()
     LazyRow(
         state = shelfRowState,
+        modifier = Modifier.bouncyHorizontalOverscroll(),
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -4105,6 +4124,7 @@ private fun ArtistScreen(
                     val simRowState = rememberLazyListState()
                     LazyRow(
                         state = simRowState,
+                        modifier = Modifier.bouncyHorizontalOverscroll(),
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
@@ -5189,7 +5209,29 @@ private fun FullPlayer(
     onOpenArtist: (TrackItem) -> Unit = {},
     onCollapse: () -> Unit,
 ) {
-    BackHandler(onBack = onCollapse)
+    val playerContext = androidx.compose.ui.platform.LocalContext.current
+    var showVideo by remember(item.url) { mutableStateOf(false) }
+    var videoUrl by remember(item.url) { mutableStateOf<String?>(null) }
+    var videoLoading by remember(item.url) { mutableStateOf(false) }
+    var isFullscreenVideo by remember { mutableStateOf(false) }
+
+    LaunchedEffect(item.url) {
+        showVideo = false
+        videoUrl = null
+        if (item.source == Source.YOUTUBE_MUSIC || NewPipeResolver.isYouTube(item.url)) {
+            videoLoading = true
+            videoUrl = runCatching { NewPipeResolver.resolveVideo(playerContext, item.url) }.getOrNull()
+            videoLoading = false
+        }
+    }
+
+    BackHandler(onBack = {
+        if (isFullscreenVideo) {
+            isFullscreenVideo = false
+        } else {
+            onCollapse()
+        }
+    })
 
     // Читаем позицию/длительность только здесь → рекомпозится лишь плеер, не главная.
     val position by positionState
@@ -5412,6 +5454,45 @@ private fun FullPlayer(
                             )
                         }
                     }
+
+                    if (videoUrl != null || videoLoading) {
+                        Surface(
+                            shape = CircleShape,
+                            color = if (showVideo) cs.primaryContainer else Color.White.copy(alpha = 0.08f),
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .clickable(enabled = !videoLoading && videoUrl != null) {
+                                    val next = !showVideo
+                                    showVideo = next
+                                    if (next) {
+                                        showLyrics = false
+                                        videoUrl?.let { vUrl ->
+                                            com.melo.music.playback.PlaybackService.switchToVideo(vUrl)
+                                        }
+                                    } else {
+                                        com.melo.music.playback.PlaybackService.switchToAudio()
+                                    }
+                                },
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                if (videoLoading) {
+                                    CircularProgressIndicator(
+                                        color = white,
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Rounded.Videocam,
+                                        contentDescription = "Клип",
+                                        tint = if (showVideo) cs.onPrimaryContainer else white,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -5460,30 +5541,81 @@ private fun FullPlayer(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.offset { IntOffset(swipeX.value.roundToInt(), 0) },
                     ) {
-                        // 2. Обложка с выразительными скруглениями (32dp) и рамкой
-                        Crossfade(
-                            targetState = hiRes,
-                            animationSpec = tween(500),
-                            label = "art",
-                            modifier = Modifier
-                                .fillMaxWidth(0.88f)
-                                .aspectRatio(1f),
-                        ) { art ->
+                        // 2. Обложка или видеоклип с выразительными скруглениями (32dp) и рамкой
+                        if (showVideo && videoUrl != null) {
                             Surface(
                                 shape = RoundedCornerShape(32.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                color = Color.Black,
                                 border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f)),
                                 shadowElevation = 12.dp,
                                 modifier = Modifier
-                                    .fillMaxSize()
+                                    .fillMaxWidth(0.88f)
+                                    .aspectRatio(1f)
                                     .clip(RoundedCornerShape(32.dp)),
                             ) {
-                                AsyncImage(
-                                    model = art,
-                                    contentDescription = null,
-                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    AndroidView(
+                                        factory = { ctx ->
+                                            androidx.media3.ui.PlayerView(ctx).apply {
+                                                useController = false
+                                                resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                                player = com.melo.music.playback.PlaybackService.activePlayer
+                                            }
+                                        },
+                                        update = { view ->
+                                            if (view.player == null) {
+                                                view.player = com.melo.music.playback.PlaybackService.activePlayer
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = Color.Black.copy(alpha = 0.6f),
+                                        modifier = Modifier
+                                            .align(Alignment.BottomEnd)
+                                            .padding(12.dp)
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .clickable { isFullscreenVideo = true },
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                Icons.Rounded.Fullscreen,
+                                                contentDescription = "Полный экран",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(20.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Crossfade(
+                                targetState = hiRes,
+                                animationSpec = tween(500),
+                                label = "art",
+                                modifier = Modifier
+                                    .fillMaxWidth(0.88f)
+                                    .aspectRatio(1f),
+                            ) { art ->
+                                Surface(
+                                    shape = RoundedCornerShape(32.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f)),
+                                    shadowElevation = 12.dp,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(32.dp)),
+                                ) {
+                                    AsyncImage(
+                                        model = art,
+                                        contentDescription = null,
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
                             }
                         }
 
@@ -5764,6 +5896,58 @@ private fun FullPlayer(
             }
 
             Spacer(Modifier.weight(1f))
+        }
+    }
+
+    if (isFullscreenVideo && videoUrl != null) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { isFullscreenVideo = false },
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false,
+            ),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black),
+            ) {
+                AndroidView(
+                    factory = { ctx ->
+                        androidx.media3.ui.PlayerView(ctx).apply {
+                            useController = true
+                            resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            player = com.melo.music.playback.PlaybackService.activePlayer
+                        }
+                    },
+                    update = { view ->
+                        if (view.player == null) {
+                            view.player = com.melo.music.playback.PlaybackService.activePlayer
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                Surface(
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.6f),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(top = 44.dp, start = 20.dp)
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .clickable { isFullscreenVideo = false },
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = "Закрыть",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+            }
         }
     }
 }

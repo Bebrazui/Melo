@@ -87,6 +87,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun playResolved(track: ResolvedTrack) {
+        PlaybackService.currentAudioStreamUrl = track.audioUrl
         val player = controller ?: return
         val artist = track.artist ?: ""
         val meta = MediaMetadata.Builder()

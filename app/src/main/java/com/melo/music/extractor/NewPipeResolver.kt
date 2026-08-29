@@ -133,12 +133,36 @@ object NewPipeResolver {
         //     "resolve init=${t1 - t0}ms getInfo=${t2 - t1}ms pick=${t3 - t2}ms TOTAL=${t3 - t0}ms",
         // )
 
+        val video = if (isYouTube(url)) {
+            info.videoStreams.filter { it.content.isNotBlank() && !it.isVideoOnly }
+                .maxByOrNull { it.height }
+                ?: info.videoStreams.filter { it.content.isNotBlank() }.maxByOrNull { it.height }
+                ?: info.videoOnlyStreams.filter { it.content.isNotBlank() }.maxByOrNull { it.height }
+        } else null
+
         val author = info.uploaderName?.takeIf { it.isNotBlank() }
         ResolvedTrack(
             title = if (author != null) "${info.name} — $author" else info.name,
             audioUrl = audio.content,
             thumbnailUrl = info.thumbnails.firstOrNull()?.url,
+            artist = author,
+            videoUrl = video?.content,
         )
+    }
+
+    /** Находит прямой видеопоток (клип) для трека. */
+    suspend fun resolveVideo(context: Context, url: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            ensureInit(context)
+            if (!isYouTube(url)) return@runCatching null
+            val info = StreamInfo.getInfo(serviceFor(url), url)
+            val progressive = info.videoStreams.filter { it.content.isNotBlank() && !it.isVideoOnly }
+                .maxByOrNull { it.height }
+            if (progressive != null) return@runCatching progressive.content
+            val anyVideo = info.videoStreams.filter { it.content.isNotBlank() }.maxByOrNull { it.height }
+                ?: info.videoOnlyStreams.filter { it.content.isNotBlank() }.maxByOrNull { it.height }
+            anyVideo?.content
+        }.getOrNull()
     }
 
     /**

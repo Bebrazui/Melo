@@ -61,6 +61,7 @@ object StreamCacheStore {
             title = obj.optString("title", pageUrl),
             audioUrl = audioUrl,
             thumbnailUrl = obj.optString("thumb", "").ifBlank { null },
+            videoUrl = obj.optString("video", "").ifBlank { null },
         )
     }
 
@@ -74,6 +75,7 @@ object StreamCacheStore {
                 put("audio", resolved.audioUrl)
                 put("title", resolved.title)
                 put("thumb", resolved.thumbnailUrl ?: "")
+                put("video", resolved.videoUrl ?: "")
                 put("exp", expiryOf(resolved.audioUrl))
             },
         )

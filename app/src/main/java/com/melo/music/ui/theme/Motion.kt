@@ -222,3 +222,85 @@ fun Modifier.bouncyOverscroll(
             translationY = overscrollOffset.value
         }
 }
+
+/**
+ * Горизонтальный пружинистый оверскролл для каруселей (LazyRow):
+ * При упоре в край карусель упруго оттягивается по горизонтали с сопротивлением резины,
+ * а при отпускании пальца весело отпружинивает назад на физике Spring.
+ */
+fun Modifier.bouncyHorizontalOverscroll(
+    enabled: Boolean = true,
+): Modifier = composed {
+    if (!enabled) return@composed this
+    val overscrollOffset = remember { androidx.compose.animation.core.Animatable(0f) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                val current = overscrollOffset.value
+                if (current != 0f) {
+                    val delta = available.x
+                    if ((current > 0f && delta < 0f) || (current < 0f && delta > 0f)) {
+                        val consumed = if (kotlin.math.abs(delta) >= kotlin.math.abs(current)) -current else delta
+                        scope.launch { overscrollOffset.snapTo(current + consumed) }
+                        return Offset(consumed, 0f)
+                    }
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                if (source == NestedScrollSource.UserInput && available.x != 0f) {
+                    val current = overscrollOffset.value
+                    val resistance = 0.38f / (1f + kotlin.math.abs(current) / 160f)
+                    val newOffset = (current + available.x * resistance).coerceIn(-260f, 260f)
+                    scope.launch { overscrollOffset.snapTo(newOffset) }
+                    return Offset(available.x, 0f)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (overscrollOffset.value != 0f) {
+                    scope.launch { springBack(overscrollOffset) }
+                    return available
+                }
+                return Velocity.Zero
+            }
+
+            override suspend fun onPostFling(
+                consumed: Velocity,
+                available: Velocity,
+            ): Velocity {
+                if (overscrollOffset.value != 0f) {
+                    springBack(overscrollOffset)
+                }
+                return Velocity.Zero
+            }
+
+            private suspend fun springBack(anim: androidx.compose.animation.core.Animatable<Float, *>) {
+                anim.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow,
+                    ),
+                )
+            }
+        }
+    }
+
+    this
+        .nestedScroll(nestedScrollConnection)
+        .graphicsLayer {
+            translationX = overscrollOffset.value
+        }
+}

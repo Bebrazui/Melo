@@ -23,6 +23,8 @@ data class ResolvedTrack(
     val thumbnailUrl: String? = null,
     /** Автор/исполнитель трека (для системного уведомления и Dynamic Island). */
     val artist: String? = null,
+    /** Прямой URL видеоклипа (MP4), если у трека есть видеопоток. */
+    val videoUrl: String? = null,
 )
 
 /** Источник трека (для индикатора в UI). */
