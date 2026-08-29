@@ -1,6 +1,11 @@
 package com.melo.music.ui
 
 import android.Manifest
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -5320,6 +5325,77 @@ private fun WavySlider(
     }
 }
 
+/**
+ * Отслеживание физического наклона устройства (гироскоп / акселерометр) для живого 3D-параллакса.
+ * Возвращает сглаженную пару (roll, pitch) в диапазоне от -1f до 1f.
+ */
+@Composable
+private fun rememberDeviceTilt(): Pair<Float, Float> {
+    val context = LocalContext.current
+    var rawRoll by remember { mutableFloatStateOf(0f) }
+    var rawPitch by remember { mutableFloatStateOf(0f) }
+
+    DisposableEffect(context) {
+        val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        val sensor = sensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+            ?: sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+
+        if (sensorManager == null || sensor == null) {
+            return@DisposableEffect onDispose {}
+        }
+
+        val listener = object : SensorEventListener {
+            private val rotationMatrix = FloatArray(9)
+            private val orientation = FloatArray(3)
+
+            override fun onSensorChanged(event: SensorEvent) {
+                if (event.sensor.type == Sensor.TYPE_ROTATION_VECTOR) {
+                    SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
+                    SensorManager.getOrientation(rotationMatrix, orientation)
+                    // orientation[2] = roll (-pi..pi), orientation[1] = pitch (-pi/2..pi/2)
+                    // Нормальный угол удержания в ладони: pitch ~ -0.7 рад (~40°)
+                    val r = (orientation[2] / (Math.PI.toFloat() / 5.5f)).coerceIn(-1f, 1f)
+                    val p = ((orientation[1] + 0.7f) / (Math.PI.toFloat() / 5.5f)).coerceIn(-1f, 1f)
+                    rawRoll = r
+                    rawPitch = p
+                } else if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+                    val r = (event.values[0] / 5.0f).coerceIn(-1f, 1f)
+                    val p = ((event.values[1] - 5.5f) / 5.0f).coerceIn(-1f, 1f)
+                    rawRoll = -r
+                    rawPitch = p
+                }
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        }
+
+        sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME)
+
+        onDispose {
+            sensorManager.unregisterListener(listener)
+        }
+    }
+
+    val animatedRoll by animateFloatAsState(
+        targetValue = rawRoll,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "tiltRoll",
+    )
+    val animatedPitch by animateFloatAsState(
+        targetValue = rawPitch,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "tiltPitch",
+    )
+
+    return Pair(animatedRoll, animatedPitch)
+}
+
 @Composable
 private fun FullPlayer(
     item: TrackItem,
@@ -5454,6 +5530,9 @@ private fun FullPlayer(
         label = "playScaleX",
     )
 
+    // ── 3D-эффект наклона устройства (гироскоп / акселерометр) ──
+    val (tiltRoll, tiltPitch) = rememberDeviceTilt()
+
     // Жесты: вниз → свернуть, вверх → панель скорости, вправо/влево → пред/след трек.
     var dragOffset by remember { mutableStateOf(0f) }
     var showSpeed by remember { mutableStateOf(false) }
@@ -5538,7 +5617,15 @@ private fun FullPlayer(
         FlowingBackground(
             thumbnailUrl = hiRes,
             audioSessionId = audioSessionId,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    // Контр-параллакс фона при наклоне устройства для создания ощущения глубины
+                    translationX = -tiltRoll * 14.dp.toPx()
+                    translationY = -tiltPitch * 14.dp.toPx()
+                    scaleX = 1.08f
+                    scaleY = 1.08f
+                },
         )
         Box(
             modifier = Modifier.fillMaxSize().background(
@@ -5635,24 +5722,6 @@ private fun FullPlayer(
                         }
                     }
 
-                    Surface(
-                        shape = CircleShape,
-                        color = if (showLyrics) cs.primaryContainer else Color.White.copy(alpha = 0.08f),
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .clickable { showLyrics = !showLyrics },
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Rounded.Lyrics,
-                                contentDescription = "Текст",
-                                tint = if (showLyrics) cs.onPrimaryContainer else white,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
-
                     if (videoUrl != null || videoLoading) {
                         Surface(
                             shape = CircleShape,
@@ -5739,16 +5808,26 @@ private fun FullPlayer(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.offset { IntOffset(swipeX.value.roundToInt(), 0) },
                     ) {
-                        // 2. Обложка или видеоклип с выразительными скруглениями (32dp) и рамкой
+                        // 2. Обложка или видеоклип с выразительными скруглениями (32dp) и живым 3D-наклоном
+                        val art3dModifier = Modifier
+                            .fillMaxWidth(0.88f)
+                            .aspectRatio(1f)
+                            .graphicsLayer {
+                                rotationY = tiltRoll * 14f
+                                rotationX = -tiltPitch * 14f
+                                translationX = tiltRoll * 12.dp.toPx()
+                                translationY = tiltPitch * 12.dp.toPx()
+                                cameraDistance = 14f * density
+                                shadowElevation = (14f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 8f).dp.toPx()
+                            }
+
                         if (showVideo && videoUrl != null) {
                             Surface(
                                 shape = RoundedCornerShape(32.dp),
                                 color = Color.Black,
                                 border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f)),
                                 shadowElevation = 12.dp,
-                                modifier = Modifier
-                                    .fillMaxWidth(0.88f)
-                                    .aspectRatio(1f)
+                                modifier = art3dModifier
                                     .clip(RoundedCornerShape(32.dp)),
                             ) {
                                 Box(modifier = Modifier.fillMaxSize()) {
@@ -5794,9 +5873,7 @@ private fun FullPlayer(
                                 targetState = hiRes,
                                 animationSpec = tween(500),
                                 label = "art",
-                                modifier = Modifier
-                                    .fillMaxWidth(0.88f)
-                                    .aspectRatio(1f),
+                                modifier = art3dModifier,
                             ) { art ->
                                 Surface(
                                     shape = RoundedCornerShape(32.dp),
@@ -5807,12 +5884,32 @@ private fun FullPlayer(
                                         .fillMaxSize()
                                         .clip(RoundedCornerShape(32.dp)),
                                 ) {
-                                    AsyncImage(
-                                        model = art,
-                                        contentDescription = null,
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize(),
-                                    )
+                                    Box(modifier = Modifier.fillMaxSize()) {
+                                        AsyncImage(
+                                            model = art,
+                                            contentDescription = null,
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
+
+                                        // Живой динамический 3D-блик на стеклянной поверхности обложки при наклоне
+                                        Canvas(modifier = Modifier.fillMaxSize()) {
+                                            val sheenAlpha = (0.24f + tiltRoll * 0.10f - tiltPitch * 0.10f).coerceIn(0.04f, 0.38f)
+                                            val sheenCenterX = size.width * (0.45f + tiltRoll * 0.40f)
+                                            val sheenCenterY = size.height * (0.45f + tiltPitch * 0.40f)
+                                            drawCircle(
+                                                brush = Brush.radialGradient(
+                                                    colors = listOf(
+                                                        Color.White.copy(alpha = sheenAlpha),
+                                                        Color.White.copy(alpha = sheenAlpha * 0.3f),
+                                                        Color.Transparent,
+                                                    ),
+                                                    center = Offset(sheenCenterX, sheenCenterY),
+                                                    radius = size.width * 0.85f,
+                                                ),
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
