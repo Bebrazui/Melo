@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DownloadForOffline
 import androidx.compose.material.icons.rounded.GraphicEq
@@ -182,7 +183,10 @@ fun SettingsScreen(
                 }
                 Switch(
                     checked = AppSettings.karaoke,
-                    onCheckedChange = { AppSettings.updateKaraoke(it) },
+                    onCheckedChange = {
+                        ClickFeedback.play()
+                        AppSettings.updateKaraoke(it)
+                    },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = cs.onPrimary,
                         checkedTrackColor = cs.primary,
@@ -309,6 +313,64 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(16.dp))
 
+        // ── 💿 Виниловая пластинка (Bento Card) ───────────────────
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = Color.White.copy(alpha = 0.05f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = cs.primaryContainer,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.Album,
+                            contentDescription = null,
+                            tint = cs.onPrimaryContainer,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Виниловая пластинка",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "Крутящаяся виниловая пластинка с дорожками вместо квадратной обложки в плеере",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.65f),
+                    )
+                }
+                Switch(
+                    checked = com.melo.music.settings.AppSettings.vinylRecord,
+                    onCheckedChange = {
+                        ClickFeedback.play()
+                        com.melo.music.settings.AppSettings.updateVinylRecord(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = cs.onPrimary,
+                        checkedTrackColor = cs.primary,
+                    ),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
         // ── 🎨 Иконка приложения (Bento Card) ────────────────────
         IconPickerSection()
 
@@ -366,6 +428,7 @@ private fun SpatialAudioSection() {
                 Switch(
                     checked = enabled,
                     onCheckedChange = {
+                        ClickFeedback.play()
                         enabled = it
                         EqualizerManager.setSpatialEnabled(it)
                     },
@@ -619,6 +682,7 @@ private fun EqualizerSection() {
                 Switch(
                     checked = enabled,
                     onCheckedChange = {
+                        ClickFeedback.play()
                         enabled = it
                         EqualizerManager.setEnabled(it)
                     },

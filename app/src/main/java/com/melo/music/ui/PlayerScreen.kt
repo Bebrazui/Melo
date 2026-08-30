@@ -2533,13 +2533,21 @@ private fun SeaCard(
                             }),
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (loading) {
-                            CircularProgressIndicator(
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = loading,
+                            enter = fadeIn(tween(260)) + scaleIn(tween(260), initialScale = 0.65f),
+                            exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.65f),
+                        ) {
+                            LoadingIndicator(
                                 modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.5.dp,
                                 color = cs.onPrimary,
                             )
-                        } else {
+                        }
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = !loading,
+                            enter = fadeIn(tween(260)) + scaleIn(tween(260), initialScale = 0.65f),
+                            exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.65f),
+                        ) {
                             Icon(
                                 imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                                 contentDescription = "Играть",
@@ -5359,6 +5367,167 @@ private fun rememberDeviceTilt(): Pair<Float, Float> {
     return Pair(animatedRoll, animatedPitch)
 }
 
+/**
+ * Реалистичная вращающаяся виниловая пластинка с дорожками и яблоком-обложкой.
+ */
+@Composable
+private fun VinylRecordView(
+    art: String?,
+    isPlaying: Boolean,
+    tiltRoll: Float,
+    tiltPitch: Float,
+    modifier: Modifier = Modifier,
+) {
+    val vinylRotation = remember { Animatable(0f) }
+    LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            while (isActive) {
+                vinylRotation.animateTo(
+                    targetValue = vinylRotation.value + 360f,
+                    animationSpec = tween(8000, easing = LinearEasing),
+                )
+            }
+        }
+    }
+
+    Box(
+        modifier = modifier.aspectRatio(1f),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Вращающаяся виниловая пластинка
+        Surface(
+            shape = CircleShape,
+            color = Color(0xFF0D0D10),
+            border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.16f)),
+            shadowElevation = 16.dp,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    rotationZ = vinylRotation.value % 360f
+                },
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val center = Offset(size.width / 2f, size.height / 2f)
+                    val discRadius = kotlin.math.min(size.width, size.height) / 2f
+                    val centerLabelRadius = discRadius * 0.46f
+
+                    // 1. Концентрические бороздки звуковых дорожек
+                    val numGrooves = 32
+                    for (i in 0 until numGrooves) {
+                        val r = centerLabelRadius + (discRadius - centerLabelRadius - 10.dp.toPx()) * (i.toFloat() / numGrooves)
+                        val alpha = when {
+                            i % 7 == 0 -> 0.10f
+                            i % 3 == 0 -> 0.05f
+                            else -> 0.025f
+                        }
+                        drawCircle(
+                            color = Color.White.copy(alpha = alpha),
+                            radius = r,
+                            center = center,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx()),
+                        )
+                    }
+
+                    // 2. Внешняя кромка пластинки
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.12f),
+                        radius = discRadius - 4.dp.toPx(),
+                        center = center,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()),
+                    )
+
+                    // 3. Реалистичные световые блики-лучи на дорожках винила (anisotropic reflection)
+                    val sheenBrush = Brush.sweepGradient(
+                        0.0f to Color.Transparent,
+                        0.10f to Color.White.copy(alpha = 0.07f),
+                        0.16f to Color.White.copy(alpha = 0.18f),
+                        0.22f to Color.White.copy(alpha = 0.07f),
+                        0.32f to Color.Transparent,
+                        0.58f to Color.Transparent,
+                        0.66f to Color.White.copy(alpha = 0.07f),
+                        0.72f to Color.White.copy(alpha = 0.18f),
+                        0.78f to Color.White.copy(alpha = 0.07f),
+                        0.88f to Color.Transparent,
+                        1.0f to Color.Transparent,
+                        center = center,
+                    )
+                    drawCircle(
+                        brush = sheenBrush,
+                        radius = discRadius - 4.dp.toPx(),
+                        center = center,
+                    )
+                }
+
+                // Центральное яблоко пластинки с обложкой трека
+                BoxWithConstraints(
+                    modifier = Modifier.fillMaxSize(0.48f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFF18181C),
+                        border = BorderStroke(2.dp, Color.White.copy(alpha = 0.25f)),
+                        shadowElevation = 6.dp,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            AsyncImage(
+                                model = art,
+                                contentDescription = null,
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            // Тонкое кольцо поверх яблока
+                            Surface(
+                                shape = CircleShape,
+                                color = Color.Transparent,
+                                border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.35f)),
+                                modifier = Modifier.fillMaxSize(),
+                            ) {}
+
+                            // Шпиндельное отверстие по центру с металлической кромкой
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFF08080A),
+                                border = BorderStroke(1.5.dp, Color(0xFFB0B0B8)),
+                                shadowElevation = 2.dp,
+                                modifier = Modifier.size(24.dp),
+                            ) {}
+                        }
+                    }
+                }
+            }
+        }
+
+        // Внешний статический блик от внешнего освещения телефона (реагирует на наклоны гироскопа)
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val sheenAlpha = (0.08f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 0.04f).coerceIn(0.02f, 0.12f)
+            val cx = size.width * (0.45f + tiltRoll * 0.25f)
+            val cy = size.height * (0.40f + tiltPitch * 0.25f)
+            val maxDim = kotlin.math.max(size.width, size.height)
+
+            drawCircle(
+                brush = Brush.radialGradient(
+                    0.0f to Color.White.copy(alpha = sheenAlpha),
+                    0.35f to Color.White.copy(alpha = sheenAlpha * 0.4f),
+                    0.70f to Color.Transparent,
+                    center = Offset(cx, cy),
+                    radius = maxDim * 0.85f,
+                ),
+                radius = size.width / 2f,
+                center = Offset(size.width / 2f, size.height / 2f),
+            )
+        }
+    }
+}
+
 @Composable
 private fun FullPlayer(
     item: TrackItem,
@@ -5739,46 +5908,56 @@ private fun FullPlayer(
                     }
                 } else {
                     Crossfade(
-                        targetState = hiRes,
+                        targetState = Pair(hiRes, com.melo.music.settings.AppSettings.vinylRecord),
                         animationSpec = tween(500),
                         label = "art",
                         modifier = boxModifier.then(art3dModifier),
-                    ) { art ->
-                        Surface(
-                            shape = RoundedCornerShape(32.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f)),
-                            shadowElevation = 12.dp,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(32.dp)),
-                        ) {
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                AsyncImage(
-                                    model = art,
-                                    contentDescription = null,
-                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-
-                                // Едва заметный, мягкий круглый блик света
-                                Canvas(modifier = Modifier.fillMaxSize()) {
-                                    val sheenAlpha = (0.10f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 0.04f).coerceIn(0.02f, 0.14f)
-                                    val cx = size.width * (0.45f + tiltRoll * 0.25f)
-                                    val cy = size.height * (0.40f + tiltPitch * 0.25f)
-                                    val maxDim = kotlin.math.max(size.width, size.height)
-
-                                    drawRect(
-                                        brush = Brush.radialGradient(
-                                            0.0f to Color.White.copy(alpha = sheenAlpha),
-                                            0.35f to Color.White.copy(alpha = sheenAlpha * 0.45f),
-                                            0.70f to Color.White.copy(alpha = sheenAlpha * 0.10f),
-                                            1.0f to Color.Transparent,
-                                            center = Offset(cx, cy),
-                                            radius = maxDim * 0.95f,
-                                        ),
-                                        size = size,
+                    ) { (art, isVinyl) ->
+                        if (isVinyl) {
+                            VinylRecordView(
+                                art = art,
+                                isPlaying = isPlaying,
+                                tiltRoll = tiltRoll,
+                                tiltPitch = tiltPitch,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        } else {
+                            Surface(
+                                shape = RoundedCornerShape(32.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f)),
+                                shadowElevation = 12.dp,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(32.dp)),
+                            ) {
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    AsyncImage(
+                                        model = art,
+                                        contentDescription = null,
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize(),
                                     )
+
+                                    // Едва заметный, мягкий круглый блик света
+                                    Canvas(modifier = Modifier.fillMaxSize()) {
+                                        val sheenAlpha = (0.10f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 0.04f).coerceIn(0.02f, 0.14f)
+                                        val cx = size.width * (0.45f + tiltRoll * 0.25f)
+                                        val cy = size.height * (0.40f + tiltPitch * 0.25f)
+                                        val maxDim = kotlin.math.max(size.width, size.height)
+
+                                        drawRect(
+                                            brush = Brush.radialGradient(
+                                                0.0f to Color.White.copy(alpha = sheenAlpha),
+                                                0.35f to Color.White.copy(alpha = sheenAlpha * 0.45f),
+                                                0.70f to Color.White.copy(alpha = sheenAlpha * 0.10f),
+                                                1.0f to Color.Transparent,
+                                                center = Offset(cx, cy),
+                                                radius = maxDim * 0.95f,
+                                            ),
+                                            size = size,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -5794,7 +5973,9 @@ private fun FullPlayer(
                     lyricsLoading -> Box(
                         modifier = boxModifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
-                    ) { CircularProgressIndicator(color = white) }
+                    ) {
+                        LoadingIndicator(color = white, modifier = Modifier.size(36.dp))
+                    }
 
                     lyr == null || lyr.isEmpty -> Box(
                         modifier = boxModifier.fillMaxSize(),
@@ -6317,13 +6498,21 @@ private fun FullPlayer(
                                     },
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    if (videoLoading) {
-                                        CircularProgressIndicator(
+                                    androidx.compose.animation.AnimatedVisibility(
+                                        visible = videoLoading,
+                                        enter = fadeIn(tween(260)) + scaleIn(tween(260), initialScale = 0.65f),
+                                        exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.65f),
+                                    ) {
+                                        LoadingIndicator(
                                             color = white,
                                             modifier = Modifier.size(16.dp),
-                                            strokeWidth = 2.dp,
                                         )
-                                    } else {
+                                    }
+                                    androidx.compose.animation.AnimatedVisibility(
+                                        visible = !videoLoading,
+                                        enter = fadeIn(tween(260)) + scaleIn(tween(260), initialScale = 0.65f),
+                                        exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.65f),
+                                    ) {
                                         Icon(
                                             Icons.Rounded.Videocam,
                                             contentDescription = "Клип",

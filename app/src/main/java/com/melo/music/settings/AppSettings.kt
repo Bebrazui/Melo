@@ -15,6 +15,7 @@ object AppSettings {
     private const val KEY_KARAOKE = "karaoke_lyrics"
     private const val KEY_HAPTIC_FEEDBACK = "haptic_feedback"
     private const val KEY_AUTO_DOWNLOAD_FAVORITES = "auto_download_favorites"
+    private const val KEY_VINYL_RECORD = "vinyl_record_mode"
     private const val KEY_SEEN_WELCOME = "seen_welcome"
     private const val KEY_LAUNCHER_ICON = "launcher_icon"
 
@@ -32,6 +33,10 @@ object AppSettings {
     var autoDownloadFavorites by mutableStateOf(false)
         private set
 
+    /** Режим вращающейся виниловой пластинки вместо квадратной обложки в плеере. */
+    var vinylRecord by mutableStateOf(false)
+        private set
+
     /** Видел ли пользователь экран приветствия/входа. */
     var seenWelcome by mutableStateOf(false)
         private set
@@ -45,6 +50,7 @@ object AppSettings {
         karaoke = prefs?.getBoolean(KEY_KARAOKE, false) ?: false
         hapticFeedback = prefs?.getBoolean(KEY_HAPTIC_FEEDBACK, true) ?: true
         autoDownloadFavorites = prefs?.getBoolean(KEY_AUTO_DOWNLOAD_FAVORITES, false) ?: false
+        vinylRecord = prefs?.getBoolean(KEY_VINYL_RECORD, false) ?: false
         seenWelcome = prefs?.getBoolean(KEY_SEEN_WELCOME, false) ?: false
         launcherIcon = prefs?.getString(KEY_LAUNCHER_ICON, IconPreset.DEFAULT.id) ?: IconPreset.DEFAULT.id
     }
@@ -67,6 +73,11 @@ object AppSettings {
     fun updateAutoDownloadFavorites(value: Boolean) {
         autoDownloadFavorites = value
         prefs?.edit()?.putBoolean(KEY_AUTO_DOWNLOAD_FAVORITES, value)?.apply()
+    }
+
+    fun updateVinylRecord(value: Boolean) {
+        vinylRecord = value
+        prefs?.edit()?.putBoolean(KEY_VINYL_RECORD, value)?.apply()
     }
 
     /**
