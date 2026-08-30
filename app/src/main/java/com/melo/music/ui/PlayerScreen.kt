@@ -375,8 +375,11 @@ fun PlayerScreen(
     fun getLiked(): MutableList<TrackItem> = FavoritesManager.getAll()
     fun isLiked(item: TrackItem): Boolean = FavoritesManager.isLiked(item)
     fun toggleLike(item: TrackItem) {
-        FavoritesManager.toggle(item)
+        val nowLiked = FavoritesManager.toggle(item)
         likedVersion++
+        if (nowLiked && com.melo.music.settings.AppSettings.autoDownloadFavorites) {
+            com.melo.music.offline.TrackDownloader.download(context, item)
+        }
     }
 
     var contextMenuTrack by remember { mutableStateOf<TrackItem?>(null) }
@@ -982,6 +985,10 @@ fun PlayerScreen(
                                     onShuffle = {
                                         shuffle = true
                                         playAt(likedList, likedList.indices.random())
+                                    },
+                                    onDownloadAll = {
+                                        ClickFeedback.play()
+                                        com.melo.music.offline.TrackDownloader.downloadAll(context, likedList)
                                     },
                                 )
                             }
@@ -4456,6 +4463,7 @@ private fun FavoritesHeader(
     tracks: List<TrackItem>,
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
+    onDownloadAll: () -> Unit,
 ) {
     val covers = remember(tracks) { tracks.mapNotNull { it.thumbnailUrl }.distinct() }
     val topArtist = remember(tracks) {
@@ -4501,6 +4509,12 @@ private fun FavoritesHeader(
                 }
                 FilledTonalIconButton(onClick = onShuffle) {
                     Icon(Icons.Rounded.Shuffle, contentDescription = "Перемешать")
+                }
+                FilledTonalIconButton(onClick = onDownloadAll) {
+                    Icon(
+                        Icons.Rounded.DownloadForOffline,
+                        contentDescription = "Скачать всё",
+                    )
                 }
                 FilledTonalIconButton(onClick = { pub = !pub; FavoritesManager.setPublic(pub) }) {
                     Icon(

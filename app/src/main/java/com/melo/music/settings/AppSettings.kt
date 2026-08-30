@@ -14,6 +14,7 @@ object AppSettings {
     private const val PREFS = "melo_settings"
     private const val KEY_KARAOKE = "karaoke_lyrics"
     private const val KEY_HAPTIC_FEEDBACK = "haptic_feedback"
+    private const val KEY_AUTO_DOWNLOAD_FAVORITES = "auto_download_favorites"
     private const val KEY_SEEN_WELCOME = "seen_welcome"
     private const val KEY_LAUNCHER_ICON = "launcher_icon"
 
@@ -25,6 +26,10 @@ object AppSettings {
 
     /** Тактильный отклик и звуковой щелчок при нажатии кнопок. */
     var hapticFeedback by mutableStateOf(true)
+        private set
+
+    /** Автоматически скачивать избранные треки для офлайн-прослушивания. */
+    var autoDownloadFavorites by mutableStateOf(false)
         private set
 
     /** Видел ли пользователь экран приветствия/входа. */
@@ -39,6 +44,7 @@ object AppSettings {
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         karaoke = prefs?.getBoolean(KEY_KARAOKE, false) ?: false
         hapticFeedback = prefs?.getBoolean(KEY_HAPTIC_FEEDBACK, true) ?: true
+        autoDownloadFavorites = prefs?.getBoolean(KEY_AUTO_DOWNLOAD_FAVORITES, false) ?: false
         seenWelcome = prefs?.getBoolean(KEY_SEEN_WELCOME, false) ?: false
         launcherIcon = prefs?.getString(KEY_LAUNCHER_ICON, IconPreset.DEFAULT.id) ?: IconPreset.DEFAULT.id
     }
@@ -56,6 +62,11 @@ object AppSettings {
     fun updateHapticFeedback(value: Boolean) {
         hapticFeedback = value
         prefs?.edit()?.putBoolean(KEY_HAPTIC_FEEDBACK, value)?.apply()
+    }
+
+    fun updateAutoDownloadFavorites(value: Boolean) {
+        autoDownloadFavorites = value
+        prefs?.edit()?.putBoolean(KEY_AUTO_DOWNLOAD_FAVORITES, value)?.apply()
     }
 
     /**
