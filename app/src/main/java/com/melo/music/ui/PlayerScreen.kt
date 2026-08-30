@@ -59,6 +59,9 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -73,6 +76,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
@@ -1088,22 +1093,8 @@ fun PlayerScreen(
         val current = nowPlaying
         AnimatedVisibility(
             visible = playerExpanded && current != null,
-            enter = slideInVertically(
-                animationSpec = tween(380, easing = androidx.compose.animation.core.CubicBezierEasing(0.16f, 1f, 0.3f, 1f)),
-                initialOffsetY = { (it * 0.80f).toInt() },
-            ) + scaleIn(
-                animationSpec = tween(380, easing = androidx.compose.animation.core.CubicBezierEasing(0.16f, 1f, 0.3f, 1f)),
-                initialScale = 0.82f,
-                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.96f),
-            ) + fadeIn(tween(250)),
-            exit = slideOutVertically(
-                animationSpec = tween(320, easing = androidx.compose.animation.core.CubicBezierEasing(0.4f, 0f, 0.2f, 1f)),
-                targetOffsetY = { (it * 0.80f).toInt() },
-            ) + scaleOut(
-                animationSpec = tween(320, easing = androidx.compose.animation.core.CubicBezierEasing(0.4f, 0f, 0.2f, 1f)),
-                targetScale = 0.82f,
-                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.96f),
-            ) + fadeOut(tween(260)),
+            enter = fadeIn(tween(200)),
+            exit = fadeOut(tween(140)),
         ) {
             val item = current ?: nowPlaying
             if (item != null) {
@@ -4809,6 +4800,177 @@ private class ScallopedShape(
 }
 
 @Composable
+private fun NowPlayingBarInner(
+    item: TrackItem,
+    isPlaying: Boolean,
+    resolving: Boolean,
+    animatedTrackColor: Color,
+    scallopedArt: Shape,
+    scallopedBtn: Shape,
+    onTogglePlayPause: () -> Unit,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onClick: () -> Unit = {},
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Левая зона (обложка + название + автор) — при тапе раскрывает полный плеер
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(32.dp))
+                .clickable(onClick = onClick),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Обложка в фигурной волнистой рамке со значком ноты
+            Box(
+                modifier = Modifier.size(54.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Surface(
+                    shape = scallopedArt,
+                    color = Color(0xFF1E1A16),
+                    border = BorderStroke(1.8.dp, animatedTrackColor),
+                    modifier = Modifier.size(52.dp),
+                ) {
+                    Artwork(
+                        url = item.thumbnailUrl,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(scallopedArt),
+                    )
+                }
+                // Круглый бейдж ноты снизу справа в цвет обложки
+                Surface(
+                    shape = CircleShape,
+                    color = animatedTrackColor,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .align(Alignment.BottomEnd),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.MusicNote,
+                            contentDescription = null,
+                            tint = if (animatedTrackColor.luminance() > 0.4f) Color.Black else Color.White,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            // Название трека и автор
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 6.dp),
+            ) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 17.sp,
+                        letterSpacing = (-0.2).sp,
+                    ),
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(1.dp))
+                Text(
+                    text = "by — ${item.uploader ?: "Unknown"}",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 13.sp,
+                    ),
+                    color = lerp(Color.White.copy(alpha = 0.7f), animatedTrackColor, 0.35f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+
+        // Кнопки управления в виде фигурных звездочек / лепестков
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            val btnBg = lerp(Color(0xFFE2D6BE), animatedTrackColor, 0.12f)
+            val playBg = lerp(Color(0xFFF5EACF), animatedTrackColor, 0.20f)
+
+            // Prev
+            Surface(
+                shape = scallopedBtn,
+                color = btnBg,
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(scallopedBtn)
+                    .clickable(onClick = onPrev),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Rounded.SkipPrevious,
+                        contentDescription = "Назад",
+                        tint = Color(0xFF1A1612),
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+            }
+
+            // Play / Pause (чуть крупнее 50dp)
+            Surface(
+                shape = scallopedBtn,
+                color = playBg,
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(scallopedBtn)
+                    .clickable(onClick = onTogglePlayPause),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    if (resolving) {
+                        LoadingIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = Color(0xFF1A1612),
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                            contentDescription = if (isPlaying) "Пауза" else "Играть",
+                            tint = Color(0xFF1A1612),
+                            modifier = Modifier.size(26.dp),
+                        )
+                    }
+                }
+            }
+
+            // Next
+            Surface(
+                shape = scallopedBtn,
+                color = btnBg,
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(scallopedBtn)
+                    .clickable(onClick = onNext),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Rounded.SkipNext,
+                        contentDescription = "Вперед",
+                        tint = Color(0xFF1A1612),
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun NowPlayingBar(
     item: TrackItem?,
     isPlaying: Boolean,
@@ -4950,162 +5112,18 @@ private fun NowPlayingBar(
                     }
                 }
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Левая зона (обложка + название + автор) — при тапе раскрывает полный плеер
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(32.dp))
-                        .clickable(onClick = onClick),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Обложка в фигурной волнистой рамке со значком ноты
-                    Box(
-                        modifier = Modifier.size(54.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Surface(
-                            shape = scallopedArt,
-                            color = Color(0xFF1E1A16),
-                            border = BorderStroke(1.8.dp, animatedTrackColor),
-                            modifier = Modifier.size(52.dp),
-                        ) {
-                            Artwork(
-                                url = item.thumbnailUrl,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(scallopedArt),
-                            )
-                        }
-                        // Круглый бейдж ноты снизу справа в цвет обложки
-                        Surface(
-                            shape = CircleShape,
-                            color = animatedTrackColor,
-                            modifier = Modifier
-                                .size(20.dp)
-                                .align(Alignment.BottomEnd),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Rounded.MusicNote,
-                                    contentDescription = null,
-                                    tint = if (animatedTrackColor.luminance() > 0.4f) Color.Black else Color.White,
-                                    modifier = Modifier.size(13.dp),
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.width(12.dp))
-
-                    // Название трека и автор
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 6.dp),
-                    ) {
-                        Text(
-                            text = item.title,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontSize = 17.sp,
-                                letterSpacing = (-0.2).sp,
-                            ),
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Spacer(Modifier.height(1.dp))
-                        Text(
-                            text = "by — ${item.uploader ?: "Unknown"}",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 13.sp,
-                            ),
-                            color = lerp(Color.White.copy(alpha = 0.7f), animatedTrackColor, 0.35f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-
-                // Кнопки управления в виде фигурных звездочек / лепестков
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    val btnBg = lerp(Color(0xFFE2D6BE), animatedTrackColor, 0.12f)
-                    val playBg = lerp(Color(0xFFF5EACF), animatedTrackColor, 0.20f)
-
-                    // Prev
-                    Surface(
-                        shape = scallopedBtn,
-                        color = btnBg,
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(scallopedBtn)
-                            .clickable(onClick = onPrev),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Rounded.SkipPrevious,
-                                contentDescription = "Назад",
-                                tint = Color(0xFF1A1612),
-                                modifier = Modifier.size(22.dp),
-                            )
-                        }
-                    }
-
-                    // Play / Pause (чуть крупнее 50dp)
-                    Surface(
-                        shape = scallopedBtn,
-                        color = playBg,
-                        modifier = Modifier
-                            .size(50.dp)
-                            .clip(scallopedBtn)
-                            .clickable(onClick = onTogglePlayPause),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            if (resolving) {
-                                LoadingIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    color = Color(0xFF1A1612),
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                    contentDescription = if (isPlaying) "Пауза" else "Играть",
-                                    tint = Color(0xFF1A1612),
-                                    modifier = Modifier.size(26.dp),
-                                )
-                            }
-                        }
-                    }
-
-                    // Next
-                    Surface(
-                        shape = scallopedBtn,
-                        color = btnBg,
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(scallopedBtn)
-                            .clickable(onClick = onNext),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Rounded.SkipNext,
-                                contentDescription = "Вперед",
-                                tint = Color(0xFF1A1612),
-                                modifier = Modifier.size(22.dp),
-                            )
-                        }
-                    }
-                }
-            }
+            NowPlayingBarInner(
+                item = item,
+                isPlaying = isPlaying,
+                resolving = resolving,
+                animatedTrackColor = animatedTrackColor,
+                scallopedArt = scallopedArt,
+                scallopedBtn = scallopedBtn,
+                onTogglePlayPause = onTogglePlayPause,
+                onPrev = onPrev,
+                onNext = onNext,
+                onClick = onClick,
+            )
         }
     }
 }
@@ -5571,11 +5589,50 @@ private fun FullPlayer(
         }
     }
 
+    // ── Плавная физическая трансформация полного плеера в мини-плеер ──
+    val localDensity = LocalDensity.current
+    val navBarBottomInset = 78.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val miniBarBottomOffset = navBarBottomInset + 10.dp
+    val miniBarHeight = 72.dp
+
+    val scallopedBtn = remember { ScallopedShape(petals = 8, depth = 0.15f) }
+    val scallopedArt = remember { ScallopedShape(petals = 10, depth = 0.12f) }
+
+    val gestureScope = rememberCoroutineScope()
+    val collapseProgress = remember { Animatable(0.70f) }
+    var isCollapsing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        collapseProgress.animateTo(
+            targetValue = 0f,
+            animationSpec = spring(
+                dampingRatio = 0.86f,
+                stiffness = 380f,
+            ),
+        )
+    }
+
+    val requestCollapse: () -> Unit = {
+        if (!isCollapsing) {
+            isCollapsing = true
+            gestureScope.launch {
+                collapseProgress.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = 0.86f,
+                        stiffness = 400f,
+                    ),
+                )
+                onCollapse()
+            }
+        }
+    }
+
     BackHandler(onBack = {
         if (isFullscreenVideo) {
             isFullscreenVideo = false
         } else {
-            onCollapse()
+            requestCollapse()
         }
     })
 
@@ -5736,87 +5793,101 @@ private fun FullPlayer(
     // ── 3D-эффект наклона устройства (гироскоп / акселерометр) ──
     val (tiltRoll, tiltPitch) = rememberDeviceTilt()
 
-    // Жесты: вниз → свернуть, вверх → панель скорости, вправо/влево → пред/след трек.
-    var dragOffset by remember { mutableStateOf(0f) }
-    var showSpeed by remember { mutableStateOf(false) }
-    // Накапливаем смещение, чтобы жесты не срабатывали от случайного касания.
     var swipeAccum by remember { mutableStateOf(0f) }
-    val swipeThreshold = 90f
-    val gestureScope = rememberCoroutineScope()
     val swipeX = remember { Animatable(0f) }
     // 0 = ось ещё не выбрана, 1 = вертикаль, 2 = горизонталь.
     var axis by remember { mutableIntStateOf(0) }
 
-    val dragProgress = (dragOffset / 550f).coerceIn(0f, 1f)
-    val playerCornerRadius = (dragProgress * 42f).dp
-    val playerScale = 1f - dragProgress * 0.18f
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val screenHeightPx = with(localDensity) { maxHeight.toPx() }
+        val miniBarHeightPx = with(localDensity) { miniBarHeight.toPx() }
+        val bottomOffsetPx = with(localDensity) { miniBarBottomOffset.toPx() }
+        val targetY = (screenHeightPx - bottomOffsetPx - miniBarHeightPx).coerceAtLeast(0f)
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .offset { IntOffset(0, dragOffset.roundToInt()) }
-            .graphicsLayer {
-                scaleX = playerScale
-                scaleY = playerScale
-                clip = true
-                shape = RoundedCornerShape(playerCornerRadius)
-                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.96f)
-            }
-            .background(Color(0xFF0E0E12))
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { swipeAccum = 0f; axis = 0 },
-                    onDragCancel = {
-                        swipeAccum = 0f; axis = 0; dragOffset = 0f
-                        gestureScope.launch { swipeX.animateTo(0f, tween(180)) }
-                    },
-                    onDragEnd = {
-                        swipeAccum = 0f
-                        if (axis == 2) {
-                            val v = swipeX.value
-                            val w = size.width.toFloat()
-                            gestureScope.launch {
-                                when {
-                                    // Вправо → предыдущий, влево → следующий. Новый трек
-                                    // въезжает на место со стороны свайпа.
-                                    v > w * 0.22f -> { onPrev(); swipeX.animateTo(0f, tween(260)) }
-                                    v < -w * 0.22f -> { onNext(); swipeX.animateTo(0f, tween(260)) }
-                                    else -> swipeX.animateTo(0f, tween(200))
+        val p = collapseProgress.value.coerceIn(0f, 1f)
+        val currentY = targetY * p
+        val currentHeight = androidx.compose.ui.unit.lerp(maxHeight, miniBarHeight, p)
+        val currentHorizPad = androidx.compose.ui.unit.lerp(0.dp, 14.dp, p)
+        val currentCorner = androidx.compose.ui.unit.lerp(0.dp, 42.dp, p)
+        val currentElevation = androidx.compose.ui.unit.lerp(0.dp, 18.dp, p)
+
+        val fullAlpha = (1f - p * 2.3f).coerceIn(0f, 1f)
+        val miniAlpha = ((p - 0.30f) * 1.5f).coerceIn(0f, 1f)
+
+        // Мягкое затемнение фона под карточкой, плавно уходящее при сворачивании
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = ((1f - p) * 0.72f).coerceIn(0f, 0.72f)))
+        ) {
+            Surface(
+                shape = RoundedCornerShape(currentCorner),
+                color = Color(0xEB13110E),
+                shadowElevation = currentElevation,
+                border = if (p > 0.05f) BorderStroke(1.2.dp * p, lerp(Color(0x55FFFFFF), artColor, 0.45f)) else null,
+                modifier = Modifier
+                    .padding(horizontal = currentHorizPad)
+                    .offset { IntOffset(0, currentY.roundToInt()) }
+                    .fillMaxWidth()
+                    .height(currentHeight)
+                    .clip(RoundedCornerShape(currentCorner))
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragStart = { swipeAccum = 0f; axis = 0 },
+                            onDragCancel = {
+                                swipeAccum = 0f; axis = 0
+                                gestureScope.launch {
+                                    collapseProgress.animateTo(0f, spring(0.86f, 420f))
+                                    swipeX.animateTo(0f, tween(180))
                                 }
-                            }
-                        } else {
-                            if (dragOffset > 240f) onCollapse() else dragOffset = 0f
-                        }
-                        axis = 0
-                    },
-                    onDrag = { change, drag ->
-                        change.consume()
-                        if (axis == 0) {
-                            axis = if (kotlin.math.abs(drag.x) > kotlin.math.abs(drag.y) * 1.3f) 2 else 1
-                        }
-                        if (axis == 2) {
-                            gestureScope.launch { swipeX.snapTo(swipeX.value + drag.x) }
-                        } else {
-                            val delta = drag.y
-                            swipeAccum += delta
-                            when {
-                                // Уверенный свайп вверх → панель скорости.
-                                swipeAccum <= -swipeThreshold && !showSpeed && dragOffset <= 0f -> {
-                                    showSpeed = true; swipeAccum = 0f
+                            },
+                            onDragEnd = {
+                                swipeAccum = 0f
+                                if (axis == 2) {
+                                    val v = swipeX.value
+                                    val w = size.width.toFloat()
+                                    gestureScope.launch {
+                                        when {
+                                            v > w * 0.22f -> { onPrev(); swipeX.animateTo(0f, tween(260)) }
+                                            v < -w * 0.22f -> { onNext(); swipeX.animateTo(0f, tween(260)) }
+                                            else -> swipeX.animateTo(0f, tween(200))
+                                        }
+                                    }
+                                } else {
+                                    if (collapseProgress.value > 0.20f) {
+                                        requestCollapse()
+                                    } else {
+                                        gestureScope.launch {
+                                            collapseProgress.animateTo(0f, spring(0.86f, 420f))
+                                        }
+                                    }
                                 }
-                                // Уверенный свайп вниз при открытой панели → прячем её.
-                                swipeAccum >= swipeThreshold && showSpeed && dragOffset <= 0f -> {
-                                    showSpeed = false; swipeAccum = 0f
+                                axis = 0
+                            },
+                            onDrag = { change, drag ->
+                                change.consume()
+                                if (axis == 0) {
+                                    axis = if (kotlin.math.abs(drag.x) > kotlin.math.abs(drag.y) * 1.3f) 2 else 1
                                 }
-                                // Сворачивание: плеер едет за пальцем только после явного намерения.
-                                !showSpeed && (dragOffset > 0f || swipeAccum >= swipeThreshold) ->
-                                    dragOffset = (dragOffset + delta).coerceAtLeast(0f)
-                            }
-                        }
+                                if (axis == 2) {
+                                    gestureScope.launch { swipeX.snapTo(swipeX.value + drag.x) }
+                                } else {
+                                    val delta = drag.y
+                                    swipeAccum += delta
+                                    val newProgress = (collapseProgress.value + delta / targetY.coerceAtLeast(1f)).coerceIn(0f, 1f)
+                                    gestureScope.launch { collapseProgress.snapTo(newProgress) }
+                                }
+                            },
+                        )
                     },
-                )
-            },
-    ) {
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    if (fullAlpha > 0.005f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer { alpha = fullAlpha },
+                        ) {
         FlowingBackground(
             thumbnailUrl = hiRes,
             audioSessionId = audioSessionId,
@@ -6415,7 +6486,7 @@ private fun FullPlayer(
                         modifier = Modifier
                             .size(if (isLandscape) 36.dp else 42.dp)
                             .clip(CircleShape)
-                            .clickable(onClick = onCollapse),
+                            .clickable(onClick = requestCollapse),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
@@ -6630,6 +6701,31 @@ private fun FullPlayer(
         }
     }
 
+    // 2. Мини-плеер (проявляется при сворачивании и идеально встает на свое место)
+    if (miniAlpha > 0.005f) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = miniAlpha },
+        ) {
+            NowPlayingBarInner(
+                item = item,
+                isPlaying = isPlaying,
+                resolving = resolving,
+                animatedTrackColor = artColor,
+                scallopedArt = scallopedArt,
+                scallopedBtn = scallopedBtn,
+                onTogglePlayPause = onTogglePlayPause,
+                onPrev = onPrev,
+                onNext = onNext,
+            )
+        }
+    }
+}
+}
+}
+}
+
     if (isFullscreenVideo && videoUrl != null) {
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { isFullscreenVideo = false },
@@ -6681,6 +6777,7 @@ private fun FullPlayer(
             }
         }
     }
+}
 }
 
 /** Состояние плеера для UI (через Player.Listener, без опроса). */
