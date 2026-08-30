@@ -2382,16 +2382,36 @@ private fun SearchBar(
 
 // ── Главная: лента с полками (Material 3 Expressive) ──────────────────────────
 
-/**
- * Выразительная карточка «Моя Волна» в стиле Material 3 Expressive.
- *
- * Особенности:
- * 1. Крупная живая типографика: бейдж времени суток (Утренний вайб / Дневной поток / Ночной чилл)
- *    + огромный акцентный заголовок «Твоя Волна» (38sp ExtraBold).
- * 2. Органический кластер обложек (Living Wave Cluster):
- *    Центральный суперэллипс (Squircle 26dp) с плавающими круглыми бабблами любимых артистов.
- * 3. Крупная тактильная кнопка Play (74dp) с пружинным масштабированием и встроенным Like / Next.
- */
+/** Фигура «печенька/цветок» с N лепестками. */
+private class CookieShape(
+    private val petals: Int = 8,
+    private val amp: Float = 0.12f,
+) : androidx.compose.ui.graphics.Shape {
+    override fun createOutline(
+        size: androidx.compose.ui.geometry.Size,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        density: androidx.compose.ui.unit.Density,
+    ): androidx.compose.ui.graphics.Outline {
+        val path = androidx.compose.ui.graphics.Path()
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val rMax = minOf(cx, cy)
+        val base = rMax / (1f + amp)
+        val steps = petals * 24
+        val twoPi = (2.0 * Math.PI).toFloat()
+        for (i in 0..steps) {
+            val a = i.toFloat() / steps * twoPi
+            val r = base * (1f + amp * kotlin.math.cos(petals * a))
+            val x = cx + r * kotlin.math.cos(a)
+            val y = cy + r * kotlin.math.sin(a)
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        path.close()
+        return androidx.compose.ui.graphics.Outline.Generic(path)
+    }
+}
+
+/** Карта «Sea» в виде цветка (системные цвета): запуск/управление бесконечной волной. */
 @Composable
 private fun SeaCard(
     loading: Boolean,
@@ -2406,264 +2426,137 @@ private fun SeaCard(
     onLike: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val subtitle = remember(playingArtist, topArtistsHint) {
-        when {
-            !playingArtist.isNullOrBlank() -> playingArtist
-            topArtistsHint.isNotBlank() -> "В стиле $topArtistsHint"
-            else -> "Бесконечный персональный поток"
-        }
+    val outerShape = remember { CookieShape(8, 0.11f) }
+    val btnShape = remember { CookieShape(8, 0.16f) }
+    val innerColor = lerp(cs.secondaryContainer, Color.Black, 0.22f)
+    val onColor = Color.White
+
+    // Лепестки медленно крутятся при воспроизведении (на паузе замирают, без рывка).
+    val rotOuter = remember { Animatable(0f) }
+    val rotInner = remember { Animatable(0f) }
+    LaunchedEffect(isPlaying) {
+        if (!isPlaying) return@LaunchedEffect
+        launch { while (isActive) { rotOuter.animateTo(rotOuter.value + 360f, tween(28000, easing = LinearEasing)) } }
+        launch { while (isActive) { rotInner.animateTo(rotInner.value - 360f, tween(19000, easing = LinearEasing)) } }
     }
+    // Лёгкая пульсация лепестков.
+    val pulse = rememberInfiniteTransition(label = "seaPulse")
+    val pOuter by pulse.animateFloat(1f, 1.04f, infiniteRepeatable(tween(2200, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "po")
+    val pInner by pulse.animateFloat(1.03f, 0.98f, infiniteRepeatable(tween(1700, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "pi")
+    val sOuter = if (isPlaying) pOuter else 1f
+    val sInner = if (isPlaying) pInner else 1f
 
-    // Мягкая плавающая анимация бабблов при воспроизведении
-    val infiniteTransition = rememberInfiniteTransition(label = "bubbleFloat")
-    val floatY1 by infiniteTransition.animateFloat(
-        initialValue = -4f,
-        targetValue = 4f,
-        animationSpec = infiniteRepeatable(tween(2600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "fy1",
-    )
-    val floatY2 by infiniteTransition.animateFloat(
-        initialValue = 4f,
-        targetValue = -5f,
-        animationSpec = infiniteRepeatable(tween(3100, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "fy2",
-    )
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "pulse",
-    )
-
-    val currentFloat1 = if (isPlaying) floatY1 else 0f
-    val currentFloat2 = if (isPlaying) floatY2 else 0f
-    val currentPulse = if (isPlaying) pulseScale else 1.0f
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 6.dp),
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        // 1. Верхний блок: Заголовок + Большая кнопка Play
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                // Огромный выразительный заголовок M3 Expressive
+        // Внешний лепесток (вращается в одну сторону).
+        Box(
+            modifier = Modifier
+                .size(300.dp)
+                .graphicsLayer { rotationZ = rotOuter.value; scaleX = sOuter; scaleY = sOuter }
+                .clip(outerShape)
+                .background(cs.secondaryContainer),
+        )
+        // Внутренний лепесток (вращается в другую сторону, чуть быстрее).
+        Box(
+            modifier = Modifier
+                .size(232.dp)
+                .graphicsLayer { rotationZ = rotInner.value; scaleX = sInner; scaleY = sInner }
+                .clip(outerShape)
+                .background(innerColor),
+        )
+        // Контент поверх — не вращается.
+        Box(modifier = Modifier.width(232.dp), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Твоя\nВолна",
-                    style = MaterialTheme.typography.displaySmall.copy(
-                        fontSize = 38.sp,
-                        lineHeight = 38.sp,
-                        letterSpacing = (-0.5).sp,
-                    ),
-                    fontWeight = FontWeight.Black,
-                    color = Color.White,
+                    "Sea",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = onColor,
                 )
-
-                Spacer(Modifier.height(6.dp))
-
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    // Лайк
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(btnShape)
+                            .background(cs.primaryContainer)
+                            .clickable(onClick = onLike),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                            contentDescription = "Нравится",
+                            tint = cs.onPrimaryContainer,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    // Плей/пауза
+                    Box(
+                        modifier = Modifier
+                            .size(58.dp)
+                            .clip(btnShape)
+                            .background(cs.primary)
+                            .clickable(enabled = !loading, onClick = onPlayPause),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.5.dp,
+                                color = cs.onPrimary,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = "Играть",
+                                tint = cs.onPrimary,
+                                modifier = Modifier.size(28.dp),
+                            )
+                        }
+                    }
+                    // Следующий
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(btnShape)
+                            .background(cs.primaryContainer)
+                            .clickable(onClick = onNext),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Rounded.SkipNext,
+                            contentDescription = "Дальше",
+                            tint = cs.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    text = subtitle,
+                    text = playingTitle ?: "Бесконечная волна",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = onColor,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                )
+                Text(
+                    text = playingArtist ?: "под твой вкус",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = onColor.copy(alpha = 0.7f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 18.dp),
                 )
-            }
-
-            // Крупная чистая кнопка Play M3 Expressive (72dp) без темного ореола
-            val scaleBtn by animateFloatAsState(
-                targetValue = currentPulse,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-                label = "btnScale",
-            )
-
-            Surface(
-                shape = CircleShape,
-                color = cs.primary,
-                shadowElevation = 6.dp,
-                modifier = Modifier
-                    .size(72.dp)
-                    .graphicsLayer {
-                        scaleX = scaleBtn
-                        scaleY = scaleBtn
-                    }
-                    .clip(CircleShape)
-                    .clickable(
-                        enabled = !loading,
-                        onClick = { onPlayPause() },
-                    ),
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (loading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(28.dp),
-                            strokeWidth = 3.dp,
-                            color = cs.onPrimary,
-                        )
-                    } else {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = "Волна",
-                            tint = cs.onPrimary,
-                            modifier = Modifier.size(38.dp),
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // 2. Органический кластер обложек и управление
-        Surface(
-            shape = RoundedCornerShape(32.dp),
-            color = Color.White.copy(alpha = 0.05f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-            modifier = Modifier.fillMaxWidth().height(164.dp),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 18.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Кластер органических обложек (центральный сквиркл + плавающие круглые бабблы)
-                Box(
-                    modifier = Modifier
-                        .size(136.dp)
-                        .padding(end = 8.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    // Главная центральная капсула / сквиркл
-                    Surface(
-                        shape = RoundedCornerShape(26.dp),
-                        color = cs.surfaceVariant,
-                        border = BorderStroke(1.5.dp, cs.primary.copy(alpha = 0.4f)),
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clip(RoundedCornerShape(26.dp)),
-                    ) {
-                        Artwork(
-                            url = recentThumbs.firstOrNull(),
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
-
-                    // Баббл 1: Слева сверху
-                    if (recentThumbs.size > 1) {
-                        Surface(
-                            shape = CircleShape,
-                            color = cs.surfaceVariant,
-                            border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.3f)),
-                            modifier = Modifier
-                                .size(42.dp)
-                                .align(Alignment.TopStart)
-                                .offset(x = (-4).dp, y = currentFloat1.dp)
-                                .clip(CircleShape),
-                        ) {
-                            Artwork(
-                                url = recentThumbs.getOrNull(1),
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
-                    }
-
-                    // Баббл 2: Справа снизу
-                    if (recentThumbs.size > 2) {
-                        Surface(
-                            shape = CircleShape,
-                            color = cs.surfaceVariant,
-                            border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.3f)),
-                            modifier = Modifier
-                                .size(46.dp)
-                                .align(Alignment.BottomEnd)
-                                .offset(x = 6.dp, y = currentFloat2.dp)
-                                .clip(CircleShape),
-                        ) {
-                            Artwork(
-                                url = recentThumbs.getOrNull(2),
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.width(10.dp))
-
-                // Информация о треке и быстрые действия
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(
-                        text = playingTitle ?: "Бесконечный поток",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = playingArtist ?: "Персональные рекомендации",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.65f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-
-                    Spacer(Modifier.height(12.dp))
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // Лайк капсула
-                        Surface(
-                            shape = CircleShape,
-                            color = if (isLiked) cs.primaryContainer else Color.White.copy(alpha = 0.1f),
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .clickable(onClick = onLike),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                                    contentDescription = "Лайк",
-                                    tint = if (isLiked) cs.onPrimaryContainer else Color.White,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            }
-                        }
-
-                        // Следующий капсула
-                        Surface(
-                            shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.1f),
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .clickable(onClick = onNext),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Rounded.SkipNext,
-                                    contentDescription = "Дальше",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                        }
-                    }
-                }
             }
         }
     }
