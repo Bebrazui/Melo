@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
@@ -16,10 +17,15 @@ object AppSettings {
     private const val KEY_HAPTIC_FEEDBACK = "haptic_feedback"
     private const val KEY_AUTO_DOWNLOAD_FAVORITES = "auto_download_favorites"
     private const val KEY_VINYL_RECORD = "vinyl_record_mode"
+    private const val KEY_UI_SCALE = "ui_scale"
     private const val KEY_SEEN_WELCOME = "seen_welcome"
     private const val KEY_LAUNCHER_ICON = "launcher_icon"
 
     private var prefs: SharedPreferences? = null
+
+    /** Масштаб интерфейса (DPI) приложения (1.0f = 100%). */
+    var uiScale by mutableFloatStateOf(1.0f)
+        private set
 
     /** Караоке-подсветка текста: слова в активной строке загораются по времени. */
     var karaoke by mutableStateOf(false)
@@ -51,6 +57,7 @@ object AppSettings {
         hapticFeedback = prefs?.getBoolean(KEY_HAPTIC_FEEDBACK, true) ?: true
         autoDownloadFavorites = prefs?.getBoolean(KEY_AUTO_DOWNLOAD_FAVORITES, false) ?: false
         vinylRecord = prefs?.getBoolean(KEY_VINYL_RECORD, false) ?: false
+        uiScale = prefs?.getFloat(KEY_UI_SCALE, 1.0f) ?: 1.0f
         seenWelcome = prefs?.getBoolean(KEY_SEEN_WELCOME, false) ?: false
         launcherIcon = prefs?.getString(KEY_LAUNCHER_ICON, IconPreset.DEFAULT.id) ?: IconPreset.DEFAULT.id
     }
@@ -78,6 +85,12 @@ object AppSettings {
     fun updateVinylRecord(value: Boolean) {
         vinylRecord = value
         prefs?.edit()?.putBoolean(KEY_VINYL_RECORD, value)?.apply()
+    }
+
+    fun updateUiScale(value: Float) {
+        val clamped = value.coerceIn(0.75f, 1.40f)
+        uiScale = clamped
+        prefs?.edit()?.putFloat(KEY_UI_SCALE, clamped)?.apply()
     }
 
     /**

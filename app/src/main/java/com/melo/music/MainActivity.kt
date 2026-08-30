@@ -46,37 +46,46 @@ class MainActivity : ComponentActivity() {
         )
 
         setContent {
-            MeloTheme {
-                PlayerScreen(
-                    onSearch = { query -> NewPipeResolver.search(this, query) },
-                    onGetSuggestions = { query -> NewPipeResolver.getSuggestions(query) },
-                    onLoadRecommendations = { NewPipeResolver.recommendations(this) },
-                    onLoadArtistTracks = { artist -> NewPipeResolver.artistTracks(this, artist) },
-                    onLoadArtistAlbums = { artist -> NewPipeResolver.artistAlbums(this, artist) },
-                    onLoadSimilarArtists = { artist, seed -> NewPipeResolver.similarArtists(this, artist, seed) },
-                    onLoadAlbumTracks = { url -> NewPipeResolver.albumTracks(this, url) },
-                    onLoadShelf = { seed -> NewPipeResolver.shelf(this, seed) },
-                    onRelatedTracks = { track -> NewPipeResolver.relatedTracks(this, track) },
-                    onGoogleLogin = { GoogleAuthHelper.signIn(this) },
-                    onSearchUsers = { q -> com.melo.music.profile.ProfilesRepository.search(q) },
-                    scGetId = { SoundCloudFix.currentId(this) },
-                    onScSetManual = { id ->
-                        withContext(Dispatchers.IO) { SoundCloudFix.setManual(this@MainActivity, id) }
-                    },
-                    onScRefresh = {
-                        withContext(Dispatchers.IO) { SoundCloudFix.refresh(this@MainActivity) }
-                    },
-                    onResolveAudioUrl = { url -> Extractor.resolveAudioUrl(this, url) },
-                    isCached = { url -> Extractor.isCached(url) },
-                    onPrefetch = { url -> Extractor.prefetch(this, url) },
-                    onInvalidateCache = { url -> Extractor.invalidate(url) },
-                    onFetchLyrics = { title, artist -> LyricsRepository.fetch(title, artist) },
-                    onPlayResolved = ::playResolved,
-                    onTogglePlayPause = ::togglePlayPause,
-                    playerProvider = { controller },
-                    audioSessionIdProvider = { PlaybackService.audioSessionId },
-                    showGoogle = BuildConfig.FLAVOR == "google",
+            val baseDensity = androidx.compose.ui.platform.LocalDensity.current
+            val scale = com.melo.music.settings.AppSettings.uiScale
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
+                    density = baseDensity.density * scale,
+                    fontScale = baseDensity.fontScale * scale,
                 )
+            ) {
+                MeloTheme {
+                    PlayerScreen(
+                        onSearch = { query -> NewPipeResolver.search(this, query) },
+                        onGetSuggestions = { query -> NewPipeResolver.getSuggestions(query) },
+                        onLoadRecommendations = { NewPipeResolver.recommendations(this) },
+                        onLoadArtistTracks = { artist -> NewPipeResolver.artistTracks(this, artist) },
+                        onLoadArtistAlbums = { artist -> NewPipeResolver.artistAlbums(this, artist) },
+                        onLoadSimilarArtists = { artist, seed -> NewPipeResolver.similarArtists(this, artist, seed) },
+                        onLoadAlbumTracks = { url -> NewPipeResolver.albumTracks(this, url) },
+                        onLoadShelf = { seed -> NewPipeResolver.shelf(this, seed) },
+                        onRelatedTracks = { track -> NewPipeResolver.relatedTracks(this, track) },
+                        onGoogleLogin = { GoogleAuthHelper.signIn(this) },
+                        onSearchUsers = { q -> com.melo.music.profile.ProfilesRepository.search(q) },
+                        scGetId = { SoundCloudFix.currentId(this) },
+                        onScSetManual = { id ->
+                            withContext(Dispatchers.IO) { SoundCloudFix.setManual(this@MainActivity, id) }
+                        },
+                        onScRefresh = {
+                            withContext(Dispatchers.IO) { SoundCloudFix.refresh(this@MainActivity) }
+                        },
+                        onResolveAudioUrl = { url -> Extractor.resolveAudioUrl(this, url) },
+                        isCached = { url -> Extractor.isCached(url) },
+                        onPrefetch = { url -> Extractor.prefetch(this, url) },
+                        onInvalidateCache = { url -> Extractor.invalidate(url) },
+                        onFetchLyrics = { title, artist -> LyricsRepository.fetch(title, artist) },
+                        onPlayResolved = ::playResolved,
+                        onTogglePlayPause = ::togglePlayPause,
+                        playerProvider = { controller },
+                        audioSessionIdProvider = { PlaybackService.audioSessionId },
+                        showGoogle = BuildConfig.FLAVOR == "google",
+                    )
+                }
             }
         }
     }

@@ -25,7 +25,10 @@ object MeloNet {
     val byedpiSelector: ProxySelector = object : ProxySelector() {
         override fun select(uri: URI): List<Proxy> {
             return if (ByeDpiProxy.shouldRoute()) {
-                listOf(Proxy(Proxy.Type.SOCKS, InetSocketAddress(ByeDpiProxy.DEFAULT_HOST, ByeDpiProxy.DEFAULT_PORT)))
+                listOf(
+                    Proxy(Proxy.Type.SOCKS, InetSocketAddress(ByeDpiProxy.DEFAULT_HOST, ByeDpiProxy.DEFAULT_PORT)),
+                    Proxy.NO_PROXY,
+                )
             } else {
                 listOf(Proxy.NO_PROXY)
             }

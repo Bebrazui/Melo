@@ -37,9 +37,33 @@ object ByeDpiProxy {
         runCatching { jniDisableFdsan() }
     }
 
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
     fun init(context: Context) {
         appContext = context.applicationContext
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+        val cm = appContext?.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        if (cm != null && networkCallback == null) {
+            val cb = object : ConnectivityManager.NetworkCallback() {
+                private var lastNetwork: android.net.Network? = null
+                override fun onAvailable(network: android.net.Network) {
+                    if (lastNetwork != null && lastNetwork != network) {
+                        if (isEnabled() && running) {
+                            Thread {
+                                runCatching {
+                                    Thread.sleep(400)
+                                    restart()
+                                }
+                            }.start()
+                        }
+                    }
+                    lastNetwork = network
+                }
+            }
+            networkCallback = cb
+            runCatching { cm.registerDefaultNetworkCallback(cb) }
+        }
     }
 
     /** Активен ли системный VPN. */
@@ -123,9 +147,9 @@ object ByeDpiProxy {
         running = false
     }
 
-    /** Перезапуск с заданной стратегией (для подбора/тюнинга). */
+    /** Перезапуск с заданной стратегией (для подбора/тюнинга или смены сети). */
     @Synchronized
-    fun restart(args: String): Boolean {
+    fun restart(args: String? = null): Boolean {
         stop()
         Thread.sleep(250)
         return start(args)

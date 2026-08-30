@@ -32,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DownloadForOffline
 import androidx.compose.material.icons.rounded.GraphicEq
@@ -39,7 +40,9 @@ import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.VpnLock
 import androidx.compose.material.icons.rounded.Waves
+import com.melo.music.byedpi.ByeDpiProxy
 import com.melo.music.ui.sound.ClickFeedback
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -366,6 +370,182 @@ fun SettingsScreen(
                         checkedTrackColor = cs.primary,
                     ),
                 )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // ── 🛡️ Обход блокировок (ByeDPI) ─────────────────────────
+        var byedpiActive by remember { mutableStateOf(ByeDpiProxy.isEnabled()) }
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = Color.White.copy(alpha = 0.05f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = cs.primaryContainer,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.VpnLock,
+                            contentDescription = null,
+                            tint = cs.onPrimaryContainer,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Обход блокировок (ByeDPI)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "Автономный обход ограничений без VPN. Можно отключить при нестабильной мобильной сети/в машине.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.65f),
+                    )
+                }
+                Switch(
+                    checked = byedpiActive,
+                    onCheckedChange = {
+                        ClickFeedback.play()
+                        byedpiActive = it
+                        ByeDpiProxy.setEnabled(it)
+                        if (it) {
+                            Thread { ByeDpiProxy.start() }.start()
+                        } else {
+                            ByeDpiProxy.stop()
+                        }
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = cs.onPrimary,
+                        checkedTrackColor = cs.primary,
+                    ),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // ── 🔍 Масштаб интерфейса (DPI) ──────────────────────────
+        val currentScale = com.melo.music.settings.AppSettings.uiScale
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = Color.White.copy(alpha = 0.05f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = cs.primaryContainer,
+                        modifier = Modifier.size(48.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Rounded.AspectRatio,
+                                contentDescription = null,
+                                tint = cs.onPrimaryContainer,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Масштаб интерфейса (DPI)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            "Регулировка размера элементов и текста под магнитолы и экраны с высоким DPI",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.65f),
+                        )
+                    }
+                    Text(
+                        "${kotlin.math.round(currentScale * 100).toInt()}%",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = cs.primary,
+                    )
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                Slider(
+                    value = currentScale,
+                    onValueChange = {
+                        com.melo.music.settings.AppSettings.updateUiScale(it)
+                    },
+                    onValueChangeFinished = {
+                        ClickFeedback.play()
+                    },
+                    valueRange = 0.75f..1.35f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = cs.primary,
+                        activeTrackColor = cs.primary,
+                        inactiveTrackColor = Color.White.copy(alpha = 0.12f),
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Spacer(Modifier.height(6.dp))
+
+                // Быстрые пресеты
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf(
+                        "85%" to 0.85f,
+                        "100%" to 1.00f,
+                        "115%" to 1.15f,
+                        "130%" to 1.30f,
+                    ).forEach { (label, presetScale) ->
+                        val isSelected = kotlin.math.abs(currentScale - presetScale) < 0.03f
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) cs.primary else Color.White.copy(alpha = 0.08f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    ClickFeedback.play()
+                                    com.melo.music.settings.AppSettings.updateUiScale(presetScale)
+                                }
+                                .padding(vertical = 8.dp),
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isSelected) cs.onPrimary else Color.White.copy(alpha = 0.8f),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
             }
         }
 

@@ -5391,7 +5391,9 @@ private fun VinylRecordView(
     }
 
     Box(
-        modifier = modifier.aspectRatio(1f),
+        modifier = modifier
+            .aspectRatio(1f)
+            .clip(CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         // Вращающаяся виниловая пластинка
@@ -5507,11 +5509,11 @@ private fun VinylRecordView(
         }
 
         // Внешний статический блик от внешнего освещения телефона (реагирует на наклоны гироскопа)
-        Canvas(modifier = Modifier.fillMaxSize()) {
+        Canvas(modifier = Modifier.fillMaxSize().clip(CircleShape)) {
             val sheenAlpha = (0.08f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 0.04f).coerceIn(0.02f, 0.12f)
             val cx = size.width * (0.45f + tiltRoll * 0.25f)
             val cy = size.height * (0.40f + tiltPitch * 0.25f)
-            val maxDim = kotlin.math.max(size.width, size.height)
+            val discRadius = kotlin.math.min(size.width, size.height) / 2f
 
             drawCircle(
                 brush = Brush.radialGradient(
@@ -5519,9 +5521,9 @@ private fun VinylRecordView(
                     0.35f to Color.White.copy(alpha = sheenAlpha * 0.4f),
                     0.70f to Color.Transparent,
                     center = Offset(cx, cy),
-                    radius = maxDim * 0.85f,
+                    radius = discRadius * 1.5f,
                 ),
-                radius = size.width / 2f,
+                radius = discRadius,
                 center = Offset(size.width / 2f, size.height / 2f),
             )
         }
@@ -5845,6 +5847,7 @@ private fun FullPlayer(
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val isWide = (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) || (maxWidth > maxHeight)
 
+            val isVinylMode = com.melo.music.settings.AppSettings.vinylRecord
             val art3dModifier = Modifier
                 .graphicsLayer {
                     rotationY = tiltRoll * 5f
@@ -5853,6 +5856,8 @@ private fun FullPlayer(
                     translationY = tiltPitch * 4.dp.toPx()
                     cameraDistance = 20f * density
                     shadowElevation = (10f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 2f).dp.toPx()
+                    shape = if (isVinylMode) CircleShape else RoundedCornerShape(32.dp)
+                    clip = isVinylMode
                 }
 
             // ── Компонент обложки или видеоклипа ──
