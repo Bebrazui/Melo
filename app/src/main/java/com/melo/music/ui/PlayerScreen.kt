@@ -243,6 +243,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
+import com.melo.music.ui.sound.ClickFeedback
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -829,6 +830,7 @@ fun PlayerScreen(
                 selected = selectedTab,
                 onSelect = {
                     if (it != selectedTab) {
+                        ClickFeedback.play()
                         previousTab = selectedTab
                         selectedTab = it
                     }
@@ -2486,7 +2488,10 @@ private fun SeaCard(
                             .size(46.dp)
                             .clip(btnShape)
                             .background(cs.primaryContainer)
-                            .clickable(onClick = onLike),
+                            .clickable(onClick = {
+                                ClickFeedback.play()
+                                onLike()
+                            }),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -2502,7 +2507,10 @@ private fun SeaCard(
                             .size(58.dp)
                             .clip(btnShape)
                             .background(cs.primary)
-                            .clickable(enabled = !loading, onClick = onPlayPause),
+                            .clickable(enabled = !loading, onClick = {
+                                ClickFeedback.play()
+                                onPlayPause()
+                            }),
                         contentAlignment = Alignment.Center,
                     ) {
                         if (loading) {
@@ -2526,7 +2534,10 @@ private fun SeaCard(
                             .size(46.dp)
                             .clip(btnShape)
                             .background(cs.primaryContainer)
-                            .clickable(onClick = onNext),
+                            .clickable(onClick = {
+                                ClickFeedback.play()
+                                onNext()
+                            }),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -5426,6 +5437,34 @@ private fun FullPlayer(
         label = "playScaleX",
     )
 
+    // Анимация вытягивания кнопки Предыдущий при нажатии
+    val prevInteractionSource = remember { MutableInteractionSource() }
+    val isPrevPressed by prevInteractionSource.collectIsPressedAsState()
+    val prevBounceAnim = remember { Animatable(1f) }
+
+    val prevScaleX by animateFloatAsState(
+        targetValue = if (isPrevPressed) 1.24f else prevBounceAnim.value,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "prevScaleX",
+    )
+
+    // Анимация вытягивания кнопки Следующий при нажатии
+    val nextInteractionSource = remember { MutableInteractionSource() }
+    val isNextPressed by nextInteractionSource.collectIsPressedAsState()
+    val nextBounceAnim = remember { Animatable(1f) }
+
+    val nextScaleX by animateFloatAsState(
+        targetValue = if (isNextPressed) 1.24f else nextBounceAnim.value,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "nextScaleX",
+    )
+
     // ── 3D-эффект наклона устройства (гироскоп / акселерометр) ──
     val (tiltRoll, tiltPitch) = rememberDeviceTilt()
 
@@ -5869,14 +5908,32 @@ private fun FullPlayer(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // Предыдущий трек: круг в цвет обложки
+                    // Предыдущий трек: сквиркл в цвет обложки с эффектом вытягивания при нажатии
                     Surface(
-                        shape = CircleShape,
+                        shape = RoundedCornerShape(30.dp),
                         color = sideBtnColor,
                         modifier = Modifier
-                            .size(if (isLandscape) 56.dp else 66.dp)
-                            .clip(CircleShape)
-                            .clickable(onClick = onPrev),
+                            .width((if (isLandscape) 56.dp else 66.dp) * prevScaleX)
+                            .height(if (isLandscape) 56.dp else 66.dp)
+                            .clip(RoundedCornerShape(30.dp))
+                            .clickable(
+                                interactionSource = prevInteractionSource,
+                                indication = ripple(bounded = true),
+                                onClick = {
+                                    gestureScope.launch {
+                                        prevBounceAnim.snapTo(1.25f)
+                                        prevBounceAnim.animateTo(
+                                            targetValue = 1f,
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                stiffness = Spring.StiffnessMediumLow,
+                                            ),
+                                        )
+                                    }
+                                    ClickFeedback.play()
+                                    onPrev()
+                                },
+                            ),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
@@ -5888,7 +5945,7 @@ private fun FullPlayer(
                         }
                     }
 
-                    Spacer(Modifier.width(if (isLandscape) 14.dp else 18.dp))
+                    Spacer(Modifier.width(if (isLandscape) 8.dp else 10.dp))
 
                     // Play / Pause: сквиркл в цвет обложки с вытягиванием в длину
                     Surface(
@@ -5913,6 +5970,7 @@ private fun FullPlayer(
                                             ),
                                         )
                                     }
+                                    ClickFeedback.play()
                                     onTogglePlayPause()
                                 },
                             ),
@@ -5940,16 +5998,34 @@ private fun FullPlayer(
                         }
                     }
 
-                    Spacer(Modifier.width(if (isLandscape) 14.dp else 18.dp))
+                    Spacer(Modifier.width(if (isLandscape) 8.dp else 10.dp))
 
-                    // Следующий трек: круг в цвет обложки
+                    // Следующий трек: сквиркл в цвет обложки с эффектом вытягивания при нажатии
                     Surface(
-                        shape = CircleShape,
+                        shape = RoundedCornerShape(30.dp),
                         color = sideBtnColor,
                         modifier = Modifier
-                            .size(if (isLandscape) 56.dp else 66.dp)
-                            .clip(CircleShape)
-                            .clickable(onClick = onNext),
+                            .width((if (isLandscape) 56.dp else 66.dp) * nextScaleX)
+                            .height(if (isLandscape) 56.dp else 66.dp)
+                            .clip(RoundedCornerShape(30.dp))
+                            .clickable(
+                                interactionSource = nextInteractionSource,
+                                indication = ripple(bounded = true),
+                                onClick = {
+                                    gestureScope.launch {
+                                        nextBounceAnim.snapTo(1.25f)
+                                        nextBounceAnim.animateTo(
+                                            targetValue = 1f,
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                stiffness = Spring.StiffnessMediumLow,
+                                            ),
+                                        )
+                                    }
+                                    ClickFeedback.play()
+                                    onNext()
+                                },
+                            ),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(

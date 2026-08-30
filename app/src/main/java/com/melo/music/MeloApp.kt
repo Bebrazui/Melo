@@ -53,6 +53,7 @@ class MeloApp : Application(), ImageLoaderFactory {
         StreamCacheStore.init(this)
         com.melo.music.offline.OfflineManager.init(this)
         com.melo.music.settings.AppSettings.init(this)
+        com.melo.music.ui.sound.ClickFeedback.init(this)
         Recommender.init(this)
         // Карта музыки: бэкенд Appwrite + osmdroid.
         com.melo.music.map.AppwriteService.init(this)

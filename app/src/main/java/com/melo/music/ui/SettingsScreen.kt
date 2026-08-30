@@ -35,8 +35,10 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Lyrics
+import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Waves
+import com.melo.music.ui.sound.ClickFeedback
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -180,6 +182,64 @@ fun SettingsScreen(
                 Switch(
                     checked = AppSettings.karaoke,
                     onCheckedChange = { AppSettings.updateKaraoke(it) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = cs.onPrimary,
+                        checkedTrackColor = cs.primary,
+                    ),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // ── 📳 Тактильный отклик и щелчок (Bento Card) ────────────
+        Surface(
+            shape = RoundedCornerShape(26.dp),
+            color = Color.White.copy(alpha = 0.05f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = cs.primaryContainer,
+                    modifier = Modifier.size(46.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.Vibration,
+                            contentDescription = null,
+                            tint = cs.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Тактильный отклик",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "Звук щелчка и виброотклик при нажатии кнопок",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.65f),
+                    )
+                }
+                Switch(
+                    checked = com.melo.music.settings.AppSettings.hapticFeedback,
+                    onCheckedChange = {
+                        com.melo.music.settings.AppSettings.updateHapticFeedback(it)
+                        if (it) ClickFeedback.play()
+                    },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = cs.onPrimary,
                         checkedTrackColor = cs.primary,
