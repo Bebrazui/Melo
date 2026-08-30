@@ -116,7 +116,7 @@ dependencies {
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.androidx.material3)
+    implementation("androidx.compose.material3:material3:1.5.0-alpha10")
     implementation(libs.androidx.material.icons.extended)
     debugImplementation(libs.androidx.ui.tooling)
 

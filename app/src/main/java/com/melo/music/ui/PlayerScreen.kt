@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package com.melo.music.ui
 
 import android.Manifest
@@ -19,6 +20,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -129,9 +131,11 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -251,6 +255,7 @@ import kotlin.math.roundToInt
  * Главный экран MVP в стиле Material 3 Expressive: поиск + популярная музыка
  * по региону. Тап по треку → on-device резолв (NewPipe) → фоновое воспроизведение.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PlayerScreen(
     onSearch: (String) -> Flow<List<TrackItem>>,
@@ -873,7 +878,15 @@ fun PlayerScreen(
                             listLoading && items.isEmpty() -> Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center,
-                            ) { CircularProgressIndicator() }
+                            ) {
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = true,
+                                    enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0.7f),
+                                    exit = fadeOut(tween(250)) + scaleOut(tween(250), targetScale = 0.7f),
+                                ) {
+                                    LoadingIndicator(modifier = Modifier.size(48.dp))
+                                }
+                            }
 
                             listError != null && items.isEmpty() -> Text(
                                 text = "Ошибка: $listError",
@@ -2758,7 +2771,15 @@ private fun HomeFeed(
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(24.dp),
                     contentAlignment = Alignment.Center,
-                ) { CircularProgressIndicator() }
+                ) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0.7f),
+                        exit = fadeOut(tween(250)) + scaleOut(tween(250), targetScale = 0.7f),
+                    ) {
+                        LoadingIndicator(modifier = Modifier.size(44.dp))
+                    }
+                }
             }
         }
         itemsIndexed(recTracks, key = { index, it -> "rec_${index}_${it.url}" }) { index, t ->
@@ -2843,7 +2864,15 @@ private fun QuickPickGrid(
         Box(
             modifier = Modifier.fillMaxWidth().height(148.dp),
             contentAlignment = Alignment.Center,
-        ) { CircularProgressIndicator() }
+        ) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = true,
+                enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0.7f),
+                exit = fadeOut(tween(250)) + scaleOut(tween(250), targetScale = 0.7f),
+            ) {
+                LoadingIndicator(modifier = Modifier.size(36.dp))
+            }
+        }
         return
     }
     if (tracks.isEmpty()) return
@@ -2921,7 +2950,15 @@ private fun HorizontalShelf(
         Box(
             modifier = Modifier.fillMaxWidth().height(208.dp),
             contentAlignment = Alignment.Center,
-        ) { CircularProgressIndicator() }
+        ) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = true,
+                enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0.7f),
+                exit = fadeOut(tween(250)) + scaleOut(tween(250), targetScale = 0.7f),
+            ) {
+                LoadingIndicator(modifier = Modifier.size(36.dp))
+            }
+        }
         return
     }
     if (tracks.isEmpty()) return
@@ -3114,11 +3151,16 @@ private fun TrackCard(
                     tint = iconTint,
                     modifier = Modifier.padding(end = 6.dp),
                 )
-                resolving -> CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    strokeWidth = 2.dp,
-                    color = iconTint,
-                )
+                resolving -> androidx.compose.animation.AnimatedVisibility(
+                    visible = true,
+                    enter = fadeIn(tween(250)) + scaleIn(tween(250), initialScale = 0.6f),
+                    exit = fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.6f),
+                ) {
+                    LoadingIndicator(
+                        modifier = Modifier.size(24.dp).padding(end = 4.dp),
+                        color = iconTint,
+                    )
+                }
                 else -> Icon(
                     imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                     contentDescription = null,
@@ -5437,27 +5479,28 @@ private fun FullPlayer(
         label = "iconTint",
     )
 
-    // Анимация вытягивания кнопки Play/Pause при нажатии
+    // Анимация вытягивания и сжатия кнопок управления при нажатии
     val playInteractionSource = remember { MutableInteractionSource() }
     val isPlayPressed by playInteractionSource.collectIsPressedAsState()
     val playBounceAnim = remember { Animatable(1f) }
 
-    val playScaleX by animateFloatAsState(
-        targetValue = if (isPlayPressed) 1.24f else playBounceAnim.value,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow,
-        ),
-        label = "playScaleX",
-    )
-
-    // Анимация вытягивания кнопки Предыдущий при нажатии
     val prevInteractionSource = remember { MutableInteractionSource() }
     val isPrevPressed by prevInteractionSource.collectIsPressedAsState()
     val prevBounceAnim = remember { Animatable(1f) }
 
+    val nextInteractionSource = remember { MutableInteractionSource() }
+    val isNextPressed by nextInteractionSource.collectIsPressedAsState()
+    val nextBounceAnim = remember { Animatable(1f) }
+
+    // Динамический масштаб по X: зажатая кнопка сильнее вытягивается (до 1.46x), а соседние сжимаются (до 0.82x-0.90x)
+    val prevTargetScale = when {
+        isPrevPressed -> 1.46f
+        isPlayPressed -> 0.82f
+        isNextPressed -> 0.92f
+        else -> prevBounceAnim.value
+    }
     val prevScaleX by animateFloatAsState(
-        targetValue = if (isPrevPressed) 1.24f else prevBounceAnim.value,
+        targetValue = prevTargetScale,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMediumLow,
@@ -5465,18 +5508,60 @@ private fun FullPlayer(
         label = "prevScaleX",
     )
 
-    // Анимация вытягивания кнопки Следующий при нажатии
-    val nextInteractionSource = remember { MutableInteractionSource() }
-    val isNextPressed by nextInteractionSource.collectIsPressedAsState()
-    val nextBounceAnim = remember { Animatable(1f) }
+    val playTargetScale = when {
+        isPlayPressed -> 1.40f
+        isPrevPressed -> 0.80f
+        isNextPressed -> 0.80f
+        else -> playBounceAnim.value
+    }
+    val playScaleX by animateFloatAsState(
+        targetValue = playTargetScale,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "playScaleX",
+    )
 
+    val nextTargetScale = when {
+        isNextPressed -> 1.46f
+        isPlayPressed -> 0.82f
+        isPrevPressed -> 0.92f
+        else -> nextBounceAnim.value
+    }
     val nextScaleX by animateFloatAsState(
-        targetValue = if (isNextPressed) 1.24f else nextBounceAnim.value,
+        targetValue = nextTargetScale,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMediumLow,
         ),
         label = "nextScaleX",
+    )
+
+    // Динамическое скругление: пока кнопка зажата — скругление слегка уменьшается
+    val prevCornerRadius by animateDpAsState(
+        targetValue = if (isPrevPressed) 18.dp else 32.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "prevCornerRadius",
+    )
+    val playCornerRadius by animateDpAsState(
+        targetValue = if (isPlayPressed) 16.dp else 26.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "playCornerRadius",
+    )
+    val nextCornerRadius by animateDpAsState(
+        targetValue = if (isNextPressed) 18.dp else 32.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "nextCornerRadius",
     )
 
     // ── 3D-эффект наклона устройства (гироскоп / акселерометр) ──
@@ -5924,12 +6009,12 @@ private fun FullPlayer(
                 ) {
                     // Предыдущий трек: сквиркл в цвет обложки с эффектом вытягивания при нажатии
                     Surface(
-                        shape = RoundedCornerShape(30.dp),
+                        shape = RoundedCornerShape(prevCornerRadius),
                         color = sideBtnColor,
                         modifier = Modifier
                             .width((if (isLandscape) 56.dp else 66.dp) * prevScaleX)
                             .height(if (isLandscape) 56.dp else 66.dp)
-                            .clip(RoundedCornerShape(30.dp))
+                            .clip(RoundedCornerShape(prevCornerRadius))
                             .clickable(
                                 interactionSource = prevInteractionSource,
                                 indication = ripple(bounded = true),
@@ -5963,13 +6048,13 @@ private fun FullPlayer(
 
                     // Play / Pause: сквиркл в цвет обложки с вытягиванием в длину
                     Surface(
-                        shape = RoundedCornerShape(26.dp),
+                        shape = RoundedCornerShape(playCornerRadius),
                         color = playBtnColor,
                         shadowElevation = 8.dp,
                         modifier = Modifier
                             .width((if (isLandscape) 84.dp else 96.dp) * playScaleX)
                             .height(if (isLandscape) 64.dp else 74.dp)
-                            .clip(RoundedCornerShape(26.dp))
+                            .clip(RoundedCornerShape(playCornerRadius))
                             .clickable(
                                 interactionSource = playInteractionSource,
                                 indication = ripple(bounded = true),
@@ -5993,13 +6078,21 @@ private fun FullPlayer(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center,
                         ) {
-                            if (resolving) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(28.dp),
-                                    strokeWidth = 3.dp,
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = resolving,
+                                enter = fadeIn(tween(260)) + scaleIn(tween(260), initialScale = 0.65f),
+                                exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.65f),
+                            ) {
+                                LoadingIndicator(
+                                    modifier = Modifier.size(if (isLandscape) 26.dp else 30.dp),
                                     color = iconTint,
                                 )
-                            } else {
+                            }
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = !resolving,
+                                enter = fadeIn(tween(260)) + scaleIn(tween(260), initialScale = 0.65f),
+                                exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.65f),
+                            ) {
                                 AnimatedContent(targetState = isPlaying, label = "playPause") { playing ->
                                     Icon(
                                         imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
@@ -6016,12 +6109,12 @@ private fun FullPlayer(
 
                     // Следующий трек: сквиркл в цвет обложки с эффектом вытягивания при нажатии
                     Surface(
-                        shape = RoundedCornerShape(30.dp),
+                        shape = RoundedCornerShape(nextCornerRadius),
                         color = sideBtnColor,
                         modifier = Modifier
                             .width((if (isLandscape) 56.dp else 66.dp) * nextScaleX)
                             .height(if (isLandscape) 56.dp else 66.dp)
-                            .clip(RoundedCornerShape(30.dp))
+                            .clip(RoundedCornerShape(nextCornerRadius))
                             .clickable(
                                 interactionSource = nextInteractionSource,
                                 indication = ripple(bounded = true),
