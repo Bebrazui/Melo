@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.melo.music.ui
 
 import androidx.compose.foundation.background
@@ -22,6 +24,7 @@ import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -139,7 +142,7 @@ fun TrackInfoSheet(
             item {
                 if (statsLoading) {
                     Box(Modifier.fillMaxWidth().padding(vertical = 18.dp), Alignment.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(26.dp), strokeWidth = 2.dp)
+                        LoadingIndicator(modifier = Modifier.size(28.dp))
                     }
                 } else if (stats == null) {
                     Text(
@@ -184,7 +187,7 @@ fun TrackInfoSheet(
                         Text("Показать комментарии")
                     }
                     commentsLoading -> Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), Alignment.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        LoadingIndicator(modifier = Modifier.size(26.dp))
                     }
                     else -> {}
                 }

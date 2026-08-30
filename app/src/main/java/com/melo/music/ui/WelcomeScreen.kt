@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.melo.music.ui
 
 import androidx.activity.compose.BackHandler
@@ -20,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -222,7 +225,7 @@ fun WelcomeScreen(
                 shape = RoundedCornerShape(16.dp),
             ) {
                 if (busy) {
-                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = Color.White)
+                    LoadingIndicator(modifier = Modifier.size(24.dp), color = Color.White)
                 } else {
                     Text(
                         when {

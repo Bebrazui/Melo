@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.melo.music.ui
 
 import androidx.activity.compose.BackHandler
@@ -41,6 +43,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -350,9 +353,8 @@ private fun EditProfileDialog(onDismiss: () -> Unit) {
                         enabled = !busy,
                     ) {
                         if (busy) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
+                            LoadingIndicator(
+                                modifier = Modifier.size(22.dp),
                                 color = Color.White,
                             )
                         } else {
@@ -500,7 +502,7 @@ fun ProfileScreen(
             if (favorites == null || playlists == null) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
+                        LoadingIndicator(modifier = Modifier.size(36.dp))
                     }
                 }
             } else if (favs.isNullOrEmpty() && playlists!!.isEmpty()) {

@@ -19,8 +19,8 @@ Java_com_melo_music_byedpi_ByeDpiProxy_jniDisableFdsan(JNIEnv *env, jobject thiz
     }
 }
 
-#define LOG_TAG "ByeDPI"
-// Логи заглушены (no-op) — движок работает, в logcat ничего не пишет.
+#define LOG_TAG "MeloCore"
+// Логи заглушены (no-op) — движок работает скрытно, в logcat ничего не пишет.
 #define LOGI(...) ((void)0)
 #define LOGE(...) ((void)0)
 

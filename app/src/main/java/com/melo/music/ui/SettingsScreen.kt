@@ -373,68 +373,69 @@ fun SettingsScreen(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-
-        // ── 🛡️ Обход блокировок (ByeDPI) ─────────────────────────
-        var byedpiActive by remember { mutableStateOf(ByeDpiProxy.isEnabled()) }
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = Color.White.copy(alpha = 0.05f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Row(
-                modifier = Modifier
-                    .padding(20.dp)
-                    .fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+        // ── 🛡️ Обход блокировок (ByeDPI) — скрыт в сборке RuStore ──
+        if (com.melo.music.BuildConfig.FLAVOR != "ruStore") {
+            Spacer(Modifier.height(16.dp))
+            var byedpiActive by remember { mutableStateOf(ByeDpiProxy.isEnabled()) }
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = Color.White.copy(alpha = 0.05f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = cs.primaryContainer,
-                    modifier = Modifier.size(48.dp),
+                Row(
+                    modifier = Modifier
+                        .padding(20.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Rounded.VpnLock,
-                            contentDescription = null,
-                            tint = cs.onPrimaryContainer,
-                            modifier = Modifier.size(24.dp),
+                    Surface(
+                        shape = CircleShape,
+                        color = cs.primaryContainer,
+                        modifier = Modifier.size(48.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Rounded.VpnLock,
+                                contentDescription = null,
+                                tint = cs.onPrimaryContainer,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Обход блокировок (ByeDPI)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            "Автономный обход ограничений без VPN. Можно отключить при нестабильной мобильной сети/в машине.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.65f),
                         )
                     }
-                }
-                Spacer(Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Обход блокировок (ByeDPI)",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
+                    Switch(
+                        checked = byedpiActive,
+                        onCheckedChange = {
+                            ClickFeedback.play()
+                            byedpiActive = it
+                            ByeDpiProxy.setEnabled(it)
+                            if (it) {
+                                Thread { ByeDpiProxy.start() }.start()
+                            } else {
+                                ByeDpiProxy.stop()
+                            }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = cs.onPrimary,
+                            checkedTrackColor = cs.primary,
+                        ),
                     )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        "Автономный обход ограничений без VPN. Можно отключить при нестабильной мобильной сети/в машине.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.65f),
-                    )
                 }
-                Switch(
-                    checked = byedpiActive,
-                    onCheckedChange = {
-                        ClickFeedback.play()
-                        byedpiActive = it
-                        ByeDpiProxy.setEnabled(it)
-                        if (it) {
-                            Thread { ByeDpiProxy.start() }.start()
-                        } else {
-                            ByeDpiProxy.stop()
-                        }
-                    },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = cs.onPrimary,
-                        checkedTrackColor = cs.primary,
-                    ),
-                )
             }
         }
 

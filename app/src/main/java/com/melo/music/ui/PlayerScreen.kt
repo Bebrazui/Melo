@@ -3021,7 +3021,7 @@ private fun ShelfCard(
                 Box(
                     modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)),
                     contentAlignment = Alignment.Center,
-                ) { CircularProgressIndicator(color = Color.White, modifier = Modifier.size(26.dp), strokeWidth = 2.dp) }
+                ) { LoadingIndicator(color = Color.White, modifier = Modifier.size(28.dp)) }
             } else if (playing) {
                 Box(
                     modifier = Modifier
@@ -3377,7 +3377,7 @@ private fun SearchResultsScreen(
                     modifier = Modifier.fillMaxWidth().padding(14.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    CircularProgressIndicator(modifier = Modifier.size(26.dp), strokeWidth = 2.dp)
+                    LoadingIndicator(modifier = Modifier.size(28.dp))
                 }
             }
         }
@@ -3463,9 +3463,8 @@ private fun TopResultCard(
                     .size(46.dp),
             ) {
                 when {
-                    resolving -> CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        strokeWidth = 2.dp,
+                    resolving -> LoadingIndicator(
+                        modifier = Modifier.size(24.dp),
                         color = Color.Black,
                     )
                     else -> Icon(
@@ -3566,7 +3565,7 @@ private fun SearchAlbumCard(
                             modifier = Modifier.fillMaxWidth().padding(16.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            LoadingIndicator(modifier = Modifier.size(28.dp))
                         }
                     } else {
                         tracks.forEachIndexed { i, t ->
@@ -3600,7 +3599,7 @@ private fun SearchAlbumCard(
                                      }
                                  }
                                  if (resolvingUrl == t.url) {
-                                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                     LoadingIndicator(modifier = Modifier.size(20.dp))
                                  } else if (nowPlayingUrl == t.url && isPlaying) {
                                      Icon(
                                          Icons.Rounded.MusicNote, contentDescription = null,
@@ -3983,7 +3982,7 @@ private fun ArtistScreen(
                                 }
                             }
                             if (resolvingUrl == t.url) {
-                                CircularProgressIndicator(color = animatedAccent, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                LoadingIndicator(color = animatedAccent, modifier = Modifier.size(20.dp))
                             } else if (isCurrent && isPlaying) {
                                 Icon(
                                     imageVector = Icons.Rounded.MusicNote,
@@ -4031,7 +4030,7 @@ private fun ArtistScreen(
             when {
                 loading -> item(key = "tracks_loading") {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = animatedAccent)
+                        LoadingIndicator(color = animatedAccent, modifier = Modifier.size(48.dp))
                     }
                 }
                 error != null && tracks.isEmpty() -> item(key = "tracks_error") {
@@ -4217,8 +4216,8 @@ private fun AlbumCard(
                             modifier = Modifier.fillMaxWidth().padding(16.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            CircularProgressIndicator(
-                                color = accent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp,
+                            LoadingIndicator(
+                                color = accent, modifier = Modifier.size(28.dp),
                             )
                         }
                     } else {
@@ -4257,8 +4256,8 @@ private fun AlbumCard(
                                         }
                                     }
                                     if (resolvingUrl == t.url) {
-                                        CircularProgressIndicator(
-                                            color = accent, modifier = Modifier.size(18.dp), strokeWidth = 2.dp,
+                                        LoadingIndicator(
+                                            color = accent, modifier = Modifier.size(20.dp),
                                         )
                                     } else if (isTrackCurrent && isPlaying) {
                                         Icon(
@@ -4308,7 +4307,7 @@ private fun ArtistTrackTile(
                         modifier = Modifier.size(46.dp).background(Color.Black.copy(alpha = 0.50f), RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        CircularProgressIndicator(color = accent, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        LoadingIndicator(color = accent, modifier = Modifier.size(22.dp))
                     }
                 }
             }
@@ -5072,9 +5071,8 @@ private fun NowPlayingBar(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             if (resolving) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(22.dp),
-                                    strokeWidth = 2.5.dp,
+                                LoadingIndicator(
+                                    modifier = Modifier.size(24.dp),
                                     color = Color(0xFF1A1612),
                                 )
                             } else {

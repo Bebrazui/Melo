@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.melo.music.map
 
 import android.Manifest
@@ -66,6 +68,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -913,7 +916,7 @@ private fun TrackPickerSheet(
                     Spacer(Modifier.height(10.dp))
                     if (searching) {
                         Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(26.dp))
+                            LoadingIndicator(modifier = Modifier.size(28.dp))
                         }
                     }
                     TrackList(results, onPick)
