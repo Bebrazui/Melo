@@ -78,6 +78,9 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
@@ -344,6 +347,7 @@ fun PlayerScreen(
     var selectedTab by rememberSaveable { mutableStateOf(MeloTab.Home) }
     var previousTab by rememberSaveable { mutableStateOf(MeloTab.Home) }
     var playerExpanded by rememberSaveable { mutableStateOf(false) }
+    var miniPlayerBounds by remember { mutableStateOf<Rect?>(null) }
     var artistOpen by rememberSaveable(stateSaver = TrackSaver.singleSaver()) { mutableStateOf<TrackItem?>(null) }
     var playlistOpen by remember { mutableStateOf<Playlist?>(null) }
     var searchMode by rememberSaveable { mutableStateOf(false) }
@@ -1050,7 +1054,10 @@ fun PlayerScreen(
               onPrev = { playPrev() },
               onNext = { playNext() },
               onClick = { playerExpanded = true },
-              modifier = Modifier.align(Alignment.BottomCenter),
+              modifier = Modifier
+                  .align(Alignment.BottomCenter)
+                  .graphicsLayer { alpha = if (playerExpanded) 0f else 1f },
+              onPositioned = { miniPlayerBounds = it },
           )
         }
 
@@ -1083,6 +1090,8 @@ fun PlayerScreen(
                         onPrev = { playPrev() },
                         onNext = { playNext() },
                         onClick = { playerExpanded = true },
+                        modifier = Modifier.graphicsLayer { alpha = if (playerExpanded) 0f else 1f },
+                        onPositioned = { miniPlayerBounds = it },
                     )
                 },
             )
@@ -1128,6 +1137,7 @@ fun PlayerScreen(
                         artistOpen = artistItem
                     },
                     onCollapse = { playerExpanded = false },
+                    miniPlayerBounds = miniPlayerBounds,
                 )
             }
         }
@@ -4981,6 +4991,7 @@ private fun NowPlayingBar(
     onNext: () -> Unit = {},
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onPositioned: (Rect) -> Unit = {},
 ) {
     if (item == null) return
     val context = LocalContext.current
@@ -5056,7 +5067,10 @@ private fun NowPlayingBar(
         border = BorderStroke(1.2.dp, lerp(Color(0x55FFFFFF), animatedTrackColor, 0.45f)),
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .onGloballyPositioned { coordinates ->
+                onPositioned(coordinates.boundsInRoot())
+            },
     ) {
         Box(
             modifier = Modifier
@@ -5572,6 +5586,7 @@ private fun FullPlayer(
     onFetchLyrics: suspend () -> Lyrics?,
     onOpenArtist: (TrackItem) -> Unit = {},
     onCollapse: () -> Unit,
+    miniPlayerBounds: Rect? = null,
 ) {
     val playerContext = androidx.compose.ui.platform.LocalContext.current
     var showVideo by remember(item.url) { mutableStateOf(false) }
@@ -5799,20 +5814,24 @@ private fun FullPlayer(
     var axis by remember { mutableIntStateOf(0) }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val screenWidthPx = with(localDensity) { maxWidth.toPx() }
         val screenHeightPx = with(localDensity) { maxHeight.toPx() }
-        val miniBarHeightPx = with(localDensity) { miniBarHeight.toPx() }
-        val bottomOffsetPx = with(localDensity) { miniBarBottomOffset.toPx() }
-        val targetY = (screenHeightPx - bottomOffsetPx - miniBarHeightPx).coerceAtLeast(0f)
+
+        val targetX = miniPlayerBounds?.left ?: with(localDensity) { 14.dp.toPx() }
+        val targetY = miniPlayerBounds?.top ?: (screenHeightPx - with(localDensity) { 160.dp.toPx() })
+        val targetW = miniPlayerBounds?.width ?: (screenWidthPx - with(localDensity) { 28.dp.toPx() })
+        val targetH = miniPlayerBounds?.height ?: with(localDensity) { 72.dp.toPx() }
 
         val p = collapseProgress.value.coerceIn(0f, 1f)
-        val currentY = targetY * p
-        val currentHeight = androidx.compose.ui.unit.lerp(maxHeight, miniBarHeight, p)
-        val currentHorizPad = androidx.compose.ui.unit.lerp(0.dp, 14.dp, p)
+        val currentX = androidx.compose.ui.util.lerp(0f, targetX, p)
+        val currentY = androidx.compose.ui.util.lerp(0f, targetY, p)
+        val currentW = androidx.compose.ui.util.lerp(screenWidthPx, targetW, p)
+        val currentH = androidx.compose.ui.util.lerp(screenHeightPx, targetH, p)
         val currentCorner = androidx.compose.ui.unit.lerp(0.dp, 42.dp, p)
         val currentElevation = androidx.compose.ui.unit.lerp(0.dp, 18.dp, p)
 
-        val fullAlpha = (1f - p * 2.3f).coerceIn(0f, 1f)
-        val miniAlpha = ((p - 0.30f) * 1.5f).coerceIn(0f, 1f)
+        val fullAlpha = (1f - p * 2.4f).coerceIn(0f, 1f)
+        val miniAlpha = ((p - 0.25f) / 0.75f).coerceIn(0f, 1f)
 
         // Мягкое затемнение фона под карточкой, плавно уходящее при сворачивании
         Box(
@@ -5826,10 +5845,11 @@ private fun FullPlayer(
                 shadowElevation = currentElevation,
                 border = if (p > 0.05f) BorderStroke(1.2.dp * p, lerp(Color(0x55FFFFFF), artColor, 0.45f)) else null,
                 modifier = Modifier
-                    .padding(horizontal = currentHorizPad)
-                    .offset { IntOffset(0, currentY.roundToInt()) }
-                    .fillMaxWidth()
-                    .height(currentHeight)
+                    .offset { IntOffset(currentX.roundToInt(), currentY.roundToInt()) }
+                    .size(
+                        width = with(localDensity) { currentW.toDp() },
+                        height = with(localDensity) { currentH.toDp() },
+                    )
                     .clip(RoundedCornerShape(currentCorner))
                     .pointerInput(Unit) {
                         detectDragGestures(
@@ -5874,7 +5894,8 @@ private fun FullPlayer(
                                 } else {
                                     val delta = drag.y
                                     swipeAccum += delta
-                                    val newProgress = (collapseProgress.value + delta / targetY.coerceAtLeast(1f)).coerceIn(0f, 1f)
+                                    val dragDistance = (targetY - 0f).coerceAtLeast(100f)
+                                    val newProgress = (collapseProgress.value + delta / dragDistance).coerceIn(0f, 1f)
                                     gestureScope.launch { collapseProgress.snapTo(newProgress) }
                                 }
                             },
