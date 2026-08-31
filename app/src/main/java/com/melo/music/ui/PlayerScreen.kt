@@ -58,6 +58,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -827,9 +828,12 @@ fun PlayerScreen(
     val ambientLight = lerp(ambientBg, Color(0xFF3E6B4E), 0.22f)
     val ambientDark = lerp(ambientBg, Color.Black, 0.32f)
     val onBg = MaterialTheme.colorScheme.onBackground
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     // Плавающие над контентом плашки: лента скроллится под ними (без фоновой подложки).
-    val playerInset = if (nowPlaying != null) 96.dp else 0.dp
-    val searchInset = 84.dp
+    val playerInset = if (nowPlaying != null) {
+        if (isLandscape) 80.dp else 96.dp
+    } else 0.dp
+    val searchInset = if (isLandscape) 70.dp else 84.dp
     // Очень медленный дрейф пятен (один цикл ~70с, бесшовно через sin/cos).
     val ambientPhase by rememberInfiniteTransition(label = "ambient").animateFloat(
         initialValue = 0f,
@@ -866,24 +870,43 @@ fun PlayerScreen(
         containerColor = Color.Transparent,
         contentColor = onBg,
         bottomBar = {
-            MeloBottomNav(
-                selected = selectedTab,
-                onSelect = {
-                    if (it != selectedTab) {
-                        ClickFeedback.play()
-                        previousTab = selectedTab
-                        selectedTab = it
-                    }
-                },
-            )
+            if (!isLandscape) {
+                MeloBottomNav(
+                    selected = selectedTab,
+                    onSelect = {
+                        if (it != selectedTab) {
+                            ClickFeedback.play()
+                            previousTab = selectedTab
+                            selectedTab = it
+                        }
+                    },
+                )
+            }
         },
     ) { innerPadding ->
       Box(modifier = Modifier.fillMaxSize()) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
+          if (isLandscape) {
+              MeloNavRail(
+                  selected = selectedTab,
+                  onSelect = {
+                      if (it != selectedTab) {
+                          ClickFeedback.play()
+                          previousTab = selectedTab
+                          selectedTab = it
+                      }
+                  },
+              )
+          }
+          Box(
+              modifier = Modifier
+                  .weight(1f)
+                  .fillMaxHeight(),
+          ) {
           AnimatedContent(
             targetState = selectedTab,
             transitionSpec = {
@@ -1002,7 +1025,9 @@ fun PlayerScreen(
                             ghostIndex = 0
                             runSearch()
                         },
-                        modifier = Modifier.align(Alignment.TopCenter),
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .then(if (isLandscape) Modifier.widthIn(max = 560.dp).padding(top = 4.dp) else Modifier.fillMaxWidth()),
                     )
                 }
 
@@ -1079,10 +1104,12 @@ fun PlayerScreen(
               onClick = { playerExpanded = true },
               modifier = Modifier
                   .align(Alignment.BottomCenter)
+                  .then(if (isLandscape) Modifier.widthIn(max = 560.dp).padding(bottom = 6.dp) else Modifier.fillMaxWidth())
                   .graphicsLayer { alpha = if (playerExpanded) 0f else 1f },
               onPositioned = { miniPlayerBounds = it },
           )
         }
+       }
 
         // Карта — отдельный слой во весь экран с направленным боковым выездом (смотря откуда перешли).
         val mapFromLeft = previousTab.ordinal < MeloTab.Map.ordinal
@@ -1630,6 +1657,65 @@ private fun MeloBottomNav(selected: MeloTab, onSelect: (MeloTab) -> Unit) {
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MeloNavRail(selected: MeloTab, onSelect: (MeloTab) -> Unit, modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val tabs = remember {
+        listOf(
+            Triple(MeloTab.Home, Icons.Rounded.Home, MeloTab.Home.label),
+            Triple(MeloTab.Favorite, Icons.Rounded.Favorite, MeloTab.Favorite.label),
+            Triple(MeloTab.Map, Icons.Rounded.Map, MeloTab.Map.label),
+            Triple(MeloTab.Account, Icons.Rounded.AccountCircle, MeloTab.Account.label),
+        )
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .padding(start = 12.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(32.dp),
+            color = Color(0xF2141F19),
+            shadowElevation = 8.dp,
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier.width(64.dp).fillMaxHeight(),
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                tabs.forEach { (tab, icon, label) ->
+                    val isSelected = selected == tab
+
+                    Surface(
+                        shape = CircleShape,
+                        color = if (isSelected) cs.primaryContainer else Color.Transparent,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { onSelect(tab) }
+                            .padding(horizontal = 4.dp),
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(48.dp),
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = label,
+                                tint = if (isSelected) cs.onPrimaryContainer else Color.White.copy(alpha = 0.65f),
+                                modifier = Modifier.size(22.dp),
+                            )
                         }
                     }
                 }
@@ -2472,10 +2558,14 @@ private fun SeaCard(
     onLike: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val outerShape = remember { CookieShape(8, 0.11f) }
     val btnShape = remember { CookieShape(8, 0.16f) }
     val innerColor = lerp(cs.secondaryContainer, Color.Black, 0.22f)
     val onColor = Color.White
+
+    val outerSize = if (isLandscape) 180.dp else 300.dp
+    val innerSize = if (isLandscape) 140.dp else 232.dp
 
     // Лепестки медленно крутятся при воспроизведении (на паузе замирают, без рывка).
     val rotOuter = remember { Animatable(0f) }
@@ -2493,13 +2583,13 @@ private fun SeaCard(
     val sInner = if (isPlaying) pInner else 1f
 
     Box(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = if (isLandscape) 2.dp else 8.dp),
         contentAlignment = Alignment.Center,
     ) {
         // Внешний лепесток (вращается в одну сторону).
         Box(
             modifier = Modifier
-                .size(300.dp)
+                .size(outerSize)
                 .graphicsLayer { rotationZ = rotOuter.value; scaleX = sOuter; scaleY = sOuter }
                 .clip(outerShape)
                 .background(cs.secondaryContainer),
@@ -2507,29 +2597,29 @@ private fun SeaCard(
         // Внутренний лепесток (вращается в другую сторону, чуть быстрее).
         Box(
             modifier = Modifier
-                .size(232.dp)
+                .size(innerSize)
                 .graphicsLayer { rotationZ = rotInner.value; scaleX = sInner; scaleY = sInner }
                 .clip(outerShape)
                 .background(innerColor),
         )
         // Контент поверх — не вращается.
-        Box(modifier = Modifier.width(232.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.width(innerSize), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "Sea",
-                    style = MaterialTheme.typography.headlineLarge,
+                    style = if (isLandscape) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
                     color = onColor,
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(if (isLandscape) 4.dp else 10.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (isLandscape) 6.dp else 10.dp),
                 ) {
                     // Лайк
                     Box(
                         modifier = Modifier
-                            .size(46.dp)
+                            .size(if (isLandscape) 36.dp else 46.dp)
                             .clip(btnShape)
                             .background(cs.primaryContainer)
                             .clickable(onClick = {
@@ -2542,13 +2632,13 @@ private fun SeaCard(
                             imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                             contentDescription = "Нравится",
                             tint = cs.onPrimaryContainer,
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(if (isLandscape) 16.dp else 20.dp),
                         )
                     }
                     // Плей/пауза
                     Box(
                         modifier = Modifier
-                            .size(58.dp)
+                            .size(if (isLandscape) 44.dp else 58.dp)
                             .clip(btnShape)
                             .background(cs.primary)
                             .clickable(enabled = !loading, onClick = {
@@ -2563,7 +2653,7 @@ private fun SeaCard(
                             exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.65f),
                         ) {
                             LoadingIndicator(
-                                modifier = Modifier.size(24.dp),
+                                modifier = Modifier.size(if (isLandscape) 18.dp else 24.dp),
                                 color = cs.onPrimary,
                             )
                         }
@@ -2576,14 +2666,14 @@ private fun SeaCard(
                                 imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                                 contentDescription = "Играть",
                                 tint = cs.onPrimary,
-                                modifier = Modifier.size(28.dp),
+                                modifier = Modifier.size(if (isLandscape) 22.dp else 28.dp),
                             )
                         }
                     }
                     // Следующий
                     Box(
                         modifier = Modifier
-                            .size(46.dp)
+                            .size(if (isLandscape) 36.dp else 46.dp)
                             .clip(btnShape)
                             .background(cs.primaryContainer)
                             .clickable(onClick = {
@@ -2596,29 +2686,29 @@ private fun SeaCard(
                             Icons.Rounded.SkipNext,
                             contentDescription = "Дальше",
                             tint = cs.onPrimaryContainer,
-                            modifier = Modifier.size(22.dp),
+                            modifier = Modifier.size(if (isLandscape) 18.dp else 22.dp),
                         )
                     }
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(if (isLandscape) 4.dp else 12.dp))
                 Text(
                     text = playingTitle ?: "Бесконечная волна",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = if (isLandscape) MaterialTheme.typography.bodySmall else MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = onColor,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 18.dp),
+                    modifier = Modifier.padding(horizontal = if (isLandscape) 8.dp else 18.dp),
                 )
                 Text(
                     text = playingArtist ?: "под твой вкус",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = onColor.copy(alpha = 0.7f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 18.dp),
+                    modifier = Modifier.padding(horizontal = if (isLandscape) 8.dp else 18.dp),
                 )
             }
         }
@@ -2830,6 +2920,7 @@ private fun HomeFeed(
 
 @Composable
 private fun Greeting(onOpenAccount: () -> Unit) {
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
     val greet = when (hour) {
         in 5..11 -> "Доброе утро"
@@ -2840,20 +2931,20 @@ private fun Greeting(onOpenAccount: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp),
+            .padding(start = 20.dp, end = 20.dp, top = if (isLandscape) 4.dp else 16.dp, bottom = if (isLandscape) 2.dp else 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Avatar(
             com.melo.music.auth.AuthManager.avatarUrl,
-            46.dp,
+            if (isLandscape) 36.dp else 46.dp,
             Modifier.clip(CircleShape).clickable(onClick = onOpenAccount),
         )
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(if (isLandscape) 10.dp else 14.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = greet,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontSize = 22.sp,
+                style = (if (isLandscape) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge).copy(
+                    fontSize = if (isLandscape) 18.sp else 22.sp,
                     letterSpacing = (-0.3).sp,
                 ),
                 fontWeight = FontWeight.Bold,
@@ -2861,7 +2952,7 @@ private fun Greeting(onOpenAccount: () -> Unit) {
             )
             Text(
                 text = "Твоя музыка всегда с тобой",
-                style = MaterialTheme.typography.bodySmall,
+                style = if (isLandscape) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.65f),
             )
         }
