@@ -5739,10 +5739,7 @@ private fun FullPlayer(
                 animationSpec = tween(durationMillis = 1100, easing = LinearEasing),
             )
         } else {
-            likeAnimProgress.animateTo(
-                targetValue = 0f,
-                animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
-            )
+            likeAnimProgress.snapTo(0f)
         }
     }
     // ── Извлечение палитры обложки для кнопок Material 3 Expressive ──
@@ -5902,8 +5899,8 @@ private fun FullPlayer(
         // Мягкий эффект глубины (3D lift): карточка слегка отдаляется в перспективе во время движения
         val depthScale = 1f - (kotlin.math.sin(p * Math.PI.toFloat()) * 0.035f)
 
-        val fullAlpha = (1f - p * 2.2f).coerceIn(0f, 1f)
-        val miniAlpha = if (p >= 0.16f) ((p - 0.16f) / 0.55f).coerceIn(0f, 1f) else 0f
+        val fullAlpha = (1f - p * 1.35f).coerceIn(0f, 1f)
+        val miniAlpha = (p * 1.4f - 0.15f).coerceIn(0f, 1f)
 
         // Мягкое затемнение фона под карточкой, плавно уходящее при сворачивании
         Box(
@@ -5931,30 +5928,34 @@ private fun FullPlayer(
                         detectDragGestures(
                             onDragStart = { swipeAccum = 0f; axis = 0 },
                             onDragCancel = {
-                                if (collapseProgress.value > 0.20f) {
+                                val dragDistance = (targetY - 0f).coerceAtLeast(100f)
+                                val progress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
+                                if (progress > 0.08f || swipeAccum > 60f || collapseProgress.value > 0.12f) {
                                     requestCollapse()
                                 } else {
-                                    swipeAccum = 0f; axis = 0
                                     gestureScope.launch {
                                         collapseProgress.animateTo(0f, spring(0.86f, 420f))
                                         swipeX.animateTo(0f, tween(180))
                                     }
                                 }
+                                swipeAccum = 0f
+                                axis = 0
                             },
                             onDragEnd = {
-                                swipeAccum = 0f
                                 if (axis == 2) {
                                     val v = swipeX.value
                                     val w = size.width.toFloat()
                                     gestureScope.launch {
                                         when {
-                                            v > w * 0.22f -> { onPrev(); swipeX.animateTo(0f, tween(260)) }
-                                            v < -w * 0.22f -> { onNext(); swipeX.animateTo(0f, tween(260)) }
+                                            v > w * 0.20f -> { onPrev(); swipeX.animateTo(0f, tween(260)) }
+                                            v < -w * 0.20f -> { onNext(); swipeX.animateTo(0f, tween(260)) }
                                             else -> swipeX.animateTo(0f, tween(200))
                                         }
                                     }
                                 } else {
-                                    if (collapseProgress.value > 0.20f) {
+                                    val dragDistance = (targetY - 0f).coerceAtLeast(100f)
+                                    val progress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
+                                    if (progress > 0.08f || swipeAccum > 60f || collapseProgress.value > 0.12f) {
                                         requestCollapse()
                                     } else {
                                         gestureScope.launch {
@@ -5962,6 +5963,7 @@ private fun FullPlayer(
                                         }
                                     }
                                 }
+                                swipeAccum = 0f
                                 axis = 0
                             },
                             onDrag = { change, drag ->
@@ -5983,12 +5985,11 @@ private fun FullPlayer(
                     },
             ) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    if (fullAlpha > 0.005f) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer { alpha = fullAlpha },
-                        ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = fullAlpha },
+                    ) {
         FlowingBackground(
             thumbnailUrl = hiRes,
             audioSessionId = audioSessionId,
@@ -6576,7 +6577,7 @@ private fun FullPlayer(
                             onClick = onToggleLike,
                             modifier = Modifier.size(if (isLandscape) 46.dp else 56.dp),
                         ) {
-                            if (isLiked || likeAnimProgress.value > 0.02f) {
+                            if (isLiked) {
                                 LottieAnimation(
                                     composition = likeComposition,
                                     progress = { likeAnimProgress.value },
@@ -6826,10 +6827,8 @@ private fun FullPlayer(
                 }
             }
         }
-    }
 
-    // 2. Мини-плеер (проявляется при сворачивании и идеально встает на свое место)
-    if (miniAlpha > 0.005f) {
+        // 2. Мини-плеер (проявляется при сворачивании и идеально встает на свое место)
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -6844,8 +6843,8 @@ private fun FullPlayer(
                         brush = Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                artColor.copy(alpha = 0.22f),
-                                artColor.copy(alpha = 0.65f),
+                                artColor.copy(alpha = 0.25f),
+                                artColor.copy(alpha = 0.70f),
                             ),
                             startY = h * 0.15f,
                             endY = h,
@@ -6867,7 +6866,6 @@ private fun FullPlayer(
             )
         }
     }
-}
 }
 }
 }
