@@ -244,15 +244,19 @@ fun MusicMapScreen(
         }
     }
 
+    val allDiscoveredDrops = remember { java.util.concurrent.ConcurrentHashMap<String, MapDrop>() }
+
     fun reload() {
         scope.launch {
             val bb = mapView.boundingBox ?: return@launch
             val list = runCatching {
                 DropsRepository.listInArea(bb.latSouth, bb.latNorth, bb.lonWest, bb.lonEast)
             }.getOrDefault(emptyList())
-            if (list.isNotEmpty() || ms.drops.isEmpty()) {
-                ms.drops = list
-                status = if (list.isEmpty()) "Здесь пока пусто — оставь первый трек" else "${list.size} рядом · двигай карту"
+            list.forEach { allDiscoveredDrops[it.id] = it }
+            val all = allDiscoveredDrops.values.toList()
+            if (all.isNotEmpty() || ms.drops.isEmpty()) {
+                ms.drops = all
+                status = if (all.isEmpty()) "Здесь пока пусто — оставь первый трек" else "${all.size} треков на карте · двигай"
                 ms.render()
             }
         }
@@ -264,9 +268,10 @@ fun MusicMapScreen(
         var renderJob: Job? = null
         mapView.post {
             val known = DropsRepository.knownDrops.values.toList()
+            known.forEach { allDiscoveredDrops[it.id] = it }
             if (known.isNotEmpty() && ms.drops.isEmpty()) {
                 ms.drops = known
-                status = "${known.size} рядом · двигай карту"
+                status = "${known.size} треков на карте · двигай"
                 ms.render()
             }
             reload()

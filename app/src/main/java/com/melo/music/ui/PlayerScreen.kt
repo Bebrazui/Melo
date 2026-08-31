@@ -4952,12 +4952,21 @@ private fun NowPlayingBarInner(
                 }
             }
 
-            // Play / Pause (чуть крупнее 50dp)
+            // Play / Pause (чуть крупнее 50dp) с пружинной отдачей и плавной морфинг-анимацией
+            val playScale by animateFloatAsState(
+                targetValue = if (isPlaying) 1f else 0.94f,
+                animationSpec = spring(dampingRatio = 0.72f, stiffness = 420f),
+                label = "playScale",
+            )
             Surface(
                 shape = scallopedBtn,
                 color = playBg,
                 modifier = Modifier
                     .size(50.dp)
+                    .graphicsLayer {
+                        scaleX = playScale
+                        scaleY = playScale
+                    }
                     .clip(scallopedBtn)
                     .clickable(onClick = onTogglePlayPause),
             ) {
@@ -4968,12 +4977,21 @@ private fun NowPlayingBarInner(
                             color = Color(0xFF1A1612),
                         )
                     } else {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = if (isPlaying) "Пауза" else "Играть",
-                            tint = Color(0xFF1A1612),
-                            modifier = Modifier.size(26.dp),
-                        )
+                        androidx.compose.animation.AnimatedContent(
+                            targetState = isPlaying,
+                            transitionSpec = {
+                                (fadeIn(tween(220)) + androidx.compose.animation.scaleIn(tween(220), initialScale = 0.65f))
+                                    .togetherWith(fadeOut(tween(160)) + androidx.compose.animation.scaleOut(tween(160), targetScale = 0.65f))
+                            },
+                            label = "playPauseMorph",
+                        ) { playing ->
+                            Icon(
+                                imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = if (playing) "Пауза" else "Играть",
+                                tint = Color(0xFF1A1612),
+                                modifier = Modifier.size(26.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -5079,12 +5097,18 @@ private fun NowPlayingBar(
         label = "phase3",
     )
 
+    val playIntensity by animateFloatAsState(
+        targetValue = if (isPlaying) 1f else 0f,
+        animationSpec = tween(700, easing = FastOutSlowInEasing),
+        label = "miniPlayerPlayIntensity",
+    )
+
     Surface(
         // Матовое полупрозрачное стекло
         color = Color(0xEB13110E),
         shape = RoundedCornerShape(42.dp),
-        shadowElevation = 18.dp,
-        border = BorderStroke(1.2.dp, lerp(Color(0x55FFFFFF), animatedTrackColor, 0.45f)),
+        shadowElevation = androidx.compose.ui.unit.lerp(8.dp, 18.dp, playIntensity),
+        border = BorderStroke(1.2.dp, lerp(Color(0x33FFFFFF), animatedTrackColor, androidx.compose.ui.util.lerp(0.18f, 0.45f, playIntensity))),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 10.dp)
@@ -5102,17 +5126,18 @@ private fun NowPlayingBar(
                     // 1. Матовое темное стекло (база)
                     drawRect(color = Color(0xEB13110E))
 
-                    // 2. Живой плавающий волновой градиент (дышит и плавно колышется по высоте и яркости)
-                    val waveShift = kotlin.math.sin(phase1.toDouble() * 1.5).toFloat() * (h * 0.15f)
-                    val startY = if (isPlaying) (h * 0.10f + waveShift).coerceIn(0f, h * 0.40f) else h * 0.35f
-                    val glowAlpha = if (isPlaying) (0.62f + kotlin.math.sin(phase2.toDouble() * 2.0).toFloat() * 0.18f).coerceIn(0.30f, 0.88f) else 0.16f
+                    // 2. Живой плавающий волновой градиент с плавным затуханием при паузе
+                    val waveShift = kotlin.math.sin(phase1.toDouble() * 1.5).toFloat() * (h * 0.15f) * playIntensity
+                    val startY = androidx.compose.ui.util.lerp(h * 0.42f, (h * 0.10f + waveShift).coerceIn(0f, h * 0.40f), playIntensity)
+                    val dynamicGlow = (0.62f + kotlin.math.sin(phase2.toDouble() * 2.0).toFloat() * 0.18f).coerceIn(0.30f, 0.88f)
+                    val glowAlpha = androidx.compose.ui.util.lerp(0.08f, dynamicGlow, playIntensity)
 
                     drawRect(
                         brush = Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                animatedTrackColor.copy(alpha = if (isPlaying) glowAlpha * 0.35f else 0.04f),
-                                animatedTrackColor.copy(alpha = if (isPlaying) glowAlpha else 0.16f),
+                                animatedTrackColor.copy(alpha = androidx.compose.ui.util.lerp(0.02f, glowAlpha * 0.35f, playIntensity)),
+                                animatedTrackColor.copy(alpha = glowAlpha),
                             ),
                             startY = startY,
                             endY = h,
@@ -5129,7 +5154,7 @@ private fun NowPlayingBar(
                         // Сверху (первые 40% высоты) точки полностью отсутствуют
                         if (yFactor > 0.40f) {
                             val progress = ((yFactor - 0.40f) / 0.60f).coerceIn(0f, 1f)
-                            val verticalAlpha = (progress * progress * progress * 0.88f) * if (isPlaying) 1.0f else 0.45f
+                            val verticalAlpha = (progress * progress * progress * 0.88f) * androidx.compose.ui.util.lerp(0.35f, 1.0f, playIntensity)
                             if (verticalAlpha > 0.005f) {
                                 for (c in 0..cols) {
                                     drawCircle(

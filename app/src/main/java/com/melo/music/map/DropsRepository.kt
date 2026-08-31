@@ -47,8 +47,10 @@ object DropsRepository {
 
     private fun fresh(stamp: Long): Boolean = System.currentTimeMillis() - stamp < CACHE_TTL_MS
 
+    private val checkedRegions = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     /** Сбросить кэш карты (после создания/удаления своего пина). */
-    fun invalidate() { areaCache.clear(); recentCache = null; knownDrops.clear() }
+    fun invalidate() { areaCache.clear(); recentCache = null; knownDrops.clear(); checkedRegions.clear() }
 
     /** Пины в видимой области карты (bounding box). Быстрый локальный фильтр + фоновая синхронизация. */
     suspend fun listInArea(
@@ -76,13 +78,15 @@ object DropsRepository {
             }
         }
 
-        // Мгновенная выдача из локального кэша — 0 мс задержки
+        // Если область уже проверялась — моментально отдаём из памяти без сетевых запросов
+        val regionKey = "%.1f,%.1f,%.1f,%.1f".format(actualMinLat, actualMaxLat, minLng, maxLng)
         val localHits = filterLocal(knownDrops.values)
-        if (localHits.isNotEmpty()) {
+        if (localHits.isNotEmpty() || checkedRegions.contains(regionKey)) {
             return@withContext localHits
         }
+        checkedRegions.add(regionKey)
 
-        // Если локально пока ничего нет — безопасный точечный запрос
+        // Если локально пока ничего нет и регион новый — безопасный точечный запрос
         val key = "%.2f,%.2f,%.2f,%.2f".format(actualMinLat, actualMaxLat, minLng, maxLng)
         areaCache[key]?.takeIf { fresh(it.second) }?.let { return@withContext it.first }
 
