@@ -1126,7 +1126,7 @@ fun PlayerScreen(
         AnimatedVisibility(
             visible = playerExpanded && current != null,
             enter = fadeIn(tween(200)),
-            exit = fadeOut(tween(140)),
+            exit = androidx.compose.animation.ExitTransition.None,
         ) {
             val item = current ?: nowPlaying
             if (item != null) {
@@ -5662,18 +5662,8 @@ private fun FullPlayer(
     val scallopedArt = remember { ScallopedShape(petals = 10, depth = 0.12f) }
 
     val gestureScope = rememberCoroutineScope()
-    val collapseProgress = remember { Animatable(0.70f) }
+    val collapseProgress = remember { Animatable(0f) }
     var isCollapsing by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        collapseProgress.animateTo(
-            targetValue = 0f,
-            animationSpec = spring(
-                dampingRatio = 0.86f,
-                stiffness = 380f,
-            ),
-        )
-    }
 
     val requestCollapse: () -> Unit = {
         if (!isCollapsing) {
@@ -5736,12 +5726,12 @@ private fun FullPlayer(
             likeAnimProgress.snapTo(0f)
             likeAnimProgress.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 650, easing = LinearEasing),
+                animationSpec = tween(durationMillis = 950, easing = LinearEasing),
             )
         } else {
             likeAnimProgress.animateTo(
                 targetValue = 0f,
-                animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+                animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
             )
         }
     }
@@ -5931,10 +5921,14 @@ private fun FullPlayer(
                         detectDragGestures(
                             onDragStart = { swipeAccum = 0f; axis = 0 },
                             onDragCancel = {
-                                swipeAccum = 0f; axis = 0
-                                gestureScope.launch {
-                                    collapseProgress.animateTo(0f, spring(0.86f, 420f))
-                                    swipeX.animateTo(0f, tween(180))
+                                if (collapseProgress.value > 0.20f) {
+                                    requestCollapse()
+                                } else {
+                                    swipeAccum = 0f; axis = 0
+                                    gestureScope.launch {
+                                        collapseProgress.animateTo(0f, spring(0.86f, 420f))
+                                        swipeX.animateTo(0f, tween(180))
+                                    }
                                 }
                             },
                             onDragEnd = {
@@ -5971,7 +5965,7 @@ private fun FullPlayer(
                                     val delta = drag.y
                                     swipeAccum += delta
                                     val dragDistance = (targetY - 0f).coerceAtLeast(100f)
-                                    val newProgress = (collapseProgress.value + delta / dragDistance).coerceIn(0f, 1f)
+                                    val newProgress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
                                     gestureScope.launch { collapseProgress.snapTo(newProgress) }
                                 }
                             },
@@ -6078,12 +6072,15 @@ private fun FullPlayer(
                         }
                     }
                 } else {
-                    Crossfade(
-                        targetState = Pair(hiRes, com.melo.music.settings.AppSettings.vinylRecord),
-                        animationSpec = tween(500),
-                        label = "art",
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = Triple(item.url, hiRes, com.melo.music.settings.AppSettings.vinylRecord),
+                        transitionSpec = {
+                            (slideInHorizontally(tween(360, easing = FastOutSlowInEasing)) { width -> (width * 0.28f).toInt() } + fadeIn(tween(280)))
+                                .togetherWith(slideOutHorizontally(tween(300, easing = FastOutSlowInEasing)) { width -> (-width * 0.28f).toInt() } + fadeOut(tween(220)))
+                        },
+                        label = "artTrackTransition",
                         modifier = boxModifier.then(art3dModifier),
-                    ) { (art, isVinyl) ->
+                    ) { (_, art, isVinyl) ->
                         if (isVinyl) {
                             VinylRecordView(
                                 art = art,
@@ -6193,44 +6190,54 @@ private fun FullPlayer(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Column(modifier = Modifier.weight(1f).padding(end = 10.dp)) {
-                        Text(
-                            text = item.title,
-                            style = MaterialTheme.typography.headlineSmall.copy(
-                                fontSize = if (isLandscape) 20.sp else 24.sp,
-                                lineHeight = if (isLandscape) 24.sp else 28.sp,
-                                letterSpacing = (-0.4).sp,
-                            ),
-                            fontWeight = FontWeight.ExtraBold,
-                            color = white,
-                            maxLines = if (isLandscape) 1 else 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        item.uploader?.let { artistName ->
-                            Spacer(Modifier.height(3.dp))
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = Pair(item.title, item.uploader),
+                        transitionSpec = {
+                            (slideInHorizontally(tween(340, easing = FastOutSlowInEasing)) { width -> (width * 0.25f).toInt() } + fadeIn(tween(260)))
+                                .togetherWith(slideOutHorizontally(tween(280, easing = FastOutSlowInEasing)) { width -> (-width * 0.25f).toInt() } + fadeOut(tween(200)))
+                        },
+                        label = "titleTrackTransition",
+                        modifier = Modifier.weight(1f).padding(end = 10.dp),
+                    ) { (trackTitle, artistName) ->
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = artistName.uppercase(Locale.getDefault()),
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontSize = if (isLandscape) 13.sp else 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.6.sp,
+                                text = trackTitle,
+                                style = MaterialTheme.typography.headlineSmall.copy(
+                                    fontSize = if (isLandscape) 20.sp else 24.sp,
+                                    lineHeight = if (isLandscape) 24.sp else 28.sp,
+                                    letterSpacing = (-0.4).sp,
                                 ),
-                                color = whiteDim,
-                                maxLines = 1,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = white,
+                                maxLines = if (isLandscape) 1 else 2,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.clickable {
-                                    val artistItem = TrackItem(
-                                        title = artistName,
-                                        uploader = artistName,
-                                        url = "artist:$artistName",
-                                        durationSeconds = 0L,
-                                        thumbnailUrl = item.thumbnailUrl,
-                                        source = item.source,
-                                        kind = ItemKind.ARTIST,
-                                    )
-                                    onOpenArtist(artistItem)
-                                },
                             )
+                            artistName?.let { name ->
+                                Spacer(Modifier.height(3.dp))
+                                Text(
+                                    text = name.uppercase(Locale.getDefault()),
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontSize = if (isLandscape) 13.sp else 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.6.sp,
+                                    ),
+                                    color = whiteDim,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.clickable {
+                                        val artistItem = TrackItem(
+                                            title = name,
+                                            uploader = name,
+                                            url = "artist:$name",
+                                            durationSeconds = 0L,
+                                            thumbnailUrl = item.thumbnailUrl,
+                                            source = item.source,
+                                            kind = ItemKind.ARTIST,
+                                        )
+                                        onOpenArtist(artistItem)
+                                    },
+                                )
+                            }
                         }
                     }
 
@@ -6557,21 +6564,21 @@ private fun FullPlayer(
 
                         IconButton(
                             onClick = onToggleLike,
-                            modifier = Modifier.size(if (isLandscape) 38.dp else 46.dp),
+                            modifier = Modifier.size(if (isLandscape) 46.dp else 56.dp),
                         ) {
                             if (isLiked || likeAnimProgress.value > 0.05f) {
                                 LottieAnimation(
                                     composition = likeComposition,
                                     progress = { likeAnimProgress.value },
-                                    modifier = Modifier.size(if (isLandscape) 34.dp else 42.dp),
+                                    modifier = Modifier.size(if (isLandscape) 52.dp else 66.dp),
                                 )
                             } else {
                                 Icon(
                                     imageVector = Icons.Rounded.FavoriteBorder,
                                     contentDescription = "Нравится",
-                                    tint = heartColor,
+                                    tint = white,
                                     modifier = Modifier
-                                        .size(if (isLandscape) 22.dp else 26.dp)
+                                        .size(if (isLandscape) 26.dp else 30.dp)
                                         .scale(likeScale),
                                 )
                             }
@@ -6815,7 +6822,23 @@ private fun FullPlayer(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(72.dp)
-                .graphicsLayer { alpha = miniAlpha },
+                .graphicsLayer { alpha = miniAlpha }
+                .drawBehind {
+                    val w = size.width
+                    val h = size.height
+                    drawRect(color = Color(0xEB13110E))
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                artColor.copy(alpha = 0.22f),
+                                artColor.copy(alpha = 0.65f),
+                            ),
+                            startY = h * 0.15f,
+                            endY = h,
+                        ),
+                    )
+                },
             contentAlignment = Alignment.Center,
         ) {
             NowPlayingBarInner(
