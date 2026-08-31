@@ -34,7 +34,8 @@ class PlaybackService : MediaSessionService() {
         /** Текущая очередь. */
         var queue: List<TrackItem> = emptyList()
         var queueIndex: Int = 0
-            private set
+            set
+        @Volatile var currentTrackItem: TrackItem? = null
 
         var onQueueChanged: ((index: Int) -> Unit)? = null
 
@@ -85,6 +86,7 @@ class PlaybackService : MediaSessionService() {
         fun setQueue(list: List<TrackItem>, index: Int) {
             queue = list
             queueIndex = index
+            currentTrackItem = list.getOrNull(index)
         }
 
         /** Команда сервису: отменить текущий кроссфейд (при ручном переключении). */
@@ -490,7 +492,11 @@ class PlaybackService : MediaSessionService() {
         audioSessionId = toP.audioSessionId
         EqualizerManager.attach(audioSessionId)
         applyReverb(toP)
-        if (advanceIndex >= 0) onCrossfadeAdvance?.invoke(advanceIndex)
+        if (advanceIndex >= 0) {
+            queueIndex = advanceIndex
+            currentTrackItem = queue.getOrNull(advanceIndex)
+            onCrossfadeAdvance?.invoke(advanceIndex)
+        }
 
         // Плавно гасим старый, проявляем новый.
         val duration = crossfadeMs.toLong()

@@ -250,25 +250,35 @@ fun MusicMapScreen(
             val list = runCatching {
                 DropsRepository.listInArea(bb.latSouth, bb.latNorth, bb.lonWest, bb.lonEast)
             }.getOrDefault(emptyList())
-            ms.drops = list
-            status = if (list.isEmpty()) "Здесь пока пусто — оставь первый трек" else "${list.size} рядом · двигай карту"
-            ms.render()
+            if (list.isNotEmpty() || ms.drops.isEmpty()) {
+                ms.drops = list
+                status = if (list.isEmpty()) "Здесь пока пусто — оставь первый трек" else "${list.size} рядом · двигай карту"
+                ms.render()
+            }
         }
     }
 
-    // Первичная загрузка + дебаунс при движении карты.
+    // Первичная загрузка + сверхбыстрый дебаунс при движении карты (80мс вместо 600мс).
     DisposableEffect(Unit) {
         var reloadJob: Job? = null
         var renderJob: Job? = null
-        mapView.post { reload() }
+        mapView.post {
+            val known = DropsRepository.knownDrops.values.toList()
+            if (known.isNotEmpty() && ms.drops.isEmpty()) {
+                ms.drops = known
+                status = "${known.size} рядом · двигай карту"
+                ms.render()
+            }
+            reload()
+        }
         val listener = object : MapListener {
             override fun onScroll(event: ScrollEvent?): Boolean {
-                reloadJob?.cancel(); reloadJob = scope.launch { delay(600); reload() }
+                reloadJob?.cancel(); reloadJob = scope.launch { delay(80); reload() }
                 return false
             }
             override fun onZoom(event: ZoomEvent?): Boolean {
-                renderJob?.cancel(); renderJob = scope.launch { delay(120); ms.render() }
-                reloadJob?.cancel(); reloadJob = scope.launch { delay(600); reload() }
+                renderJob?.cancel(); renderJob = scope.launch { delay(50); ms.render() }
+                reloadJob?.cancel(); reloadJob = scope.launch { delay(80); reload() }
                 return false
             }
         }

@@ -435,6 +435,32 @@ fun PlayerScreen(
         if (controller != null) setSpeed(nowPlaying?.speed ?: 1f)
     }
 
+    // Восстановление состояния при перезапуске/возвращении в приложение из фона:
+    // если музыка играет в PlaybackService, сразу подхватываем трек и очередь.
+    LaunchedEffect(controller) {
+        if (nowPlaying == null) {
+            val sTrack = com.melo.music.playback.PlaybackService.currentTrackItem
+            if (sTrack != null) {
+                nowPlaying = sTrack
+                if (playingList.isEmpty()) playingList = com.melo.music.playback.PlaybackService.queue
+                if (playingIndex == -1) playingIndex = com.melo.music.playback.PlaybackService.queueIndex
+            } else if (controller?.currentMediaItem != null) {
+                val meta = controller.currentMediaItem?.mediaMetadata
+                val title = meta?.title?.toString()
+                if (!title.isNullOrBlank()) {
+                    nowPlaying = TrackItem(
+                        title = title,
+                        uploader = meta.artist?.toString() ?: "",
+                        url = com.melo.music.playback.PlaybackService.currentAudioStreamUrl ?: "",
+                        durationSeconds = 0L,
+                        thumbnailUrl = meta.artworkUri?.toString(),
+                        source = Source.YOUTUBE_MUSIC,
+                    )
+                }
+            }
+        }
+    }
+
     // Авто-перерезолв: плеер словил ошибку (протухшая/IP-битая ссылка) → чистим
     // кэш, резолвим заново и продолжаем с того же места. Защита от зацикливания.
     var recoverUrl by remember { mutableStateOf<String?>(null) }
@@ -609,6 +635,7 @@ fun PlayerScreen(
         playingIndex = index
         val item = list[index]
         nowPlaying = item
+        com.melo.music.playback.PlaybackService.setQueue(list, index)
         trackStartTime = android.os.SystemClock.elapsedRealtime()
         HistoryManager.add(item)
         history = HistoryManager.getAll()
@@ -764,6 +791,7 @@ fun PlayerScreen(
             val item = playingList.getOrNull(idx) ?: return@ref
             playingIndex = idx
             nowPlaying = item
+            com.melo.music.playback.PlaybackService.setQueue(playingList, idx)
             trackStartTime = android.os.SystemClock.elapsedRealtime()
             HistoryManager.add(item)
             history = HistoryManager.getAll()
@@ -773,14 +801,6 @@ fun PlayerScreen(
     LaunchedEffect(Unit) {
         com.melo.music.playback.PlaybackService.onCrossfadeAdvance = { idx ->
             crossfadeAdvanceRef.value?.invoke(idx)
-        }
-    }
-    DisposableEffect(Unit) {
-        onDispose {
-            com.melo.music.playback.PlaybackService.onTrackEnded = null
-            com.melo.music.playback.PlaybackService.onCrossfadeAdvance = null
-            com.melo.music.playback.PlaybackService.onSkipNext = null
-            com.melo.music.playback.PlaybackService.onSkipPrev = null
         }
     }
 
@@ -5633,9 +5653,9 @@ private fun FullPlayer(
             gestureScope.launch {
                 collapseProgress.animateTo(
                     targetValue = 1f,
-                    animationSpec = spring(
-                        dampingRatio = 0.86f,
-                        stiffness = 400f,
+                    animationSpec = tween(
+                        durationMillis = 340,
+                        easing = androidx.compose.animation.core.CubicBezierEasing(0.12f, 0f, 0.2f, 1f),
                     ),
                 )
                 onCollapse()
@@ -5823,15 +5843,21 @@ private fun FullPlayer(
         val targetH = miniPlayerBounds?.height ?: with(localDensity) { 72.dp.toPx() }
 
         val p = collapseProgress.value.coerceIn(0f, 1f)
-        val currentX = androidx.compose.ui.util.lerp(0f, targetX, p)
-        val currentY = androidx.compose.ui.util.lerp(0f, targetY, p)
-        val currentW = androidx.compose.ui.util.lerp(screenWidthPx, targetW, p)
-        val currentH = androidx.compose.ui.util.lerp(screenHeightPx, targetH, p)
-        val currentCorner = androidx.compose.ui.unit.lerp(0.dp, 42.dp, p)
-        val currentElevation = androidx.compose.ui.unit.lerp(0.dp, 18.dp, p)
+        val easeOut = androidx.compose.animation.core.CubicBezierEasing(0.12f, 0f, 0.2f, 1f)
+        val motionP = easeOut.transform(p)
 
-        val fullAlpha = (1f - p * 2.4f).coerceIn(0f, 1f)
-        val miniAlpha = ((p - 0.25f) / 0.75f).coerceIn(0f, 1f)
+        val currentX = androidx.compose.ui.util.lerp(0f, targetX, motionP)
+        val currentY = androidx.compose.ui.util.lerp(0f, targetY, motionP)
+        val currentW = androidx.compose.ui.util.lerp(screenWidthPx, targetW, motionP)
+        val currentH = androidx.compose.ui.util.lerp(screenHeightPx, targetH, motionP)
+        val currentCorner = androidx.compose.ui.unit.lerp(0.dp, 42.dp, motionP)
+        val currentElevation = androidx.compose.ui.unit.lerp(0.dp, 22.dp, motionP)
+
+        // Мягкий эффект глубины (3D lift): карточка слегка отдаляется в перспективе во время движения
+        val depthScale = 1f - (kotlin.math.sin(p * Math.PI.toFloat()) * 0.035f)
+
+        val fullAlpha = (1f - p * 2.8f).coerceIn(0f, 1f)
+        val miniAlpha = if (p >= 0.22f) ((p - 0.22f) / 0.50f).coerceIn(0f, 1f) else 0f
 
         // Мягкое затемнение фона под карточкой, плавно уходящее при сворачивании
         Box(
@@ -5843,13 +5869,17 @@ private fun FullPlayer(
                 shape = RoundedCornerShape(currentCorner),
                 color = Color(0xEB13110E),
                 shadowElevation = currentElevation,
-                border = if (p > 0.05f) BorderStroke(1.2.dp * p, lerp(Color(0x55FFFFFF), artColor, 0.45f)) else null,
+                border = if (p > 0.08f) BorderStroke(1.2.dp, lerp(Color(0x33FFFFFF), artColor, 0.45f).copy(alpha = ((p - 0.08f) / 0.92f).coerceIn(0f, 1f))) else null,
                 modifier = Modifier
                     .offset { IntOffset(currentX.roundToInt(), currentY.roundToInt()) }
                     .size(
                         width = with(localDensity) { currentW.toDp() },
                         height = with(localDensity) { currentH.toDp() },
                     )
+                    .graphicsLayer {
+                        scaleX = depthScale
+                        scaleY = depthScale
+                    }
                     .clip(RoundedCornerShape(currentCorner))
                     .pointerInput(Unit) {
                         detectDragGestures(
@@ -5902,7 +5932,7 @@ private fun FullPlayer(
                         )
                     },
             ) {
-                Box(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     if (fullAlpha > 0.005f) {
                         Box(
                             modifier = Modifier
@@ -6726,8 +6756,10 @@ private fun FullPlayer(
     if (miniAlpha > 0.005f) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .height(72.dp)
                 .graphicsLayer { alpha = miniAlpha },
+            contentAlignment = Alignment.Center,
         ) {
             NowPlayingBarInner(
                 item = item,

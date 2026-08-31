@@ -8,6 +8,7 @@ import io.appwrite.Permission
 import io.appwrite.Query
 import io.appwrite.Role
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Музыкальный «пин» на карте. */
@@ -42,32 +43,66 @@ object DropsRepository {
     private const val CACHE_TTL_MS = 90_000L
     private val areaCache = java.util.concurrent.ConcurrentHashMap<String, Pair<List<MapDrop>, Long>>()
     @Volatile private var recentCache: Pair<List<MapDrop>, Long>? = null
+    val knownDrops = java.util.concurrent.ConcurrentHashMap<String, MapDrop>()
 
     private fun fresh(stamp: Long): Boolean = System.currentTimeMillis() - stamp < CACHE_TTL_MS
 
     /** Сбросить кэш карты (после создания/удаления своего пина). */
-    fun invalidate() { areaCache.clear(); recentCache = null }
+    fun invalidate() { areaCache.clear(); recentCache = null; knownDrops.clear() }
 
-    /** Пины в видимой области карты (bounding box). Кэш по округлённой рамке. */
+    /** Пины в видимой области карты (bounding box). Быстрый локальный фильтр + фоновая синхронизация. */
     suspend fun listInArea(
         minLat: Double, maxLat: Double, minLng: Double, maxLng: Double,
     ): List<MapDrop> = withContext(Dispatchers.IO) {
-        val key = "%.2f,%.2f,%.2f,%.2f".format(minLat, maxLat, minLng, maxLng)
+        val actualMinLat = minOf(minLat, maxLat)
+        val actualMaxLat = maxOf(minLat, maxLat)
+        val wrap = minLng > maxLng
+
+        fun filterLocal(collection: Collection<MapDrop>): List<MapDrop> =
+            collection.filter { d ->
+                d.lat in actualMinLat..actualMaxLat &&
+                    (if (wrap) d.lng >= minLng || d.lng <= maxLng else d.lng in minLng..maxLng)
+            }.filterNot { MapModeration.isHidden(it.id) }
+
+        // Если кэш пуст — загружаем свежие со всей карты
+        if (knownDrops.isEmpty()) {
+            runCatching { recent(500) }
+        } else {
+            // В фоне обновляем кэш свежих дропов без блокировки
+            if (recentCache == null || !fresh(recentCache?.second ?: 0L)) {
+                kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                    runCatching { recent(500) }
+                }
+            }
+        }
+
+        // Мгновенная выдача из локального кэша — 0 мс задержки
+        val localHits = filterLocal(knownDrops.values)
+        if (localHits.isNotEmpty()) {
+            return@withContext localHits
+        }
+
+        // Если локально пока ничего нет — безопасный точечный запрос
+        val key = "%.2f,%.2f,%.2f,%.2f".format(actualMinLat, actualMaxLat, minLng, maxLng)
         areaCache[key]?.takeIf { fresh(it.second) }?.let { return@withContext it.first }
-        val res = AppwriteService.databases.listDocuments(
-            databaseId = AppwriteService.DATABASE_ID,
-            collectionId = AppwriteService.COLLECTION_DROPS,
-            queries = listOf(
-                Query.greaterThan("lat", minLat),
-                Query.lessThan("lat", maxLat),
-                Query.greaterThan("lng", minLng),
-                Query.lessThan("lng", maxLng),
-                Query.orderDesc("\$createdAt"),
-                Query.limit(200),
-            ),
-        )
-        res.documents.mapNotNull { toDrop(it.id, it.data) }.filterNot { MapModeration.isHidden(it.id) }
-            .also { areaCache[key] = it to System.currentTimeMillis() }
+
+        runCatching {
+            val res = AppwriteService.databases.listDocuments(
+                databaseId = AppwriteService.DATABASE_ID,
+                collectionId = AppwriteService.COLLECTION_DROPS,
+                queries = listOf(
+                    Query.greaterThan("lat", actualMinLat),
+                    Query.lessThan("lat", actualMaxLat),
+                    Query.orderDesc("\$createdAt"),
+                    Query.limit(200),
+                ),
+            )
+            res.documents.mapNotNull { toDrop(it.id, it.data) }.forEach { knownDrops[it.id] = it }
+        }
+
+        filterLocal(knownDrops.values).also {
+            areaCache[key] = it to System.currentTimeMillis()
+        }
     }
 
     /** Свежие пины со всей карты — для глобального поиска песен по карте. */
@@ -78,7 +113,9 @@ object DropsRepository {
             collectionId = AppwriteService.COLLECTION_DROPS,
             queries = listOf(Query.orderDesc("\$createdAt"), Query.limit(limit)),
         )
-        res.documents.mapNotNull { toDrop(it.id, it.data) }.filterNot { MapModeration.isHidden(it.id) }
+        res.documents.mapNotNull { toDrop(it.id, it.data) }
+            .filterNot { MapModeration.isHidden(it.id) }
+            .onEach { knownDrops[it.id] = it }
             .also { recentCache = it to System.currentTimeMillis() }
     }
 
