@@ -5662,8 +5662,18 @@ private fun FullPlayer(
     val scallopedArt = remember { ScallopedShape(petals = 10, depth = 0.12f) }
 
     val gestureScope = rememberCoroutineScope()
-    val collapseProgress = remember { Animatable(0f) }
+    val collapseProgress = remember { Animatable(1f) }
     var isCollapsing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        collapseProgress.animateTo(
+            targetValue = 0f,
+            animationSpec = spring(
+                dampingRatio = 0.82f,
+                stiffness = 360f,
+            ),
+        )
+    }
 
     val requestCollapse: () -> Unit = {
         if (!isCollapsing) {
@@ -5726,7 +5736,7 @@ private fun FullPlayer(
             likeAnimProgress.snapTo(0f)
             likeAnimProgress.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 950, easing = LinearEasing),
+                animationSpec = tween(durationMillis = 1100, easing = LinearEasing),
             )
         } else {
             likeAnimProgress.animateTo(
@@ -5892,8 +5902,8 @@ private fun FullPlayer(
         // Мягкий эффект глубины (3D lift): карточка слегка отдаляется в перспективе во время движения
         val depthScale = 1f - (kotlin.math.sin(p * Math.PI.toFloat()) * 0.035f)
 
-        val fullAlpha = (1f - p * 2.8f).coerceIn(0f, 1f)
-        val miniAlpha = if (p >= 0.22f) ((p - 0.22f) / 0.50f).coerceIn(0f, 1f) else 0f
+        val fullAlpha = (1f - p * 2.2f).coerceIn(0f, 1f)
+        val miniAlpha = if (p >= 0.16f) ((p - 0.16f) / 0.55f).coerceIn(0f, 1f) else 0f
 
         // Мягкое затемнение фона под карточкой, плавно уходящее при сворачивании
         Box(
@@ -6566,11 +6576,13 @@ private fun FullPlayer(
                             onClick = onToggleLike,
                             modifier = Modifier.size(if (isLandscape) 46.dp else 56.dp),
                         ) {
-                            if (isLiked || likeAnimProgress.value > 0.05f) {
+                            if (isLiked || likeAnimProgress.value > 0.02f) {
                                 LottieAnimation(
                                     composition = likeComposition,
                                     progress = { likeAnimProgress.value },
-                                    modifier = Modifier.size(if (isLandscape) 52.dp else 66.dp),
+                                    modifier = Modifier
+                                        .size(if (isLandscape) 52.dp else 66.dp)
+                                        .scale(1.4f),
                                 )
                             } else {
                                 Icon(
@@ -6820,6 +6832,7 @@ private fun FullPlayer(
     if (miniAlpha > 0.005f) {
         Box(
             modifier = Modifier
+                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .height(72.dp)
                 .graphicsLayer { alpha = miniAlpha }
