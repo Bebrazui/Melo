@@ -20,6 +20,7 @@ playServicesLocation = "21.3.0"
 credentials = "1.3.0"
 googleid = "1.1.1"
 playServicesAuth = "21.2.0"
+lottie = "6.6.2"
 
 [libraries]
 androidx-palette = { group = "androidx.palette", name = "palette-ktx", version.ref = "palette" }
@@ -58,6 +59,7 @@ smooth-corner-rect = { module = "com.github.racra:smooth-corner-rect-android-com
 
 # Карта музыки: Appwrite (бэкенд) + osmdroid (OSM) + геолокация
 appwrite = { group = "io.appwrite", name = "sdk-for-android", version.ref = "appwrite" }
+lottie-compose = { group = "com.airbnb.android", name = "lottie-compose", version.ref = "lottie" }
 osmdroid-android = { group = "org.osmdroid", name = "osmdroid-android", version.ref = "osmdroid" }
 play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 

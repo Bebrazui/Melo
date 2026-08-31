@@ -145,6 +145,9 @@ dependencies {
     // Smooth corners (squircle) в стиле PixelPlayer
     implementation(libs.smooth.corner.rect)
 
+    // Lottie анимации
+    implementation(libs.lottie.compose)
+
     // Карта музыки
     implementation(libs.appwrite)
     implementation(libs.osmdroid.android)

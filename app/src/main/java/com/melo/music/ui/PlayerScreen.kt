@@ -255,6 +255,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.rememberLottieComposition
 import com.melo.music.ui.sound.ClickFeedback
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -5724,6 +5727,24 @@ private fun FullPlayer(
         label = "likeScale",
     )
     val heartColor by animateColorAsState(if (isLiked) accent else white, label = "heart")
+
+    // Lottie анимация сердечка (Like.json)
+    val likeComposition by rememberLottieComposition(LottieCompositionSpec.RawRes(com.melo.music.R.raw.like_anim))
+    val likeAnimProgress = remember { Animatable(if (isLiked) 1f else 0f) }
+    LaunchedEffect(isLiked) {
+        if (isLiked) {
+            likeAnimProgress.snapTo(0f)
+            likeAnimProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 650, easing = LinearEasing),
+            )
+        } else {
+            likeAnimProgress.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+            )
+        }
+    }
     // ── Извлечение палитры обложки для кнопок Material 3 Expressive ──
     var artColor by remember(item.thumbnailUrl) { mutableStateOf(Color(0xFF90CEFF)) }
     LaunchedEffect(item.thumbnailUrl) {
@@ -6534,15 +6555,26 @@ private fun FullPlayer(
                                 .background(Color.White.copy(alpha = 0.10f)),
                         )
 
-                        IconButton(onClick = onToggleLike) {
-                            Icon(
-                                imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                                contentDescription = "Нравится",
-                                tint = heartColor,
-                                modifier = Modifier
-                                    .size(if (isLandscape) 22.dp else 26.dp)
-                                    .scale(likeScale),
-                            )
+                        IconButton(
+                            onClick = onToggleLike,
+                            modifier = Modifier.size(if (isLandscape) 38.dp else 46.dp),
+                        ) {
+                            if (isLiked || likeAnimProgress.value > 0.05f) {
+                                LottieAnimation(
+                                    composition = likeComposition,
+                                    progress = { likeAnimProgress.value },
+                                    modifier = Modifier.size(if (isLandscape) 34.dp else 42.dp),
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Rounded.FavoriteBorder,
+                                    contentDescription = "Нравится",
+                                    tint = heartColor,
+                                    modifier = Modifier
+                                        .size(if (isLandscape) 22.dp else 26.dp)
+                                        .scale(likeScale),
+                                )
+                            }
                         }
                     }
                 }
