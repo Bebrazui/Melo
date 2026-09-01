@@ -19,6 +19,13 @@ import kotlin.math.*
  */
 class MeloDspAudioProcessor : BaseAudioProcessor() {
 
+    companion object {
+        /** Уровень баса в реальном времени (0.0f .. 1.0f), обновляется напрямую из PCM сэмплов */
+        @Volatile
+        var currentBassLevel: Float = 0f
+            private set
+    }
+
     // ── 3D Spatial Audio ──
     @Volatile
     var spatialEnabled: Boolean = false
@@ -59,6 +66,12 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
     private var crossLpStoreL = 0f
     private var crossLpStoreR = 0f
     private var sideAirStore = 0f
+
+    // ── Детектор энергии баса (RMS 20-120 Гц) ──
+    private var bassLpStore = 0f
+    private var bassEnergyAccum = 0f
+    private var bassSampleCount = 0
+    private var smoothedBass = 0f
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount != 2) {
@@ -121,6 +134,7 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         val delaySamples = (sampleRate * 0.0012f).toInt().coerceIn(10, delayBufferLeft.size - 1) // 1.2ms межушная задержка
 
         // Коэффициенты DSP-фильтров
+        val bassDetectAlpha = (2.0 * Math.PI * 110.0 / sampleRate).toFloat().coerceIn(0.005f, 0.2f) // 110 Hz фильтр детектора баса
         val bassCrossoverAlpha = (2.0 * Math.PI * 140.0 / sampleRate).toFloat().coerceIn(0.005f, 0.25f) // 140 Hz моно-бас
         val headShadowAlpha = (2.0 * Math.PI * 2200.0 / sampleRate).toFloat().coerceIn(0.05f, 0.65f) // 2.2 kHz HRTF тень головы
         val airAlpha = (2.0 * Math.PI * 8500.0 / sampleRate).toFloat().coerceIn(0.1f, 0.9f) // 8.5 kHz воздух/подъём сцены
@@ -129,6 +143,24 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         while (inputBuffer.remaining() >= 4) {
             var left = inputBuffer.short.toFloat()
             var right = inputBuffer.short.toFloat()
+
+            // 0. Измерение энергии баса в реальном времени (для плавной пульсации фона)
+            val monoSample = (left + right) * 0.5f
+            bassLpStore += (monoSample - bassLpStore) * bassDetectAlpha
+            bassEnergyAccum += bassLpStore * bassLpStore
+            bassSampleCount++
+            if (bassSampleCount >= 512) {
+                val rms = kotlin.math.sqrt(bassEnergyAccum / bassSampleCount) / 6000f
+                val instant = ((rms - 0.08f) * 2.5f).coerceIn(0f, 1f)
+                smoothedBass = if (instant > smoothedBass) {
+                    instant
+                } else {
+                    smoothedBass * 0.88f
+                }
+                currentBassLevel = smoothedBass
+                bassEnergyAccum = 0f
+                bassSampleCount = 0
+            }
 
             // 1. Эквалайзер (5-полосный IIR Biquad)
             if (isEq) {
@@ -219,6 +251,11 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         sideAirStore = 0f
         comb1.reset(); comb2.reset(); comb3.reset(); comb4.reset()
         allpass1.reset(); allpass2.reset()
+        bassLpStore = 0f
+        bassEnergyAccum = 0f
+        bassSampleCount = 0
+        smoothedBass = 0f
+        currentBassLevel = 0f
     }
 
     override fun onReset() {

@@ -32,10 +32,13 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
+import androidx.compose.runtime.withFrameMillis
+import kotlinx.coroutines.isActive
+
 /**
  * Плавающий размытый фон.
  * - Медленно «плывёт» (пан + масштаб + поворот).
- * - При басе ускоряется плавание и увеличивается масштаб (пульсация).
+ * - При басе плавно пружинит с небольшим увеличением масштаба (+3%..5.5%).
  *
  * [audioSessionId] — ID аудиосессии ExoPlayer для Visualizer (0 = без детекции баса).
  */
@@ -49,7 +52,7 @@ fun FlowingBackground(
 
     val context = LocalContext.current
 
-    // --- Bass level (0f..1f) ---
+    // --- Bass level from Visualizer fallback ---
     var bassLevel by remember { mutableFloatStateOf(0f) }
 
     DisposableEffect(audioSessionId) {
@@ -113,6 +116,27 @@ fun FlowingBackground(
         }
     }
 
+    // Читаем уровень баса напрямую из DSP конвейера ExoPlayer (100% надёжность без permissions)
+    var liveBass by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            withFrameMillis {
+                val dsp = com.melo.music.audio.MeloDspAudioProcessor.currentBassLevel
+                liveBass = maxOf(dsp, bassLevel)
+            }
+        }
+    }
+
+    // Мягкая упругая пульсация масштаба: небольшое аккуратное увеличение до +5.5% при басе
+    val bassScalePulse by animateFloatAsState(
+        targetValue = 1f + liveBass * 0.055f,
+        animationSpec = spring(
+            dampingRatio = 0.55f, // мягкий пружинящий отскок
+            stiffness = 360f,
+        ),
+        label = "bassScalePulse",
+    )
+
     // Один непрерывный линейный драйвер фазы → без «замедления и рывка».
     val infinite = rememberInfiniteTransition(label = "flow")
     val angle = infinite.animateFloat(
@@ -134,18 +158,18 @@ fun FlowingBackground(
                 .fillMaxSize()
                 .blur(36.dp)
                 .graphicsLayer {
-                    // Чтение state внутри graphicsLayer предотвращает рекомпозицию экрана
+                    // Чтение state внутри graphicsLayer предотвращает лишнюю рекомпозицию
                     val curAngle = angle.value
-                    val curBass = bassLevel
+                    val curBass = liveBass
                     val rad = Math.toRadians(curAngle.toDouble())
                     val baseOffset = 100f // px
-                    val amp = 1f + curBass * 3f
+                    val amp = 1f + curBass * 2f
                     val tx = (sin(rad) * baseOffset * amp).toFloat()
                     val ty = (sin(rad * 2.0 + 1.0) * baseOffset * amp).toFloat()
-                    val baseScale = 1.12f + curBass * 0.1f
-                    val scaleOsc = (sin(rad * 2.0) * 0.06).toFloat()
-                    val sc = baseScale + scaleOsc
-                    val rot = (cos(rad) * 3.0 * amp).toFloat()
+                    val baseScale = 1.12f
+                    val scaleOsc = (sin(rad * 2.0) * 0.05).toFloat()
+                    val sc = (baseScale + scaleOsc) * bassScalePulse
+                    val rot = (cos(rad) * 2.5 * amp).toFloat()
 
                     translationX = tx
                     translationY = ty
