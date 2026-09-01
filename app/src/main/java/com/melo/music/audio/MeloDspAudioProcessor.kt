@@ -149,14 +149,11 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
             bassLpStore += (monoSample - bassLpStore) * bassDetectAlpha
             bassEnergyAccum += bassLpStore * bassLpStore
             bassSampleCount++
-            if (bassSampleCount >= 512) {
-                val rms = kotlin.math.sqrt(bassEnergyAccum / bassSampleCount) / 6000f
-                val instant = ((rms - 0.08f) * 2.5f).coerceIn(0f, 1f)
-                smoothedBass = if (instant > smoothedBass) {
-                    instant
-                } else {
-                    smoothedBass * 0.88f
-                }
+            if (bassSampleCount >= 1024) {
+                val rms = kotlin.math.sqrt(bassEnergyAccum / bassSampleCount) / 7500f
+                val instant = ((rms - 0.10f) * 2.0f).coerceIn(0f, 1f)
+                val alpha = if (instant > smoothedBass) 0.30f else 0.10f
+                smoothedBass += (instant - smoothedBass) * alpha
                 currentBassLevel = smoothedBass
                 bassEnergyAccum = 0f
                 bassSampleCount = 0

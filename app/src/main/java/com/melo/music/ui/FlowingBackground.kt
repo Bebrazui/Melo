@@ -127,23 +127,23 @@ fun FlowingBackground(
         }
     }
 
-    // Мягкая упругая пульсация масштаба: небольшое аккуратное увеличение до +5.5% при басе
+    // Мягкое плавное дыхание масштаба при басе (буквально +2.5% без тряски)
     val bassScalePulse by animateFloatAsState(
-        targetValue = 1f + liveBass * 0.055f,
+        targetValue = 1f + liveBass * 0.025f,
         animationSpec = spring(
-            dampingRatio = 0.55f, // мягкий пружинящий отскок
-            stiffness = 360f,
+            dampingRatio = 0.75f, // мягкий затухающий возврат без дребезга
+            stiffness = 220f,
         ),
         label = "bassScalePulse",
     )
 
-    // Один непрерывный линейный драйвер фазы → без «замедления и рывка».
+    // Один непрерывный линейный драйвер фазы для медленного плавного дрейфа
     val infinite = rememberInfiniteTransition(label = "flow")
     val angle = infinite.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 28_000, easing = LinearEasing),
+            animation = tween(durationMillis = 32_000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "angle",
@@ -158,18 +158,16 @@ fun FlowingBackground(
                 .fillMaxSize()
                 .blur(36.dp)
                 .graphicsLayer {
-                    // Чтение state внутри graphicsLayer предотвращает лишнюю рекомпозицию
+                    // Плавный фоновый дрейф полностью независим от баса (никакой резкой тряски!)
                     val curAngle = angle.value
-                    val curBass = liveBass
                     val rad = Math.toRadians(curAngle.toDouble())
-                    val baseOffset = 100f // px
-                    val amp = 1f + curBass * 2f
-                    val tx = (sin(rad) * baseOffset * amp).toFloat()
-                    val ty = (sin(rad * 2.0 + 1.0) * baseOffset * amp).toFloat()
-                    val baseScale = 1.12f
-                    val scaleOsc = (sin(rad * 2.0) * 0.05).toFloat()
+                    val tx = (sin(rad) * 35f).toFloat()
+                    val ty = (sin(rad * 2.0 + 1.0) * 30f).toFloat()
+                    val rot = (cos(rad) * 1.8).toFloat()
+
+                    val baseScale = 1.10f
+                    val scaleOsc = (sin(rad * 2.0) * 0.03).toFloat()
                     val sc = (baseScale + scaleOsc) * bassScalePulse
-                    val rot = (cos(rad) * 2.5 * amp).toFloat()
 
                     translationX = tx
                     translationY = ty
