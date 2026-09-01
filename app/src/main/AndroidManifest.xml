@@ -87,7 +87,50 @@
             </intent-filter>
         </service>
 
-        <!-- Виджет «сейчас играет» на главном экране -->
+        <!-- Виджеты «сейчас играет» (3 размера) -->
+        <receiver
+            android:name=".widget.MeloWidgetSmall"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.melo.music.widget.TOGGLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_small_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.MeloWidgetMedium"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.melo.music.widget.TOGGLE" />
+                <action android:name="com.melo.music.widget.NEXT" />
+                <action android:name="com.melo.music.widget.PREV" />
+                <action android:name="com.melo.music.widget.LIKE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_medium_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.MeloWidgetLarge"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.melo.music.widget.TOGGLE" />
+                <action android:name="com.melo.music.widget.NEXT" />
+                <action android:name="com.melo.music.widget.PREV" />
+                <action android:name="com.melo.music.widget.LIKE" />
+                <action android:name="com.melo.music.widget.SHUFFLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_large_info" />
+        </receiver>
+
         <receiver
             android:name=".widget.MeloWidget"
             android:exported="false">

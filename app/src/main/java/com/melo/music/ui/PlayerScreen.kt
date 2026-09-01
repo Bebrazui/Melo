@@ -414,13 +414,15 @@ fun PlayerScreen(
 
     // Виджет на главном экране: отражает текущий трек и состояние.
     val widgetCtx = androidx.compose.ui.platform.LocalContext.current
-    LaunchedEffect(nowPlaying?.url, isPlaying) {
+    val widgetLiked = run { likedVersion; nowPlaying?.let { isLiked(it) } ?: false }
+    LaunchedEffect(nowPlaying?.url, isPlaying, widgetLiked) {
         com.melo.music.widget.WidgetUpdater.setNowPlaying(
             widgetCtx,
             title = nowPlaying?.title,
             artist = nowPlaying?.uploader,
             coverUrl = nowPlaying?.thumbnailUrl,
             isPlaying = isPlaying,
+            isLiked = widgetLiked,
         )
     }
 
@@ -783,9 +785,10 @@ fun PlayerScreen(
     }
     LaunchedEffect(Unit) {
         com.melo.music.playback.PlaybackService.onTrackEnded = { autoAdvanceRef.value?.invoke() }
-        // Управление с наушников: next/prev резолвятся и играются здесь.
+        // Управление с наушников / виджетов:
         com.melo.music.playback.PlaybackService.onSkipNext = { playNext() }
         com.melo.music.playback.PlaybackService.onSkipPrev = { playPrev() }
+        com.melo.music.playback.PlaybackService.onToggleFavorite = { nowPlaying?.let { toggleLike(it) } }
     }
 
     // Кроссфейд переключил трек: сервис уже играет следующий — синхронизируем UI.

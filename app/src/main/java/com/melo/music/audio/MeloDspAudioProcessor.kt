@@ -54,6 +54,12 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
     private var reverbHpStoreL = 0f
     private var reverbHpStoreR = 0f
 
+    // ── Фильтры 3D Spatial Audio ──
+    private var sideHpStore = 0f
+    private var crossLpStoreL = 0f
+    private var crossLpStoreR = 0f
+    private var sideAirStore = 0f
+
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount != 2) {
             return AudioProcessor.AudioFormat.NOT_SET
@@ -111,9 +117,13 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         comb3.feedback = reverbFeedback; comb3.damp = reverbDamp
         comb4.feedback = reverbFeedback; comb4.damp = reverbDamp
 
-        val spatialWidth = 1.3f + spatialStrength * 1.8f // 1.3 .. 3.1x широкая стереопанорама
-        val delaySamples = (sampleRate * 0.0014f).toInt().coerceIn(10, delayBufferLeft.size - 1) // 1.4ms задержка
+        val spatialWidth = 1.25f + spatialStrength * 1.5f // 1.25 .. 2.75x широкая сцена
+        val delaySamples = (sampleRate * 0.0012f).toInt().coerceIn(10, delayBufferLeft.size - 1) // 1.2ms межушная задержка
 
+        // Коэффициенты DSP-фильтров
+        val bassCrossoverAlpha = (2.0 * Math.PI * 140.0 / sampleRate).toFloat().coerceIn(0.005f, 0.25f) // 140 Hz моно-бас
+        val headShadowAlpha = (2.0 * Math.PI * 2200.0 / sampleRate).toFloat().coerceIn(0.05f, 0.65f) // 2.2 kHz HRTF тень головы
+        val airAlpha = (2.0 * Math.PI * 8500.0 / sampleRate).toFloat().coerceIn(0.1f, 0.9f) // 8.5 kHz воздух/подъём сцены
         val hpAlpha = (2.0 * Math.PI * 250.0 / sampleRate).toFloat().coerceIn(0.01f, 0.5f)
 
         while (inputBuffer.remaining() >= 4) {
@@ -128,12 +138,23 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 }
             }
 
-            // 2. 3D Spatial Audio (стерео-расширение + психоакустическая кросс-задержка)
+            // 2. 3D Spatial Audio (HRTF Head-Shadowing + Mono-Bass + Air Shimmer)
             if (isSpatial) {
                 val mid = (left + right) * 0.5f
-                val side = (left - right) * 0.5f
+                val rawSide = (left - right) * 0.5f
 
-                // Сохраняем в буфер задержки для бинаурального 3D эффекта
+                // 2a. Mono-Bass: частоты ниже 140 Гц не размываются в стерео, удар бочки остаётся центрированным и мощным
+                sideHpStore += (rawSide - sideHpStore) * bassCrossoverAlpha
+                val sideHigh = rawSide - sideHpStore
+                val sideBass = sideHpStore
+
+                // 2b. Air Shimmer: лёгкий подъём ультра-высоких частот (>8.5 кГц) для ощущения простора
+                sideAirStore += (sideHigh - sideAirStore) * airAlpha
+                val sideAir = sideHigh - sideAirStore
+
+                val widenedSide = sideBass + sideHigh * spatialWidth + sideAir * (spatialStrength * 0.28f)
+
+                // 2c. Бинауральная задержка + HRTF фильтр поглощения черепом (Head Shadowing)
                 delayBufferLeft[delayWriteIndex] = left
                 delayBufferRight[delayWriteIndex] = right
                 val readIndex = (delayWriteIndex - delaySamples + delayBufferLeft.size) % delayBufferLeft.size
@@ -141,9 +162,12 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 val delayedR = delayBufferRight[readIndex]
                 delayWriteIndex = (delayWriteIndex + 1) % delayBufferLeft.size
 
-                // Расширенное 3D стереополе + бинауральный кросс-фид
-                left = mid + side * spatialWidth + delayedR * (spatialStrength * 0.35f)
-                right = mid - side * spatialWidth - delayedL * (spatialStrength * 0.35f)
+                crossLpStoreL += (delayedR - crossLpStoreL) * headShadowAlpha
+                crossLpStoreR += (delayedL - crossLpStoreR) * headShadowAlpha
+
+                val crossfeedGain = spatialStrength * 0.30f
+                left = mid + widenedSide + crossLpStoreL * crossfeedGain
+                right = mid - widenedSide - crossLpStoreR * crossfeedGain
             }
 
             // 3. Реверберация (Schroeder / Freeverb Matrix с High-Pass фильтром)
@@ -183,14 +207,22 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         output.flip()
     }
 
-    override fun onReset() {
+    override fun onFlush() {
         for (b in eqBands) b.reset()
         delayBufferLeft.fill(0f)
         delayBufferRight.fill(0f)
         reverbHpStoreL = 0f
         reverbHpStoreR = 0f
+        sideHpStore = 0f
+        crossLpStoreL = 0f
+        crossLpStoreR = 0f
+        sideAirStore = 0f
         comb1.reset(); comb2.reset(); comb3.reset(); comb4.reset()
         allpass1.reset(); allpass2.reset()
+    }
+
+    override fun onReset() {
+        onFlush()
     }
 
     private class CombFilter(size: Int) {
