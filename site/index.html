@@ -4,17 +4,17 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="google-site-verification" content="PZ2vAu7iczEgNsCotxGWyLTCTGtcozVJ30HglrYFbXg" />
-<title>Melo — Музыкальный плеер для Android | Скачать APK бесплатно</title>
-<meta name="description" content="Melo — бесплатный музыкальный плеер для Android: бесконечная персональная волна Sea, офлайн-режим, синхронный текст с караоке, slowed & sped up. Без рекламы и подписки." />
-<meta name="keywords" content="Melo, melo музыка, скачать melo, музыкальный плеер андроид, плеер без рекламы, скачать apk melo, музыка без подписки, плеер для андроид" />
+<title>Melo — аудиоплеер для Android с открытым исходным кодом</title>
+<meta name="description" content="Нативный аудиоплеер для Android. Прямой стриминг из YouTube Music и SoundCloud, синхронизированные тексты, офлайн-режим, эквалайзер и встроенный ByeDPI." />
+<meta name="keywords" content="Melo, melo музыка, аудиоплеер андроид, скачать apk, плеер без рекламы, открытый исходный код, byedpi android" />
 
-<!-- Open Graph / VK / Telegram -->
+<!-- Open Graph / Мессенджеры -->
 <meta property="og:type" content="website" />
-<meta property="og:title" content="Melo — Музыкальный плеер для Android" />
-<meta property="og:description" content="Бесплатный музыкальный плеер: бесконечная волна Sea, офлайн, тексты песен, эквалайзер и slowed/sped up без рекламы." />
+<meta property="og:title" content="Melo — аудиоплеер для Android" />
+<meta property="og:description" content="Стриминг из открытых каталогов, синхронизированные тексты, офлайн-сохранение и встроенный ByeDPI." />
 <meta property="og:image" content="img/banner.png" />
 
-<!-- Schema.org Microdata -->
+<!-- Schema.org SoftwareApplication -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -27,385 +27,693 @@
     "price": "0",
     "priceCurrency": "RUB"
   },
-  "description": "Бесплатный музыкальный плеер для Android с фоновым воспроизведением, текстами песен и офлайн-режимом."
+  "description": "Нативный аудиоплеер для Android со встроенным обходом сетевых ограничений, текстами песен и офлайн-режимом."
 }
 </script>
+
 <link rel="icon" href="img/icon.png" />
-<!-- Шрифт: Google Sans (+ Inter как запасной) -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>@import url('https://fonts.cdnfonts.com/css/google-sans');</style>
-<!-- Иконки Phosphor -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
 <style>
-  :root{
-    --bg:#070f0b; --bg2:#0b1610; --card:rgba(255,255,255,.035);
-    --line:rgba(120,200,160,.13);
-    --accent:#8fe3b1;            /* спокойный мятный акцент */
-    --accent-soft:#bdeed2;
-    --pill-1:#ecfff5; --pill-2:#c8f1da;  /* светлая «необычная» кнопка */
-    --pill-ink:#0c3a26;
-    --text:#e9f2ec; --muted:#8aa498;
-    --radius:22px;
+  :root {
+    --bg: #0b0f0d;
+    --surface: #121815;
+    --surface-hover: #17201c;
+    --border: #1f2a24;
+    --border-light: #283730;
+    --text: #edf2ee;
+    --text-muted: #8e9f95;
+    --text-dim: #5e7066;
+    --accent: #6ee7b7;
+    --accent-btn: #2d5a45;
+    --accent-btn-hover: #376d54;
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
   }
-  *{box-sizing:border-box;margin:0;padding:0}
-  html{scroll-behavior:smooth}
-  body{
-    font-family:'Google Sans','Inter',system-ui,-apple-system,Roboto,sans-serif;
-    background:var(--bg); color:var(--text); line-height:1.55; overflow-x:hidden;
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
   }
-  body::before{
-    content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
-    background:
-      radial-gradient(60vw 60vw at 12% 8%, rgba(80,200,140,.10), transparent 60%),
-      radial-gradient(55vw 55vw at 92% 22%, rgba(20,80,50,.32), transparent 60%),
-      radial-gradient(60vw 60vw at 80% 95%, rgba(80,200,140,.08), transparent 60%),
-      radial-gradient(50vw 50vw at 5% 90%, rgba(8,34,22,.5), transparent 60%),
-      var(--bg);
+
+  a { color: inherit; text-decoration: none; }
+
+  .wrap {
+    max-width: 1140px;
+    margin: 0 auto;
+    padding: 0 24px;
   }
-  a{color:inherit;text-decoration:none}
-  .wrap{max-width:1180px;margin:0 auto;padding:0 22px}
-  .accent{color:var(--accent)}
 
-  /* header */
-  header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
-    background:rgba(7,15,11,.55);border-bottom:1px solid var(--line)}
-  .nav{display:flex;align-items:center;gap:18px;height:68px}
-  .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px;letter-spacing:.3px}
-  .logo img{width:30px;height:30px;border-radius:8px}
-  .nav .spacer{flex:1}
-  .nav a.link{color:var(--muted);font-size:15px;transition:.2s}
-  .nav a.link:hover{color:var(--text)}
-  .btn{display:inline-flex;align-items:center;gap:9px;border-radius:999px;
-    padding:11px 18px;font-weight:600;font-size:15px;cursor:pointer;border:1px solid transparent;transition:.22s;white-space:nowrap}
-  .btn i{font-size:18px}
-  /* необычная светлая кнопка-пилюля */
-  .btn-primary{background:linear-gradient(135deg,var(--pill-1),var(--pill-2));color:var(--pill-ink);
-    box-shadow:0 10px 34px rgba(150,235,185,.18)}
-  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 16px 44px rgba(150,235,185,.32)}
-  .btn-ghost{border-color:var(--line);color:var(--text);background:rgba(255,255,255,.02)}
-  .btn-ghost:hover{background:rgba(255,255,255,.06);border-color:rgba(120,200,160,.3)}
+  /* Header */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: rgba(11, 15, 13, 0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
 
-  /* hero */
-  .hero{display:grid;grid-template-columns:1.02fr .98fr;gap:24px;align-items:center;
-    padding:64px 0 50px;min-height:80vh}
-  .badge{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);
-    color:var(--accent);background:rgba(120,200,160,.07);border-radius:999px;
-    padding:6px 14px;font-size:13px;font-weight:600;margin-bottom:22px}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent)}
-  h1{font-size:clamp(42px,6vw,74px);line-height:1.02;font-weight:700;letter-spacing:-1.5px}
-  .hero p.sub{color:var(--muted);font-size:18px;max-width:520px;margin:22px 0 30px}
-  .hero p.sub b{color:var(--text);font-weight:600}
-  .cta{display:flex;gap:14px;flex-wrap:wrap}
-  .btn-lg{padding:15px 26px;font-size:16px}
-  .hint{color:var(--muted);font-size:13px;margin-top:16px;display:flex;align-items:center;gap:8px}
+  .nav {
+    display: flex;
+    align-items: center;
+    height: 64px;
+    gap: 24px;
+  }
 
-  /* phones — веер из трёх */
-  .phones{position:relative;height:600px;display:flex;justify-content:center;align-items:center}
-  .phone{position:absolute;width:236px;border-radius:34px;padding:8px;
-    background:linear-gradient(160deg,#18261f,#0a130d);
-    border:1px solid rgba(120,200,160,.2);
-    box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 60px rgba(80,200,140,.10)}
-  .phone img{width:100%;border-radius:26px;display:block}
-  .phone.left{transform:rotate(-11deg) translateX(-168px) scale(.84);opacity:.78;z-index:1}
-  .phone.right{transform:rotate(11deg) translateX(168px) scale(.84);opacity:.78;z-index:1}
-  .phone.center{z-index:3}
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 19px;
+  }
 
-  /* sections */
-  section{padding:80px 0}
-  .eyebrow{color:var(--accent);font-weight:700;letter-spacing:2px;font-size:13px;text-transform:uppercase;text-align:center}
-  h2{font-size:clamp(30px,4.5vw,46px);font-weight:700;text-align:center;margin:10px 0 14px;letter-spacing:-.7px}
-  .lead{color:var(--muted);text-align:center;max-width:620px;margin:0 auto 50px;font-size:17px}
+  .brand img {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+  }
 
-  /* bento-сетка возможностей */
-  .bento{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;grid-auto-rows:minmax(158px,1fr)}
-  .feature{position:relative;overflow:hidden;display:flex;flex-direction:column;
-    background:linear-gradient(160deg,rgba(255,255,255,.05),rgba(255,255,255,.02));
-    border:1px solid var(--line);border-radius:24px;padding:26px;
-    transition:transform .35s cubic-bezier(.2,.7,.2,1),border-color .35s,box-shadow .35s;
-    opacity:0;transform:translateY(26px)}
-  .feature.in{opacity:1;transform:none}
-  .feature:hover{transform:translateY(-6px);border-color:rgba(120,200,160,.38);
-    box-shadow:0 22px 60px rgba(0,0,0,.45)}
-  /* мягкое свечение, проявляется на ховере */
-  .feature::after{content:"";position:absolute;width:260px;height:260px;border-radius:50%;top:-130px;right:-90px;
-    background:radial-gradient(circle,rgba(130,225,170,.18),transparent 70%);opacity:0;transition:opacity .45s;pointer-events:none}
-  .feature:hover::after{opacity:1}
+  .nav-links {
+    display: flex;
+    gap: 24px;
+    margin-left: 20px;
+  }
 
-  .span-3{grid-column:span 3} .span-2{grid-column:span 2} .row-2{grid-row:span 2}
+  .nav-links a {
+    color: var(--text-muted);
+    font-size: 14px;
+    font-weight: 500;
+    transition: color 0.15s;
+  }
 
-  .ficon{width:54px;height:54px;border-radius:16px;display:flex;align-items:center;justify-content:center;
-    font-size:28px;color:var(--accent);background:rgba(120,200,160,.10);border:1px solid var(--line);
-    margin-bottom:16px;transition:.35s}
-  .feature:hover .ficon{background:rgba(120,200,160,.18);transform:rotate(-6deg) scale(1.06);
-    box-shadow:0 0 26px rgba(120,220,160,.25)}
-  .feature h3{font-size:19px;margin-bottom:8px;font-weight:600}
-  .feature p{color:var(--muted);font-size:15px}
-  .feature .body{position:relative;z-index:2}
+  .nav-links a:hover {
+    color: var(--text);
+  }
 
-  /* большая карточка Sea */
-  .feature.big{justify-content:space-between;
-    background:linear-gradient(155deg,rgba(80,200,140,.14),rgba(20,80,50,.10) 55%,rgba(255,255,255,.02))}
-  .feature.big .ficon{width:62px;height:62px;font-size:32px}
-  .feature.big h3{font-size:clamp(24px,3vw,32px);letter-spacing:-.5px}
-  .feature.big p{font-size:16px;max-width:90%}
-  .feature.big .tag{display:inline-flex;align-items:center;gap:7px;margin-top:14px;
-    border:1px solid var(--line);background:rgba(120,200,160,.08);color:var(--accent);
-    border-radius:999px;padding:6px 13px;font-size:13px;font-weight:600;width:max-content}
-  /* живая волна на дне карточки */
-  .sea-wave{position:absolute;left:0;right:0;bottom:0;height:46%;z-index:1;pointer-events:none;
-    -webkit-mask-image:linear-gradient(transparent,#000 60%);mask-image:linear-gradient(transparent,#000 60%)}
-  .sea-wave svg{width:200%;height:100%;display:block}
-  .sea-wave .w1{animation:waveMove 11s linear infinite}
-  .sea-wave .w2{animation:waveMove 7s linear infinite reverse;opacity:.5}
-  @keyframes waveMove{to{transform:translateX(-50%)}}
+  .spacer { flex: 1; }
 
-  /* free band */
-  .band{background:linear-gradient(120deg,rgba(80,200,140,.08),rgba(20,80,50,.16));
-    border:1px solid var(--line);border-radius:32px;padding:54px 30px;text-align:center;
-    box-shadow:0 0 80px rgba(80,200,140,.06) inset}
-  .band h2{margin-bottom:6px}
-  .price{font-size:66px;font-weight:700;margin:8px 0;letter-spacing:-1px}
-  .perks{display:flex;gap:12px 26px;flex-wrap:wrap;justify-content:center;color:var(--muted);margin:22px 0 30px;font-size:15px}
-  .perks span{display:inline-flex;align-items:center;gap:8px}
-  .perks i{color:var(--accent);font-size:18px}
+  /* Кнопки */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 600;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
 
-  .dl{text-align:center}
-  .store{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:26px}
-  .soon{opacity:.5;cursor:not-allowed}
+  .btn-primary {
+    background: var(--text);
+    color: var(--bg);
+  }
 
-  footer{border-top:1px solid var(--line);padding:40px 0;color:var(--muted);font-size:14px}
-  .foot{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
-  .foot a:hover{color:var(--text)}
-  .disc{font-size:12px;color:#5d7166;max-width:760px;margin:18px auto 0;text-align:center;line-height:1.5}
+  .btn-primary:hover {
+    background: #ffffff;
+  }
 
-  /* интерактив */
-  #progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:100;
-    background:linear-gradient(90deg,var(--accent),#d7f7e4);box-shadow:0 0 12px rgba(143,227,177,.6)}
-  #spot{position:fixed;inset:0;z-index:-1;pointer-events:none;
-    background:radial-gradient(300px 300px at var(--mx,50%) var(--my,25%), rgba(120,220,160,.08), transparent 70%)}
-  .reveal{opacity:0;transform:translateY(34px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
-  .reveal.in{opacity:1;transform:none}
+  .btn-secondary {
+    background: var(--surface);
+    border-color: var(--border);
+    color: var(--text);
+  }
 
-  /* баннер — фоновый декор за финальным CTA */
-  .banner-sec{position:relative;overflow:hidden;text-align:center;padding:120px 0 130px;min-height:440px;display:flex;align-items:center;justify-content:center}
-  .banner-deco{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:0;pointer-events:none}
-  .banner-deco img{width:min(72vw,600px);opacity:.9;
-    mix-blend-mode:screen;
-    -webkit-mask-image:radial-gradient(closest-side,#000 70%,transparent 100%);
-    mask-image:radial-gradient(closest-side,#000 70%,transparent 100%)}
-  .banner-cap{position:relative;z-index:1}
-  .banner-cap .btn{margin-top:20px}
+  .btn-secondary:hover {
+    background: var(--surface-hover);
+    border-color: var(--border-light);
+  }
 
-  @media(max-width:880px){
-    .hero{grid-template-columns:1fr;text-align:center;padding-top:40px}
-    .hero .badge,.cta,.hint{justify-content:center}
-    .hero p.sub{margin-left:auto;margin-right:auto}
-    .phones{height:520px;margin-top:24px;transform:scale(.92)}
-    .bento{grid-template-columns:1fr}
-    .span-3,.span-2,.row-2{grid-column:auto;grid-row:auto}
-    .nav a.link{display:none}
+  .btn-accent {
+    background: var(--accent-btn);
+    color: var(--accent);
+    border-color: rgba(110, 231, 183, 0.25);
+  }
+
+  .btn-accent:hover {
+    background: var(--accent-btn-hover);
+    border-color: rgba(110, 231, 183, 0.4);
+  }
+
+  .btn-lg {
+    padding: 13px 22px;
+    font-size: 15px;
+  }
+
+  /* Hero */
+  .hero {
+    padding: 72px 0 56px;
+  }
+
+  .hero-content {
+    max-width: 780px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+  }
+
+  .status-badge .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  h1 {
+    font-size: clamp(34px, 5vw, 54px);
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 18px;
+  }
+
+  .hero p.lead {
+    font-size: 18px;
+    color: var(--text-muted);
+    max-width: 680px;
+    margin: 0 auto 32px;
+    line-height: 1.6;
+  }
+
+  .hero-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .install-note {
+    font-size: 13px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  /* Витрина скриншотов */
+  .preview-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-top: 54px;
+  }
+
+  .preview-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .preview-card img {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    display: block;
+    border: 1px solid var(--border);
+  }
+
+  .preview-card-caption {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+    font-weight: 500;
+  }
+
+  /* Разделы */
+  section {
+    padding: 64px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .section-header {
+    margin-bottom: 40px;
+  }
+
+  .section-header h2 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 8px;
+  }
+
+  .section-header p {
+    color: var(--text-muted);
+    font-size: 16px;
+  }
+
+  /* Сетка фич */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+
+  .feature-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 24px;
+  }
+
+  .feature-item .icon {
+    font-size: 24px;
+    color: var(--accent);
+    margin-bottom: 14px;
+    display: inline-block;
+  }
+
+  .feature-item h3 {
+    font-size: 17px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .feature-item p {
+    font-size: 14px;
+    color: var(--text-muted);
+    line-height: 1.55;
+  }
+
+  /* Спецификации */
+  .specs-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .specs-table tr {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .specs-table tr:last-child {
+    border-bottom: none;
+  }
+
+  .specs-table td {
+    padding: 14px 20px;
+    font-size: 14px;
+  }
+
+  .specs-table td:first-child {
+    color: var(--text-muted);
+    width: 35%;
+    font-weight: 500;
+  }
+
+  .specs-table td:last-child {
+    color: var(--text);
+    font-family: monospace;
+    font-size: 13.5px;
+  }
+
+  /* FAQ */
+  .faq-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .faq-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px 24px;
+  }
+
+  .faq-item h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .faq-item p {
+    font-size: 14.5px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  /* Подвал */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 44px 0 36px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .footer-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .footer-links a:hover {
+    color: var(--text);
+  }
+
+  .footer-disclaimer {
+    color: var(--text-dim);
+    line-height: 1.5;
+    font-size: 12px;
+  }
+
+  /* Мобильная плашка скачивания */
+  .mobile-cta {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: rgba(18, 24, 21, 0.96);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border-light);
+    padding: 12px 20px;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .mobile-cta-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mobile-cta-info img {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+  }
+
+  .mobile-cta-text .title {
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 1.2;
+  }
+
+  .mobile-cta-text .sub {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  @media (max-width: 860px) {
+    .preview-grid {
+      grid-template-columns: 1fr;
+      max-width: 340px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .features-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .nav-links {
+      display: none;
+    }
+
+    .mobile-cta {
+      display: flex;
+    }
+
+    body {
+      padding-bottom: 64px;
+    }
   }
 </style>
 </head>
 <body>
-<div id="progress"></div>
-<div id="spot"></div>
 
 <header>
   <div class="wrap nav">
-    <div class="logo"><img src="img/icon.png" alt="Melo"/> <span>Melo</span></div>
+    <a href="#" class="brand">
+      <img src="img/icon.png" alt="Логотип Melo" />
+      <span>Melo</span>
+    </a>
+    <nav class="nav-links" aria-label="Навигация">
+      <a href="#features">Возможности</a>
+      <a href="#specs">Спецификации</a>
+      <a href="#faq">Вопросы и ответы</a>
+      <a href="privacy/">Конфиденциальность</a>
+    </nav>
     <span class="spacer"></span>
-    <a href="#features" class="link">Возможности</a>
-    <a href="#download" class="link">Скачать</a>
-    <a class="btn btn-primary" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download><i class="ph ph-download-simple"></i> Скачать</a>
+    <a class="btn btn-secondary" href="https://github.com/Bebrazui/Melo-Releases/releases" target="_blank" rel="noopener">
+      <i class="ph ph-github-logo"></i> GitHub
+    </a>
+    <a class="btn btn-primary" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download>
+      <i class="ph ph-download-simple"></i> Скачать APK
+    </a>
   </div>
 </header>
 
 <main class="wrap">
 
   <!-- HERO -->
-  <section class="hero">
-    <div class="hero-copy">
-      <h1>Музыка <span class="accent">без границ</span></h1>
-      <p class="sub">Melo — это не просто плеер. Это <b>бесконечная волна</b> под твой вкус, <b>slowed &amp; sped up</b>, офлайн и синхронный текст. <b>Без рекламы и без подписки.</b></p>
-      <div class="cta">
-        <a class="btn btn-primary btn-lg" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download><i class="ph ph-android-logo"></i> Скачать на Android</a>
+  <section class="hero" style="border-top: none;">
+    <div class="hero-content">
+      <div class="status-badge">
+        <span class="dot"></span> Версия 0.3 · Android 8.0+ · Открытый исходный код
+      </div>
+      <h1>Аудиоплеер для Android со свободным доступом к трекам</h1>
+      <p class="lead">
+        Прямое извлечение аудиопотоков из YouTube Music и SoundCloud, синхронизированные тексты песен, офлайн-режим, 10-полосный эквалайзер и встроенный ByeDPI.
+      </p>
+
+      <div class="hero-actions">
+        <a class="btn btn-primary btn-lg" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download>
+          <i class="ph ph-download-simple"></i> Скачать APK (v0.3, arm64)
+        </a>
+        <a class="btn btn-secondary btn-lg" href="https://www.rustore.ru" target="_blank" rel="noopener">
+          <i class="ph ph-shopping-bag"></i> RuStore
+        </a>
+        <a class="btn btn-secondary btn-lg" href="https://4pda.to" target="_blank" rel="noopener">
+          <i class="ph ph-chat-circle-text"></i> Тема на 4PDA
+        </a>
+      </div>
+
+      <div class="install-note">
+        <i class="ph ph-info"></i> Бесплатно для личного использования. При установке разрешите установку из неизвестных источников.
       </div>
     </div>
-    <div class="phones">
-      <div class="phone left"><img src="img/screen-search.png" alt="Поиск в Melo"/></div>
-      <div class="phone right"><img src="img/screen-player.png" alt="Плеер Melo"/></div>
-      <div class="phone center"><img src="img/screen-home.png" alt="Главный экран Melo"/></div>
+
+    <!-- Витрина интерфейса -->
+    <div class="preview-grid">
+      <div class="preview-card">
+        <img src="img/screen-search.png" alt="Скриншот поиска треков и исполнителей в Melo" />
+        <div class="preview-card-caption">Поиск по каталогам без регистрации</div>
+      </div>
+      <div class="preview-card">
+        <img src="img/screen-player.png" alt="Скриншот экрана плеера с обложкой и управлением" />
+        <div class="preview-card-caption">Экран воспроизведения и эквалайзер</div>
+      </div>
+      <div class="preview-card">
+        <img src="img/screen-home.png" alt="Скриншот главного экрана с персональными подборками" />
+        <div class="preview-card-caption">Персональная волна рекомендаций</div>
+      </div>
     </div>
   </section>
 
-  <!-- FEATURES -->
+  <!-- ВОЗМОЖНОСТИ -->
   <section id="features">
-    <div class="eyebrow">Почему Melo</div>
-    <h2>Сделано для тех, кто <span class="accent">правда</span> слушает</h2>
-    <p class="lead">Всё, что нужно меломану — без ограничений и компромиссов.</p>
-    <div class="bento">
+    <div class="section-header">
+      <h2>Функциональные возможности</h2>
+      <p>Архитектура плеера ориентирована на локальную обработку данных прямо на устройстве.</p>
+    </div>
 
-      <div class="feature big span-3 row-2">
-        <div class="body"><div class="ficon"><i class="ph ph-wave-sine"></i></div></div>
-        <div class="body">
-          <h3>Бесконечная волна Sea</h3>
-          <p>Включи и слушай нон-стоп. Поток подстраивается под твой вкус, не повторяется и не требует собирать очередь вручную.</p>
-          <span class="tag"><span class="dot"></span> Играет, пока ты слушаешь</span>
-        </div>
-        <div class="sea-wave" aria-hidden="true">
-          <svg viewBox="0 0 1440 120" preserveAspectRatio="none">
-            <path class="w1" d="M0 64 C 180 24, 360 104, 720 64 C 900 24, 1080 104, 1440 64 L1440 120 L0 120 Z" fill="rgba(120,220,160,.30)"/>
-          </svg>
-          <svg viewBox="0 0 1440 120" preserveAspectRatio="none" style="position:absolute;inset:0">
-            <path class="w2" d="M0 78 C 200 48, 380 110, 720 78 C 1060 48, 1240 110, 1440 78 L1440 120 L0 120 Z" fill="rgba(80,180,130,.22)"/>
-          </svg>
-        </div>
+    <div class="features-grid">
+      <div class="feature-item">
+        <i class="ph ph-broadcast icon"></i>
+        <h3>Прямой стриминг</h3>
+        <p>Разрешение прямых аудиопотоков из YouTube Music и SoundCloud на устройстве через NewPipe Extractor и yt-dlp без промежуточных серверов.</p>
       </div>
 
-      <div class="feature span-3">
-        <div class="body"><div class="ficon"><i class="ph ph-gauge"></i></div>
-        <h3>Slowed &amp; Sped up</h3>
-        <p>Замедляй и ускоряй любой трек с изменением тона. Сохраняй slowed- и sped-версии в избранное и плейлисты.</p></div>
+      <div class="feature-item">
+        <i class="ph ph-shield-check icon"></i>
+        <h3>Встроенный ByeDPI</h3>
+        <p>Нативный C-демон SOCKS5-прокси, встроенный в APK для обхода сетевых замедлений и фильтрации трафика без сторонних VPN-приложений.</p>
       </div>
 
-      <div class="feature span-3">
-        <div class="body"><div class="ficon"><i class="ph ph-cloud-arrow-down"></i></div>
-        <h3>Офлайн</h3>
-        <p>Скачивай треки и слушай без интернета — скачанное играет прямо с устройства.</p></div>
+      <div class="feature-item">
+        <i class="ph ph-waveform icon"></i>
+        <h3>Персональная волна</h3>
+        <p>Непрерывный поток похожих треков на основе истории воспроизведения и частоты пропусков (Skip-aware ранжирование).</p>
       </div>
 
-      <div class="feature span-2">
-        <div class="body"><div class="ficon"><i class="ph ph-playlist"></i></div>
-        <h3>Импорт плейлистов</h3>
-        <p>Переноси плейлисты и лайки из YouTube Music, SoundCloud или из папки на телефоне.</p></div>
+      <div class="feature-item">
+        <i class="ph ph-download-simple icon"></i>
+        <h3>Офлайн-сохранение</h3>
+        <p>Скачивание аудиофайлов в память устройства для воспроизведения в поездках или при отсутствии подключения к сети.</p>
       </div>
 
-      <div class="feature span-2">
-        <div class="body"><div class="ficon"><i class="ph ph-microphone-stage"></i></div>
-        <h3>Текст с караоке</h3>
-        <p>Синхронный текст, который подсвечивается по словам в такт музыке.</p></div>
+      <div class="feature-item">
+        <i class="ph ph-text-t icon"></i>
+        <h3>Синхронный текст (LRC)</h3>
+        <p>Автоматическая подгрузка субтитров с пословной подсветкой в такт музыке и возможностью перехода по таймкодам.</p>
       </div>
 
-      <div class="feature span-2">
-        <div class="body"><div class="ficon"><i class="ph ph-equalizer"></i></div>
-        <h3>Звук под себя</h3>
-        <p>Эквалайзер, усиление и реверберация. Плавный кроссфейд между треками.</p></div>
+      <div class="feature-item">
+        <i class="ph ph-sliders icon"></i>
+        <h3>DSP и регулировка темпа</h3>
+        <p>10-полосный эквалайзер, фильтрация вокала для караоке, а также независимое изменение темпа и тональности (Slowed & Sped up).</p>
       </div>
-
     </div>
   </section>
 
-  <!-- FREE -->
-  <section>
-    <div class="band reveal">
-      <div class="eyebrow">Цена</div>
-      <h2>Бесплатно. <span class="accent">Навсегда.</span></h2>
-      <div class="price accent">0&nbsp;₽</div>
-      <div class="perks">
-        <span><i class="ph ph-check-circle"></i> Без рекламы</span>
-        <span><i class="ph ph-check-circle"></i> Без подписки</span>
-        <span><i class="ph ph-check-circle"></i> Без слежки</span>
-        <span><i class="ph ph-check-circle"></i> Без обязательной регистрации</span>
+  <!-- СПЕЦИФИКАЦИИ -->
+  <section id="specs">
+    <div class="section-header">
+      <h2>Технические параметры</h2>
+      <p>Требования к окружению и стек компонентов.</p>
+    </div>
+
+    <table class="specs-table">
+      <tbody>
+        <tr>
+          <td>Операционная система</td>
+          <td>Android 8.0 (API 26) и выше</td>
+        </tr>
+        <tr>
+          <td>Архитектура процессора</td>
+          <td>ARM64-v8a (64-bit)</td>
+        </tr>
+        <tr>
+          <td>Аудиоподсистема</td>
+          <td>AndroidX Media3 (ExoPlayer), MediaSessionService</td>
+        </tr>
+        <tr>
+          <td>Сетевой уровень</td>
+          <td>OkHttp 4, DNS-over-HTTPS, встроенный ByeDPI SOCKS5</td>
+        </tr>
+        <tr>
+          <td>Интерфейс</td>
+          <td>Jetpack Compose, Material 3 Expressive</td>
+        </tr>
+        <tr>
+          <td>Лицензия</td>
+          <td>GNU Affero General Public License v3.0 (AGPL-3.0)</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq">
+    <div class="section-header">
+      <h2>Часто задаваемые вопросы</h2>
+      <p>Ответы на ключевые вопросы по установке и работе приложения.</p>
+    </div>
+
+    <div class="faq-list">
+      <div class="faq-item">
+        <h3>1. Безопасно ли устанавливать APK вручную?</h3>
+        <p>Да. Проект имеет полностью открытый исходный код под лицензией AGPL-3.0, проверяемый любым желающим в репозитории на GitHub. Предупреждение системы Android об «установке из неизвестных источников» является стандартным для всех приложений, скачанных вне Google Play.</p>
       </div>
-      <a class="btn btn-primary btn-lg" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download><i class="ph ph-download-simple"></i> Установить Melo</a>
-    </div>
-  </section>
 
-  <!-- DOWNLOAD -->
-  <section id="download" class="dl">
-    <div class="eyebrow">Загрузка</div>
-    <h2>Поехали</h2>
-    <p class="lead">Скачай свежий APK и запусти волну за пару минут.</p>
-    <div class="store">
-      <a class="btn btn-primary btn-lg" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download><i class="ph ph-android-logo"></i> Скачать на Android</a>
-      <a class="btn btn-ghost btn-lg" href="https://github.com/Bebrazui/Melo-Releases/releases" target="_blank" rel="noopener"><i class="ph ph-github-logo"></i> Все версии</a>
-    </div>
-    <p class="hint" style="justify-content:center"><i class="ph ph-info"></i> При установке разреши «установку из неизвестных источников».</p>
-  </section>
+      <div class="faq-item">
+        <h3>2. Откуда берутся аудиотреки?</h3>
+        <p>Melo не содержит собственных серверов с музыкой. Приложение локально на устройстве извлекает публичные аудиопотоки из YouTube Music и SoundCloud, используя компоненты NewPipe Extractor и yt-dlp.</p>
+      </div>
 
-  <!-- ФИНАЛЬНЫЙ CTA + баннер-декор -->
-  <section class="banner-sec">
-    <div class="banner-deco" aria-hidden="true"><img src="img/banner.png" alt="" /></div>
-    <div class="banner-cap reveal">
-      <div class="eyebrow">Готов?</div>
-      <h2>Включи свою <span class="accent">волну</span></h2>
-      <a class="btn btn-primary btn-lg" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download><i class="ph ph-download-simple"></i> Скачать Melo</a>
+      <div class="faq-item">
+        <h3>3. Как приложение работает при сетевых блокировках?</h3>
+        <p>В код приложения скомпилирован нативный C-демон ByeDPI. При необходимости он запускает локальный SOCKS5-прокси на порту 1080 и фрагментирует TCP/TLS-пакеты, позволяя соединению обходить замедления провайдера без внешнего VPN.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>4. Собираются ли персональные данные?</h3>
+        <p>Нет. Поисковые запросы, плейлисты, история прослушиваний и кеш треков сохраняются исключительно в локальном хранилище вашего устройства. Сайт и приложение не используют рекламные SDK и аналитические трекеры.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>5. Почему приложения нет в Google Play?</h3>
+        <p>Правила магазина Google Play прямо запрещают фоновое воспроизведение и скачивание контента с сервисов YouTube без использования официального платного YouTube Premium API.</p>
+      </div>
     </div>
   </section>
 
 </main>
 
+<!-- Фиксированная кнопка на смартфонах -->
+<div class="mobile-cta" id="mobileCta">
+  <div class="mobile-cta-info">
+    <img src="img/icon.png" alt="Melo" />
+    <div class="mobile-cta-text">
+      <div class="title">Melo</div>
+      <div class="sub">v0.3 · APK для Android</div>
+    </div>
+  </div>
+  <a class="btn btn-primary" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download>
+    <i class="ph ph-download-simple"></i> Скачать
+  </a>
+</div>
+
 <footer>
   <div class="wrap">
-    <div class="foot">
-      <div class="logo"><img src="img/icon.png" alt="Melo"/> <span>Melo</span></div>
-      <div style="display:flex;gap:22px;flex-wrap:wrap">
+    <div class="footer-row">
+      <div class="brand">
+        <img src="img/icon.png" alt="Melo" />
+        <span>Melo</span>
+      </div>
+      <div class="footer-links">
         <a href="#features">Возможности</a>
-        <a href="#download">Скачать</a>
+        <a href="#specs">Спецификации</a>
+        <a href="#faq">FAQ</a>
         <a href="privacy/">Конфиденциальность</a>
-        <a href="https://github.com/Bebrazui/Melo-Releases/releases" target="_blank" rel="noopener">Releases</a>
+        <a href="https://github.com/Bebrazui/Melo" target="_blank" rel="noopener">Исходный код</a>
+        <a href="https://github.com/Bebrazui/Melo-Releases/releases" target="_blank" rel="noopener">Все релизы</a>
       </div>
     </div>
-    <p class="disc">Melo — плеер-агрегатор. Приложение не размещает и не хранит аудио на серверах: музыка воспроизводится из открытых публичных источников через соединение устройства. Все права на контент принадлежат их правообладателям. Для личного некоммерческого использования.</p>
+    <p class="footer-disclaimer">
+      Melo — клиентский аудиоплеер с открытым исходным кодом. Приложение не размещает и не распространяет аудиофайлы. Воспроизведение осуществляется из открытых сетевых источников через соединение устройства пользователя. Все товарные знаки и права на контент принадлежат их правообладателям.
+    </p>
   </div>
 </footer>
 
-<script>
-  // появление карточек
-  const io = new IntersectionObserver((entries)=>{
-    entries.forEach((e,i)=>{ if(e.isIntersecting){ setTimeout(()=>e.target.classList.add('in'), i*70); io.unobserve(e.target);} });
-  },{threshold:.15});
-  document.querySelectorAll('.feature').forEach(el=>io.observe(el));
-
-  // reveal секций
-  const rio = new IntersectionObserver((entries)=>{
-    entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); rio.unobserve(e.target);} });
-  },{threshold:.18});
-  document.querySelectorAll('.reveal').forEach(el=>rio.observe(el));
-
-  // прогресс-бар скролла + параллакс
-  const prog=document.getElementById('progress');
-  const phonesEl=document.querySelector('.phones');
-  const heroCopy=document.querySelector('.hero-copy');
-  const bannerDeco=document.querySelector('.banner-deco');
-  const isDesktop=window.matchMedia('(min-width:881px)').matches;
-  let ticking=false;
-  const applyScroll=()=>{
-    const h=document.documentElement, sc=h.scrollTop;
-    prog.style.width=(sc/(h.scrollHeight-h.clientHeight)*100)+'%';
-    if(isDesktop){
-      if(phonesEl) phonesEl.style.transform=`translateY(${sc*0.12}px)`;
-      if(heroCopy)  heroCopy.style.transform=`translateY(${sc*0.05}px)`;
-    }
-    if(bannerDeco){
-      const r=bannerDeco.getBoundingClientRect();
-      bannerDeco.style.transform=`translateY(${(window.innerHeight-r.top)*0.06}px) scale(1.04)`;
-    }
-    ticking=false;
-  };
-  const onScroll=()=>{ if(!ticking){ requestAnimationFrame(applyScroll); ticking=true; } };
-  document.addEventListener('scroll',onScroll,{passive:true}); applyScroll();
-
-  // спотлайт за курсором
-  const root=document.documentElement;
-  window.addEventListener('mousemove',(e)=>{
-    root.style.setProperty('--mx',e.clientX+'px');
-    root.style.setProperty('--my',e.clientY+'px');
-  });
-
-  const phones=document.querySelector('.phones');
-  if(phones && window.matchMedia('(min-width:881px)').matches){
-    const c=phones.querySelector('.center'), l=phones.querySelector('.left'), r=phones.querySelector('.right');
-    window.addEventListener('mousemove',(e)=>{
-      const x=(e.clientX/window.innerWidth-.5), y=(e.clientY/window.innerHeight-.5);
-      c.style.transform=`translate(${x*16}px,${y*12}px)`;
-      l.style.transform=`rotate(-11deg) translate(${-168+x*10}px,${y*8}px) scale(.84)`;
-      r.style.transform=`rotate(11deg) translate(${168+x*10}px,${y*8}px) scale(.84)`;
-    });
-  }
-</script>
 </body>
 </html>
