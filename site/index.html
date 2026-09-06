@@ -314,23 +314,16 @@
     position: relative;
   }
 
-  .pano-card.outer {
-    width: 250px;
-    opacity: 0.88;
-    transform: translateY(34px) scale(0.92);
-  }
-
-  .pano-card.inner {
-    width: 285px;
-    opacity: 0.96;
-    transform: translateY(18px) scale(0.96);
+  .pano-card.side {
+    width: 295px;
+    opacity: 0.94;
+    transform: translateY(20px) scale(0.95);
   }
 
   .pano-card.center {
-    width: 325px;
+    width: 340px;
     z-index: 10;
-    border-color: var(--border);
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.09);
   }
 
   .pano-card img {
@@ -742,23 +735,17 @@
       <span class="label">Скачайте Melo на телефон</span>
     </div>
 
-    <!-- FULL-BLEED ПАНОРАМА: ЧИСТЫЕ МОКАПЫ БЕЗ ОВЕРЛЕЕВ -->
+    <!-- FULL-BLEED ПАНОРАМА: 3 УНИКАЛЬНЫХ ЭКРАНА БЕЗ ПОВТОРОВ -->
     <div class="panorama-wrap">
       <div class="panorama-track" id="panoTrack">
-        <div class="pano-card outer" id="panoLeftOuter">
+        <div class="pano-card side" id="panoLeft">
           <img src="img/screen-search.png" alt="Каталоги и поиск треков" />
-        </div>
-        <div class="pano-card inner" id="panoLeftInner">
-          <img src="img/screen-home.png" alt="Персональные волны и рекомендации" />
         </div>
         <div class="pano-card center" id="panoCenter">
           <img src="img/screen-player.png" alt="Экран плеера Melo" />
         </div>
-        <div class="pano-card inner" id="panoRightInner">
-          <img src="img/screen-search.png" alt="Результаты поиска" />
-        </div>
-        <div class="pano-card outer" id="panoRightOuter">
-          <img src="img/screen-home.png" alt="Библиотека и треки" />
+        <div class="pano-card side" id="panoRight">
+          <img src="img/screen-home.png" alt="Персональные волны и рекомендации" />
         </div>
       </div>
     </div>
@@ -990,25 +977,21 @@
 <!-- ЖИВОЙ ПАРАЛЛАКС СКРОЛЛА И ИНТЕРАКТИВНЫЕ ТАБЫ -->
 <script>
   // 1. ПАРАЛЛАКС СКРОЛЛА ДЛЯ ПАНОРАМНОЙ ВИТРИНЫ
-  const leftOuter = document.getElementById('panoLeftOuter');
-  const leftInner = document.getElementById('panoLeftInner');
+  const leftCard = document.getElementById('panoLeft');
   const centerCard = document.getElementById('panoCenter');
-  const rightInner = document.getElementById('panoRightInner');
-  const rightOuter = document.getElementById('panoRightOuter');
+  const rightCard = document.getElementById('panoRight');
 
   let ticking = false;
 
   function updateParallax() {
     const scrollY = window.pageYOffset;
     if (scrollY < 1200) {
-      const offset = scrollY * 0.14;
+      const offset = scrollY * 0.12;
       const spread = scrollY * 0.08;
 
-      if (leftOuter) leftOuter.style.transform = `translateX(-${spread * 1.6}px) translateY(${34 - offset * 0.7}px) scale(0.92)`;
-      if (leftInner) leftInner.style.transform = `translateX(-${spread * 0.8}px) translateY(${18 - offset * 0.5}px) scale(0.96)`;
+      if (leftCard) leftCard.style.transform = `translateX(-${spread}px) translateY(${20 - offset * 0.5}px) scale(0.95)`;
       if (centerCard) centerCard.style.transform = `translateY(${-offset * 0.3}px) scale(1)`;
-      if (rightInner) rightInner.style.transform = `translateX(${spread * 0.8}px) translateY(${18 - offset * 0.5}px) scale(0.96)`;
-      if (rightOuter) rightOuter.style.transform = `translateX(${spread * 1.6}px) translateY(${34 - offset * 0.7}px) scale(0.92)`;
+      if (rightCard) rightCard.style.transform = `translateX(${spread}px) translateY(${20 - offset * 0.5}px) scale(0.95)`;
     }
     ticking = false;
   }
