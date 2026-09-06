@@ -4,388 +4,411 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="google-site-verification" content="PZ2vAu7iczEgNsCotxGWyLTCTGtcozVJ30HglrYFbXg" />
-<title>Melo — музыкальный плеер для Android</title>
-<meta name="description" content="Плеер для Android с музыкой из YouTube Music и SoundCloud: тексты песен с караоке, режим винила, офлайн, эквалайзер и встроенный обход ограничений." />
-<meta name="keywords" content="Melo, melo музыка, плеер андроид, скачать apk, музыка без рекламы, плеер с текстами песен, караоке" />
-
-<!-- Open Graph -->
-<meta property="og:type" content="website" />
-<meta property="og:title" content="Melo — музыкальный плеер для Android" />
-<meta property="og:description" content="YouTube Music, SoundCloud, синхронные тексты, винил и офлайн в одном приложении." />
-<meta property="og:image" content="img/banner.png" />
-
-<!-- Schema.org -->
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "Melo",
-  "operatingSystem": "Android",
-  "applicationCategory": "MultimediaApplication",
-  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "RUB" },
-  "description": "Музыкальный плеер для Android со свободным доступом к трекам, текстами песен и офлайн-режимом."
-}
-</script>
+<title>Melo — аудиоплеер для Android</title>
+<meta name="description" content="Автономный аудиоплеер для Android. Прямой стриминг YouTube Music и SoundCloud, синхронные тексты песен, офлайн и встроенный ByeDPI." />
+<meta name="keywords" content="Melo, melo музыка, аудиоплеер андроид, скачать apk, плеер без рекламы, byedpi" />
 
 <link rel="icon" href="img/icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/@phosphor-icons/web"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
 <style>
   :root {
-    --bg: #070908;
-    --card: #0f1411;
-    --card-hover: #141b17;
-    --border: rgba(255, 255, 255, 0.07);
-    --border-hover: rgba(110, 231, 183, 0.28);
-    --text: #f0f4f1;
-    --muted: #88988f;
-    --dim: #54635b;
-    --accent: #6ee7b7;
-    --accent-glow: rgba(110, 231, 183, 0.15);
-    --btn-primary: #ecfdf5;
-    --btn-primary-text: #064e3b;
-    --radius: 18px;
+    --bg: #090a0a;
+    --surface: #101211;
+    --surface-2: #161817;
+    --border: #232725;
+    --border-strong: #383e3b;
+    --text: #f2f5f3;
+    --muted: #828a85;
+    --dim: #4f5752;
+    --accent: #34d399;
   }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* Строгое правило: нулевые скругления везде */
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border-radius: 0 !important;
+  }
+
   html { scroll-behavior: smooth; }
 
   body {
-    font-family: 'Inter', system-ui, sans-serif;
-    background: var(--bg);
+    font-family: 'Inter', -apple-system, sans-serif;
+    background-color: var(--bg);
     color: var(--text);
-    line-height: 1.6;
-    overflow-x: hidden;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
 
-  h1, h2, h3, .brand {
-    font-family: 'Plus Jakarta Sans', sans-serif;
+  .mono {
+    font-family: 'JetBrains Mono', monospace;
   }
 
   a { color: inherit; text-decoration: none; }
 
-  .wrap {
-    max-width: 1120px;
+  .container {
+    max-width: 1160px;
     margin: 0 auto;
-    padding: 0 24px;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
   }
 
-  /* Навигация */
+  /* Header */
   header {
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
     position: sticky;
     top: 0;
-    z-index: 40;
-    background: rgba(7, 9, 8, 0.85);
-    backdrop-filter: blur(16px);
-    border-bottom: 1px solid var(--border);
+    z-index: 50;
   }
 
-  .nav {
+  .header-inner {
     display: flex;
-    align-items: center;
-    height: 68px;
-    gap: 28px;
+    align-items: stretch;
+    height: 60px;
   }
 
   .brand {
     display: flex;
     align-items: center;
     gap: 12px;
-    font-weight: 800;
-    font-size: 21px;
-    letter-spacing: -0.02em;
+    padding: 0 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: 0.05em;
+    border-right: 1px solid var(--border);
   }
 
   .brand img {
-    width: 32px;
-    height: 32px;
-    border-radius: 9px;
+    width: 24px;
+    height: 24px;
+    display: block;
   }
 
-  .nav-links {
+  .nav-menu {
     display: flex;
-    gap: 24px;
+    align-items: stretch;
   }
 
-  .nav-links a {
+  .nav-item {
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    font-size: 13px;
     color: var(--muted);
-    font-size: 14px;
-    font-weight: 500;
-    transition: color 0.15s;
+    border-right: 1px solid var(--border);
+    transition: background 0.1s, color 0.1s;
   }
 
-  .nav-links a:hover {
+  .nav-item:hover {
+    background: var(--surface);
     color: var(--text);
   }
 
-  .spacer { flex: 1; }
+  .header-spacer { flex: 1; }
 
-  /* Кнопки */
+  .header-cta {
+    display: flex;
+    align-items: stretch;
+  }
+
+  /* Кнопки в индустриальном стиле */
   .btn {
     display: inline-flex;
     align-items: center;
-    gap: 9px;
-    padding: 11px 20px;
-    border-radius: 999px;
-    font-size: 14.5px;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 22px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
     font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    white-space: nowrap;
-    border: 1px solid transparent;
-  }
-
-  .btn-primary {
-    background: var(--btn-primary);
-    color: var(--btn-primary-text);
-    box-shadow: 0 4px 20px rgba(236, 253, 245, 0.15);
-  }
-
-  .btn-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 28px rgba(236, 253, 245, 0.25);
-    background: #ffffff;
-  }
-
-  .btn-outline {
+    border: 1px solid var(--border);
     background: transparent;
-    border-color: var(--border);
     color: var(--text);
+    transition: all 0.12s ease;
+    white-space: nowrap;
   }
 
-  .btn-outline:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.2);
+  .btn-solid {
+    background: var(--text);
+    color: var(--bg);
+    border-color: var(--text);
+  }
+
+  .btn-solid:hover {
+    background: #ffffff;
+    color: #000000;
+  }
+
+  .btn-ghost:hover {
+    background: var(--surface);
+    border-color: var(--border-strong);
   }
 
   .btn-lg {
-    padding: 14px 26px;
-    font-size: 15.5px;
-  }
-
-  /* Hero */
-  .hero {
-    padding: 80px 0 60px;
-    text-align: center;
-  }
-
-  h1 {
-    font-size: clamp(42px, 6.5vw, 68px);
-    font-weight: 800;
-    letter-spacing: -0.035em;
-    line-height: 1.08;
-    margin-bottom: 20px;
-  }
-
-  .hero p.lead {
-    font-size: clamp(17px, 2.2vw, 20px);
-    color: var(--muted);
-    max-width: 620px;
-    margin: 0 auto 36px;
-    line-height: 1.55;
-  }
-
-  .hero-buttons {
-    display: flex;
-    justify-content: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-bottom: 18px;
-  }
-
-  .sub-note {
-    font-size: 13px;
-    color: var(--dim);
-  }
-
-  /* Витрина скриншотов */
-  .showcase {
-    position: relative;
-    max-width: 980px;
-    margin: 54px auto 0;
-    display: flex;
-    justify-content: center;
-    align-items: flex-end;
-    gap: 20px;
-    padding: 20px 0;
-  }
-
-  .phone-mockup {
-    border-radius: 28px;
-    background: #000;
-    border: 1px solid var(--border);
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
-    overflow: hidden;
-    transition: transform 0.3s ease;
-  }
-
-  .phone-mockup img {
-    display: block;
-    width: 100%;
-    height: auto;
-  }
-
-  .phone-mockup.main {
-    width: 290px;
-    z-index: 3;
-    border-color: rgba(255, 255, 255, 0.14);
-    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.8), 0 0 40px rgba(110, 231, 183, 0.08);
-  }
-
-  .phone-mockup.side {
-    width: 250px;
-    opacity: 0.82;
-    z-index: 1;
-    transform: translateY(20px);
-  }
-
-  .phone-mockup:hover {
-    transform: translateY(-4px);
-  }
-
-  .phone-mockup.side:hover {
-    transform: translateY(14px);
-  }
-
-  /* Секции */
-  section {
-    padding: 88px 0;
-  }
-
-  .section-head {
-    text-align: center;
-    max-width: 600px;
-    margin: 0 auto 48px;
-  }
-
-  .section-head h2 {
-    font-size: clamp(28px, 4vw, 40px);
-    font-weight: 800;
-    letter-spacing: -0.025em;
-    margin-bottom: 12px;
-  }
-
-  .section-head p {
-    color: var(--muted);
-    font-size: 16px;
-  }
-
-  /* Карточки возможностей */
-  .grid-features {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-  }
-
-  .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 28px;
-    transition: all 0.25s ease;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .card:hover {
-    background: var(--card-hover);
-    border-color: var(--border-hover);
-    transform: translateY(-2px);
-  }
-
-  .card-icon {
-    width: 48px;
     height: 48px;
-    border-radius: 13px;
-    background: var(--accent-glow);
-    color: var(--accent);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-    margin-bottom: 20px;
-  }
-
-  .card h3 {
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 8px;
-    letter-spacing: -0.01em;
-  }
-
-  .card p {
-    color: var(--muted);
-    font-size: 14.5px;
-    line-height: 1.55;
-  }
-
-  /* FAQ (Интерактивный аккордеон) */
-  .faq-wrap {
-    max-width: 720px;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  details {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    overflow: hidden;
-    transition: border-color 0.2s;
-  }
-
-  details[open] {
-    border-color: rgba(255, 255, 255, 0.16);
-  }
-
-  summary {
-    padding: 18px 22px;
-    font-weight: 600;
-    font-size: 15.5px;
-    cursor: pointer;
-    list-style: none;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    user-select: none;
-  }
-
-  summary::-webkit-details-marker { display: none; }
-
-  summary::after {
-    content: '+';
-    font-size: 20px;
-    color: var(--muted);
-    font-family: monospace;
-    transition: transform 0.2s;
-  }
-
-  details[open] summary::after {
-    transform: rotate(45deg);
-  }
-
-  .faq-content {
-    padding: 0 22px 20px;
-    color: var(--muted);
-    font-size: 14.5px;
-    line-height: 1.6;
-  }
-
-  /* Подвал */
-  footer {
-    border-top: 1px solid var(--border);
-    padding: 48px 0 40px;
-    color: var(--muted);
+    padding: 0 24px;
     font-size: 13.5px;
   }
 
-  .footer-inner {
+  /* Hero Section */
+  .hero-section {
+    padding: 64px 32px 48px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: block;
+  }
+
+  h1 {
+    font-size: clamp(36px, 5.5vw, 64px);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+  }
+
+  .hero-desc {
+    font-size: 18px;
+    color: var(--muted);
+    max-width: 680px;
+    line-height: 1.6;
+    margin-bottom: 32px;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  /* Карусель (Интерактивная витрина) */
+  .carousel-section {
+    border-bottom: 1px solid var(--border);
+    padding: 40px 32px;
+    background: var(--surface);
+  }
+
+  .carousel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 16px;
+  }
+
+  .carousel-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .carousel-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .carousel-btn {
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.1s, border-color 0.1s;
+  }
+
+  .carousel-btn:hover {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+  }
+
+  .carousel-counter {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--muted);
+    padding: 0 12px;
+  }
+
+  .carousel-track {
+    display: flex;
+    gap: 20px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    padding-bottom: 10px;
+  }
+
+  .carousel-track::-webkit-scrollbar { display: none; }
+
+  .carousel-card {
+    flex: 0 0 calc(33.333% - 14px);
+    min-width: 290px;
+    scroll-snap-align: start;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .card-topbar {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    background: var(--surface);
+  }
+
+  .carousel-card img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .card-info {
+    padding: 16px;
+  }
+
+  .card-info h3 {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: -0.01em;
+  }
+
+  .card-info p {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+
+  /* Сетка архитектуры (Спецификации и возможности) */
+  .grid-section {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .grid-header {
+    padding: 24px 32px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .spec-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .spec-cell {
+    padding: 32px;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    transition: background 0.12s;
+  }
+
+  .spec-cell:nth-child(3n) {
+    border-right: none;
+  }
+
+  .spec-cell:hover {
+    background: var(--surface);
+  }
+
+  .cell-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  .spec-cell h3 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    letter-spacing: -0.01em;
+  }
+
+  .spec-cell p {
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  /* Технический FAQ */
+  .faq-section {
+    padding: 48px 32px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .faq-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+  }
+
+  .faq-box {
+    background: var(--bg);
+    padding: 28px;
+  }
+
+  .faq-box h4 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: var(--text);
+  }
+
+  .faq-box p {
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* Footer */
+  footer {
+    padding: 40px 32px;
+    background: var(--bg);
+  }
+
+  .footer-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -396,8 +419,13 @@
 
   .footer-links {
     display: flex;
-    gap: 22px;
-    flex-wrap: wrap;
+    gap: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+
+  .footer-links a {
+    color: var(--muted);
   }
 
   .footer-links a:hover {
@@ -405,255 +433,255 @@
   }
 
   .footer-legal {
-    color: var(--dim);
     font-size: 12px;
-    line-height: 1.55;
-    max-width: 820px;
+    color: var(--dim);
+    line-height: 1.6;
+    max-width: 780px;
   }
 
-  /* Мобильная плашка */
-  .mobile-bar {
-    display: none;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 50;
-    background: rgba(7, 9, 8, 0.94);
-    backdrop-filter: blur(14px);
-    border-top: 1px solid var(--border);
-    padding: 12px 20px;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .mobile-bar-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .mobile-bar-info img {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-  }
-
-  .mobile-bar-info span {
-    font-weight: 700;
-    font-size: 15px;
-  }
-
+  /* Адаптив */
   @media (max-width: 860px) {
-    .showcase {
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
-    }
-    .phone-mockup.side {
-      display: none;
-    }
-    .phone-mockup.main {
-      width: 270px;
-    }
-    .grid-features {
-      grid-template-columns: 1fr;
-    }
-    .nav-links {
-      display: none;
-    }
-    .mobile-bar {
-      display: flex;
-    }
-    body {
-      padding-bottom: 64px;
-    }
+    .nav-menu { display: none; }
+    .spec-grid { grid-template-columns: 1fr; }
+    .spec-cell { border-right: none; }
+    .faq-grid { grid-template-columns: 1fr; }
+    .carousel-card { flex: 0 0 85%; }
+    .hero-section, .carousel-section, .faq-section, footer { padding-left: 20px; padding-right: 20px; }
   }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="wrap nav">
-    <a href="#" class="brand">
-      <img src="img/icon.png" alt="Melo" />
-      <span>Melo</span>
-    </a>
-    <nav class="nav-links" aria-label="Разделы">
-      <a href="#features">Возможности</a>
-      <a href="#faq">FAQ</a>
-      <a href="privacy/">Конфиденциальность</a>
-    </nav>
-    <span class="spacer"></span>
-    <a class="btn btn-outline" href="https://github.com/Bebrazui/Melo" target="_blank" rel="noopener">
-      <i class="ph ph-github-logo"></i> GitHub
-    </a>
-    <a class="btn btn-primary" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download>
-      <i class="ph ph-download-simple"></i> Скачать APK
-    </a>
-  </div>
-</header>
+<div class="container">
 
-<main class="wrap">
+  <!-- HEADER -->
+  <header>
+    <div class="header-inner">
+      <a href="#" class="brand">
+        <img src="img/icon.png" alt="Melo" />
+        <span>MELO</span>
+      </a>
+      <nav class="nav-menu">
+        <a href="#features" class="nav-item">АРХИТЕКТУРА</a>
+        <a href="#showcase" class="nav-item">ИНТЕРФЕЙС</a>
+        <a href="#faq" class="nav-item">FAQ</a>
+        <a href="privacy/" class="nav-item">КОНФИДЕНЦИАЛЬНОСТЬ</a>
+      </nav>
+      <div class="header-spacer"></div>
+      <div class="header-cta">
+        <a class="btn btn-ghost" href="https://github.com/Bebrazui/Melo" target="_blank" rel="noopener" style="border-top:none;border-bottom:none;">
+          GITHUB
+        </a>
+        <a class="btn btn-solid" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download style="border-top:none;border-bottom:none;">
+          СКАЧАТЬ APK
+        </a>
+      </div>
+    </div>
+  </header>
 
   <!-- HERO -->
-  <section class="hero">
-    <h1>Слушай музыку свободно.</h1>
-    <p class="lead">
-      Стриминг из YouTube Music и SoundCloud, синхронные тексты с караоке, офлайн-режим и вращающийся винил в одном плеере для Android.
+  <section class="hero-section">
+    <span class="section-tag mono">// ANDROID AUDIO ENGINE</span>
+    <h1>Музыка без сторонних серверов.</h1>
+    <p class="hero-desc">
+      Нативный плеер со встроенным разрешением аудиопотоков из YouTube Music и SoundCloud, синхронными текстами, режимом винила, офлайн-хранилищем и нативным ByeDPI.
     </p>
 
-    <div class="hero-buttons">
-      <a class="btn btn-primary btn-lg" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download>
-        <i class="ph ph-download-simple"></i> Скачать APK
+    <div class="hero-actions">
+      <a class="btn btn-solid btn-lg" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download>
+        СКАЧАТЬ APK (v0.3)
       </a>
-      <a class="btn btn-outline btn-lg" href="https://www.rustore.ru" target="_blank" rel="noopener">
-        <i class="ph ph-shopping-bag"></i> RuStore
+      <a class="btn btn-ghost btn-lg" href="https://www.rustore.ru" target="_blank" rel="noopener">
+        RUSTORE
       </a>
-      <a class="btn btn-outline btn-lg" href="https://4pda.to" target="_blank" rel="noopener">
-        <i class="ph ph-chat-circle-text"></i> 4PDA
+      <a class="btn btn-ghost btn-lg" href="https://4pda.to" target="_blank" rel="noopener">
+        4PDA
+      </a>
+      <a class="btn btn-ghost btn-lg" href="https://github.com/Bebrazui/Melo-Releases/releases" target="_blank" rel="noopener">
+        ВСЕ РЕЛИЗЫ
       </a>
     </div>
+  </section>
 
-    <div class="sub-note">Android 8.0 и выше · Без рекламы</div>
+  <!-- КАРУСЕЛЬ СКРИНШОТОВ -->
+  <section class="carousel-section" id="showcase">
+    <div class="carousel-header">
+      <div>
+        <span class="section-tag mono">// ИНТЕРФЕЙС ПРИЛОЖЕНИЯ</span>
+        <div class="carousel-title">Экраны системы</div>
+      </div>
+      <div class="carousel-controls">
+        <button class="carousel-btn" id="prevBtn" aria-label="Предыдущий слайд">&larr;</button>
+        <div class="carousel-counter mono" id="slideIndicator">01 / 03</div>
+        <button class="carousel-btn" id="nextBtn" aria-label="Следующий слайд">&rarr;</button>
+      </div>
+    </div>
 
-    <!-- Мокапы плеера -->
-    <div class="showcase">
-      <div class="phone-mockup side">
-        <img src="img/screen-search.png" alt="Поиск музыки в Melo" />
+    <div class="carousel-track" id="carouselTrack">
+      <!-- Слайд 1 -->
+      <div class="carousel-card">
+        <div class="card-topbar">
+          <span>01 // PLAYER</span>
+          <span>EXOPLAYER MEDIA3</span>
+        </div>
+        <img src="img/screen-player.png" alt="Экран воспроизведения Melo: обложка, винил, управление" />
+        <div class="card-info">
+          <h3>Воспроизведение и винил</h3>
+          <p>Вращающаяся пластинка с физикой бликов, 3D-гироскопом, 10-полосным эквалайзером и режимом караоке.</p>
+        </div>
       </div>
-      <div class="phone-mockup main">
-        <img src="img/screen-player.png" alt="Экран плеера Melo с обложкой и текстом" />
+
+      <!-- Слайд 2 -->
+      <div class="carousel-card">
+        <div class="card-topbar">
+          <span>02 // SEARCH</span>
+          <span>ON-DEVICE RESOLVER</span>
+        </div>
+        <img src="img/screen-search.png" alt="Поиск треков и исполнителей в Melo" />
+        <div class="card-info">
+          <h3>Каталоги и поиск</h3>
+          <p>Прямой доступ к библиотекам YouTube Music и SoundCloud без создания учетных записей и подписок.</p>
+        </div>
       </div>
-      <div class="phone-mockup side">
-        <img src="img/screen-home.png" alt="Главный экран и персональная волна треков" />
+
+      <!-- Слайд 3 -->
+      <div class="carousel-card">
+        <div class="card-topbar">
+          <span>03 // LIBRARY</span>
+          <span>TASTE PROFILE</span>
+        </div>
+        <img src="img/screen-home.png" alt="Главный экран: персональные полки и волна Sea" />
+        <div class="card-info">
+          <h3>Персональная волна</h3>
+          <p>Бесконечный поток рекомендаций на основе локального анализа истории и фильтрации пропущенных треков.</p>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- ВОЗМОЖНОСТИ -->
-  <section id="features">
-    <div class="section-head">
-      <h2>Всё для музыки</h2>
-      <p>Ничего лишнего — только чистый звук, живой интерфейс и свобода выбора.</p>
+  <!-- АРХИТЕКТУРА И ВОЗМОЖНОСТИ -->
+  <section class="grid-section" id="features">
+    <div class="grid-header">
+      // СИСТЕМНАЯ АРХИТЕКТУРА И МОДУЛИ
     </div>
 
-    <div class="grid-features">
-      <div class="card">
-        <div class="card-icon"><i class="ph ph-disc"></i></div>
-        <h3>Режим винила</h3>
-        <p>Анимированная виниловая пластинка со световыми бликами, физикой вращения и 3D-параллаксом по гироскопу.</p>
+    <div class="spec-grid">
+      <div class="spec-cell">
+        <div class="cell-num">01 / STREAMS</div>
+        <h3>Прямое извлечение</h3>
+        <p>Парсинг аудиопотоков непосредственно на устройстве через NewPipe Extractor и yt-dlp без центральных серверов.</p>
       </div>
 
-      <div class="card">
-        <div class="card-icon"><i class="ph ph-microphone-stage"></i></div>
-        <h3>Тексты и караоке</h3>
-        <p>Синхронизированные LRC-тексты песен с плавной пословной подсветкой в такт вокалу.</p>
-      </div>
-
-      <div class="card">
-        <div class="card-icon"><i class="ph ph-broadcast"></i></div>
-        <h3>Любые треки</h3>
-        <p>Поиск и воспроизведение из YouTube Music и SoundCloud прямо на устройстве без ограничений каталога.</p>
-      </div>
-
-      <div class="card">
-        <div class="card-icon"><i class="ph ph-shield-check"></i></div>
+      <div class="spec-cell">
+        <div class="cell-num">02 / PROXY</div>
         <h3>Встроенный ByeDPI</h3>
-        <p>Встроенный C-прокси обходит замедления и блокировки на уровне пакетов. Никаких внешних VPN не требуется.</p>
+        <p>Нативный C-демон SOCKS5 с фрагментацией TCP/TLS-пакетов. Музыка воспроизводится без внешних VPN-сервисов.</p>
       </div>
 
-      <div class="card">
-        <div class="card-icon"><i class="ph ph-cloud-arrow-down"></i></div>
-        <h3>Офлайн-режим</h3>
-        <p>Скачивание треков и плейлистов в память устройства для прослушивания без подключения к сети.</p>
+      <div class="spec-cell">
+        <div class="cell-num">03 / LYRICS</div>
+        <h3>Синхронный текст LRC</h3>
+        <p>Парсинг таймкодов и пословная подсветка текста песни в такт звучанию с возможностью перемотки по строчкам.</p>
       </div>
 
-      <div class="card">
-        <div class="card-icon"><i class="ph ph-sliders"></i></div>
-        <h3>Slowed &amp; Sped up</h3>
-        <p>10-полосный эквалайзер, регулировка темпа и высоты тона, а также фильтрация вокала.</p>
+      <div class="spec-cell">
+        <div class="cell-num">04 / AUDIO DSP</div>
+        <h3>Эквалайзер и Pitch</h3>
+        <p>10-полосный эквалайзер, фильтрация вокала для караоке, а также замедление и ускорение (Slowed / Sped up) с сохранением тона.</p>
+      </div>
+
+      <div class="spec-cell">
+        <div class="cell-num">05 / STORAGE</div>
+        <h3>Офлайн-хранилище</h3>
+        <p>Фоновая загрузка треков в память устройства. Скачанные композиции воспроизводятся полностью автономно.</p>
+      </div>
+
+      <div class="spec-cell">
+        <div class="cell-num">06 / PRIVACY</div>
+        <h3>Локальная база данных</h3>
+        <p>Вся библиотека, лайки и история хранятся локально на телефоне. Сбор персональных данных и телеметрия отсутствуют.</p>
       </div>
     </div>
   </section>
 
-  <!-- FAQ -->
-  <section id="faq">
-    <div class="section-head">
-      <h2>Вопросы и ответы</h2>
-    </div>
+  <!-- ТЕХНИЧЕСКИЙ FAQ -->
+  <section class="faq-section" id="faq">
+    <span class="section-tag mono">// ДОКУМЕНТАЦИЯ И ВОПРОСЫ</span>
+    <div class="faq-grid">
+      <div class="faq-box">
+        <h4>01 / ОТКУДА ИДУТ АУДИОПОТОКИ?</h4>
+        <p>Приложение не имеет собственных медиасерверов. Потоки запрашиваются локально на телефоне из открытых каталогов YouTube Music и SoundCloud.</p>
+      </div>
 
-    <div class="faq-wrap">
-      <details>
-        <summary>Откуда берутся треки?</summary>
-        <div class="faq-content">
-          Melo напрямую на устройстве находит и воспроизводит аудиопотоки из открытых каталогов YouTube Music и SoundCloud.
-        </div>
-      </details>
+      <div class="faq-box">
+        <h4>02 / КАК РАБОТАЕТ ВСТРОЕННЫЙ BYEDPI?</h4>
+        <p>В бинарник приложения встроен скомпилированный C-демон ByeDPI. Он поднимает локальный SOCKS5-прокси и модифицирует структуру сетевых пакетов на лету, нейтрализуя замедление YouTube.</p>
+      </div>
 
-      <details>
-        <summary>Как установить приложение?</summary>
-        <div class="faq-content">
-          Скачайте APK-файл и откройте его на телефоне. Если система спросит разрешение на установку из неизвестных источников — подтвердите его.
-        </div>
-      </details>
+      <div class="faq-box">
+        <h4>03 / ТРЕБОВАНИЯ К УСТРОЙСТВУ</h4>
+        <p>Операционная система Android 8.0 (Oreo) или выше. 64-разрядный процессор (архитектура ARM64-v8a).</p>
+      </div>
 
-      <details>
-        <summary>Работает ли в фоновом режиме?</summary>
-        <div class="faq-content">
-          Да. Плеер полностью поддерживает фоновое воспроизведение, работу при заблокированном экране, управление с наушников и шторки уведомлений.
-        </div>
-      </details>
-
-      <details>
-        <summary>Почему приложение работает без VPN?</summary>
-        <div class="faq-content">
-          В Melo встроен нативный C-движок ByeDPI. Он фрагментирует сетевые пакеты на лету, что позволяет обходить замедление YouTube без сторонних сервисов.
-        </div>
-      </details>
-
-      <details>
-        <summary>Сохраняются ли личные данные?</summary>
-        <div class="faq-content">
-          История, лайки и плейлисты хранятся исключительно на вашем устройстве. В приложении нет сбора аналитики и рекламы.
-        </div>
-      </details>
+      <div class="faq-box">
+        <h4>04 / ПОЧЕМУ НЕТ В GOOGLE PLAY?</h4>
+        <p>Политика Google Developer прямо запрещает публикацию приложений, обеспечивающих фоновое воспроизведение контента YouTube без официальной подписки YouTube Premium.</p>
+      </div>
     </div>
   </section>
 
-</main>
-
-<!-- Фиксированная панель на мобильных -->
-<div class="mobile-bar">
-  <div class="mobile-bar-info">
-    <img src="img/icon.png" alt="Melo" />
-    <span>Melo</span>
-  </div>
-  <a class="btn btn-primary" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download>
-    <i class="ph ph-download-simple"></i> Скачать
-  </a>
-</div>
-
-<footer>
-  <div class="wrap">
-    <div class="footer-inner">
-      <div class="brand">
-        <img src="img/icon.png" alt="Melo" />
-        <span>Melo</span>
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-row">
+      <div class="mono" style="font-weight: 700; font-size: 14px;">
+        MELO // OPEN SOURCE AUDIO
       </div>
       <div class="footer-links">
-        <a href="#features">Возможности</a>
+        <a href="#features">МОДУЛИ</a>
+        <a href="#showcase">ИНТЕРФЕЙС</a>
         <a href="#faq">FAQ</a>
-        <a href="privacy/">Конфиденциальность</a>
-        <a href="https://github.com/Bebrazui/Melo" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://github.com/Bebrazui/Melo-Releases/releases" target="_blank" rel="noopener">Релизы</a>
+        <a href="privacy/">КОНФИДЕНЦИАЛЬНОСТЬ</a>
+        <a href="https://github.com/Bebrazui/Melo" target="_blank" rel="noopener">GITHUB</a>
+        <a href="https://github.com/Bebrazui/Melo-Releases/releases" target="_blank" rel="noopener">РЕЛИЗЫ</a>
       </div>
     </div>
-    <p class="footer-legal">
-      Melo — аудиоплеер с открытым исходным кодом. Приложение не распространяет и не хранит аудиофайлы на серверах. Воспроизведение происходит из открытых сетевых источников через прямое соединение устройства.
+    <p class="footer-legal mono">
+      Melo распространяется под лицензией GNU AGPL-3.0. Приложение не хранит медиафайлы и осуществляет маршрутизацию публичных потоков через прямое сетевое соединение клиента.
     </p>
-  </div>
-</footer>
+  </footer>
+
+</div>
+
+<!-- Скрипт интерактивной карусели -->
+<script>
+  const track = document.getElementById('carouselTrack');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const indicator = document.getElementById('slideIndicator');
+  const cards = document.querySelectorAll('.carousel-card');
+  const total = cards.length;
+
+  function updateIndicator() {
+    const cardWidth = cards[0].offsetWidth + 20;
+    const index = Math.round(track.scrollLeft / cardWidth);
+    const current = Math.min(Math.max(index + 1, 1), total);
+    indicator.textContent = `0${current} / 0${total}`;
+  }
+
+  prevBtn.addEventListener('click', () => {
+    const cardWidth = cards[0].offsetWidth + 20;
+    track.scrollBy({ left: -cardWidth, behavior: 'smooth' });
+  });
+
+  nextBtn.addEventListener('click', () => {
+    const cardWidth = cards[0].offsetWidth + 20;
+    track.scrollBy({ left: cardWidth, behavior: 'smooth' });
+  });
+
+  track.addEventListener('scroll', () => {
+    requestAnimationFrame(updateIndicator);
+  });
+</script>
 
 </body>
 </html>
