@@ -237,10 +237,10 @@
     top: 50px;
     z-index: 15;
     background: #ffffff;
-    border: 1px solid var(--border);
+    border: none;
     border-radius: 24px;
     padding: 16px 18px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -308,7 +308,7 @@
   .pano-card {
     border-radius: 36px;
     background: #ffffff;
-    border: 1px solid var(--border);
+    border: none;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.06);
     overflow: hidden;
     position: relative;
@@ -394,14 +394,14 @@
 
   .m3-card {
     border-radius: var(--radius-card);
-    padding: 44px 44px 32px;
+    padding: 44px 44px 36px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     min-height: 460px;
     position: relative;
     overflow: hidden;
-    border: 1px solid rgba(0, 0, 0, 0.04);
+    border: none;
   }
 
   .card-green { background-color: var(--card-green); }
@@ -445,11 +445,10 @@
 
   .card-footer-link:hover { text-decoration: underline; }
 
-  /* ВИЗУАЛ ВНУТРИ КАРТОЧЕК */
+  /* ВИЗУАЛ ВНУТРИ КАРТОЧЕК (ЧИСТЫЙ СПЕЙСИНГ БЕЗ ОБВОДОК) */
   .card-visual-bottom {
-    margin-top: 32px;
-    padding-top: 20px;
-    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    margin-top: 36px;
+    border-top: none;
   }
 
   /* Визуал 1: Стриминг треков */
@@ -500,17 +499,18 @@
     gap: 6px;
     background: #ffffff;
     border-radius: var(--radius-pill);
-    padding: 5px 12px;
+    padding: 6px 14px;
     font-size: 12.5px;
     font-weight: 600;
     color: var(--text-sub);
-    border: 1px solid var(--border);
+    border: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   }
 
   .wave-chip.active {
     background: #f3e8fd;
     color: #7b1fa2;
-    border-color: rgba(123, 31, 162, 0.25);
+    border: none;
   }
 
   .wave-now-playing {
