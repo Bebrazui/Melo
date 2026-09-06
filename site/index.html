@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="google-site-verification" content="PZ2vAu7iczEgNsCotxGWyLTCTGtcozVJ30HglrYFbXg" />
 <title>Melo — Вся музыка в одном плеере для Android</title>
-<meta name="description" content="Нативный аудиоплеер для Android: стриминг из YouTube Music и SoundCloud, синхронный текст с караоке, режим винила, офлайн и встроенный ByeDPI." />
-<meta name="keywords" content="Melo, melo музыка, скачать melo, плеер андроид, караоке, винил плеер, byedpi" />
+<meta name="description" content="Нативный аудиоплеер для Android: стриминг из YouTube Music и SoundCloud, бесконечная волна рекомендаций, тексты песен, офлайн и встроенный ByeDPI." />
+<meta name="keywords" content="Melo, melo музыка, скачать melo, плеер андроид, караоке, byedpi, rustore melo, 4pda melo" />
 
 <link rel="icon" href="img/icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -74,12 +74,12 @@
 
   a { color: inherit; text-decoration: none; }
 
-  /* ХЕДЕР: НА ВСЮ ШИРИНУ БЕЗ ПУСТЫХ КРАЕВ */
+  /* ХЕДЕР: НА ВСЮ ШИРИНУ */
   header {
     position: sticky;
     top: 0;
     z-index: 60;
-    background: rgba(255, 255, 255, 0.94);
+    background: rgba(255, 255, 255, 0.96);
     backdrop-filter: blur(14px);
     border-bottom: 1px solid var(--border);
     width: 100%;
@@ -127,7 +127,7 @@
 
   .spacer { flex: 1; }
 
-  /* Кнопки */
+  /* КНОПКИ: БЕЗ СВЕЧЕНИЯ И БЕЗ СКАЧКОВ */
   .btn {
     display: inline-flex;
     align-items: center;
@@ -138,7 +138,7 @@
     font-size: 14.5px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
     white-space: nowrap;
     border: 1px solid transparent;
   }
@@ -146,24 +146,25 @@
   .btn-primary {
     background: var(--primary);
     color: #ffffff;
-    box-shadow: 0 2px 6px rgba(0, 135, 90, 0.2);
+    box-shadow: none;
   }
 
   .btn-primary:hover {
     background: var(--primary-hover);
-    box-shadow: 0 6px 16px rgba(0, 135, 90, 0.3);
-    transform: translateY(-1px);
+    box-shadow: none;
+    transform: none;
   }
 
   .btn-outline {
-    border-color: var(--border);
+    border: 1px solid var(--border);
     color: var(--text);
     background: #ffffff;
   }
 
   .btn-outline:hover {
-    background: #f8f9fa;
+    background: #f5f7f5;
     border-color: #c4c7c5;
+    transform: none;
   }
 
   .btn-lg {
@@ -230,7 +231,7 @@
     color: var(--text-dim);
   }
 
-  /* БОКОВЫЕ ПЛАВАЮЩИЕ ВИДЖЕТЫ (ЗАПОЛНЯЮТ КРАЯ В HERO) */
+  /* БОКОВЫЕ КАРТОЧКИ: БЕЗ УВЕЛИЧЕНИЙ ПРИ НАВЕДЕНИИ */
   .hero-side-card {
     position: absolute;
     top: 50px;
@@ -239,16 +240,11 @@
     border: 1px solid var(--border);
     border-radius: 24px;
     padding: 16px 18px;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 8px;
-    transition: transform 0.25s ease;
-  }
-
-  .hero-side-card:hover {
-    transform: translateY(-3px);
   }
 
   .hero-side-card.left {
@@ -287,7 +283,7 @@
     margin-top: 4px;
   }
 
-  /* FULL-BLEED ПАНОРАМА С ПАРАЛЛАКСОМ */
+  /* FULL-BLEED ПАНОРАМА */
   .panorama-wrap {
     width: 100vw;
     margin-left: calc(50% - 50vw);
@@ -313,10 +309,9 @@
     border-radius: 36px;
     background: #ffffff;
     border: 1px solid var(--border);
-    box-shadow: 0 26px 60px rgba(0, 0, 0, 0.07);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.06);
     overflow: hidden;
     position: relative;
-    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .pano-card.outer {
@@ -334,76 +329,14 @@
   .pano-card.center {
     width: 325px;
     z-index: 10;
-    border-color: rgba(0, 135, 90, 0.28);
-    box-shadow: 0 34px 80px rgba(0, 0, 0, 0.12), 0 0 40px rgba(0, 135, 90, 0.1);
+    border-color: var(--border);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.08);
   }
 
   .pano-card img {
     width: 100%;
     height: auto;
     display: block;
-  }
-
-  /* ИНТЕРАКТИВНЫЙ ВИНИЛ */
-  .vinyl-interactive-layer {
-    position: absolute;
-    bottom: 22px;
-    left: 18px;
-    right: 18px;
-    background: rgba(23, 25, 24, 0.9);
-    backdrop-filter: blur(14px);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 20px;
-    padding: 12px 16px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: #ffffff;
-    z-index: 20;
-    cursor: pointer;
-  }
-
-  .vinyl-disc {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #444 10%, #111 40%, #000 70%);
-    border: 1px solid #555;
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .vinyl-disc.spinning {
-    animation: spin 3.5s linear infinite;
-  }
-
-  .vinyl-disc::before {
-    content: "";
-    width: 13px;
-    height: 13px;
-    background: var(--primary);
-    border-radius: 50%;
-    border: 2px solid #fff;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .vinyl-meta { flex: 1; overflow: hidden; }
-  .vinyl-title { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .vinyl-hint { font-size: 11.5px; color: rgba(255, 255, 255, 0.7); }
-  .play-bubble {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: #ffffff;
-    color: #000000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
   }
 
   /* ПАНЕЛЬ ВКЛАДОК */
@@ -439,14 +372,14 @@
     background: #f0f4f2;
     border: 1px solid transparent;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease;
     white-space: nowrap;
   }
 
   .pill-tab:hover { background: #e3eae6; color: var(--text); }
   .pill-tab.active { background: var(--text); color: #ffffff; }
 
-  /* КАРТОЧКИ MATERIAL 3 С ЗАПОЛНЕННЫМ НИЗОМ (КАК В CHROME) */
+  /* КАРТОЧКИ: БЕЗ УВЕЛИЧЕНИЯ И ПРЫЖКОВ */
   .features-container {
     max-width: 1400px;
     margin: 0 auto;
@@ -465,16 +398,10 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    min-height: 480px;
+    min-height: 460px;
     position: relative;
     overflow: hidden;
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
     border: 1px solid rgba(0, 0, 0, 0.04);
-  }
-
-  .m3-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.06);
   }
 
   .card-green { background-color: var(--card-green); }
@@ -518,7 +445,7 @@
 
   .card-footer-link:hover { text-decoration: underline; }
 
-  /* ВИЗУАЛ ВНУТРИ КАРТОЧЕК (УБИРАЕТ ПУСТОТУ ВНИЗУ БЛОКОВ) */
+  /* ВИЗУАЛ ВНУТРИ КАРТОЧЕК */
   .card-visual-bottom {
     margin-top: 32px;
     padding-top: 20px;
@@ -533,7 +460,7 @@
     display: flex;
     align-items: center;
     gap: 14px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
     margin-bottom: 8px;
   }
 
@@ -545,53 +472,54 @@
     align-items: center;
     justify-content: center;
     background: #ffffff;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
   }
 
   .mock-track-title { font-size: 14px; font-weight: 700; color: var(--text); }
   .mock-track-sub { font-size: 12px; color: var(--text-dim); }
 
-  /* Визуал 2: Винил и караоке */
-  .karaoke-visual {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-  }
-
-  .lrc-bubble {
+  /* Визуал 2: Волна Sea (Рекомендации вместо микрофичи винила) */
+  .wave-visual-box {
     background: rgba(255, 255, 255, 0.88);
-    border-radius: 18px;
-    padding: 14px 18px;
-    font-size: 14px;
-    font-weight: 600;
-    flex: 1;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+    border-radius: 20px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
   }
 
-  .lrc-active { color: #8e24aa; }
-  .lrc-dim { color: #9e9e9e; }
+  .wave-chip-list {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
 
-  .vinyl-stamp {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #333 10%, #111 50%, #000 70%);
-    border: 3px solid #ffffff;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  .wave-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #ffffff;
+    border-radius: var(--radius-pill);
+    padding: 5px 12px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-sub);
+    border: 1px solid var(--border);
+  }
+
+  .wave-chip.active {
+    background: #f3e8fd;
+    color: #7b1fa2;
+    border-color: rgba(123, 31, 162, 0.25);
+  }
+
+  .wave-now-playing {
     display: flex;
     align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .vinyl-stamp::after {
-    content: "";
-    width: 20px;
-    height: 20px;
-    background: #ba68c8;
-    border-radius: 50%;
-    border: 2px solid #fff;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--text-sub);
+    font-weight: 500;
   }
 
   /* Визуал 3: ByeDPI Network */
@@ -602,7 +530,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
   }
 
   .net-status-left {
@@ -616,7 +544,6 @@
     height: 10px;
     border-radius: 50%;
     background: #137333;
-    box-shadow: 0 0 8px #137333;
   }
 
   .net-title { font-size: 13.5px; font-weight: 700; color: var(--text); }
@@ -630,7 +557,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
   }
 
   /* FAQ */
@@ -731,7 +658,7 @@
 </head>
 <body>
 
-<!-- ХЕДЕР: ПОЛНАЯ ШИРИНА БЕЗ ПУСТЫХ ПОЛЕЙ -->
+<!-- ХЕДЕР -->
 <header>
   <div class="nav-full">
     <a href="#" class="brand">
@@ -740,8 +667,8 @@
     </a>
     <nav class="nav-links" aria-label="Разделы">
       <a href="#features">Возможности</a>
-      <a href="https://4pda.to" target="_blank" rel="noopener">4PDA</a>
-      <a href="https://www.rustore.ru" target="_blank" rel="noopener">RuStore</a>
+      <a href="https://4pda.to/forum/index.php?showtopic=1125767#entry144868704" target="_blank" rel="noopener">4PDA</a>
+      <a href="https://www.rustore.ru/catalog/app/com.melo.music" target="_blank" rel="noopener">RuStore</a>
       <a href="https://github.com/Bebrazui/Melo" target="_blank" rel="noopener">GitHub</a>
       <a href="#faq">FAQ</a>
     </nav>
@@ -757,9 +684,9 @@
 
 <main>
 
-  <!-- HERO: СБАЛАНСИРОВАННЫЕ КРАЯ -->
+  <!-- HERO -->
   <section class="hero">
-    <!-- Левая информационная карточка (заполняет пустой левый край) -->
+    <!-- Левая информационная карточка -->
     <div class="hero-side-card left">
       <div style="display: flex; align-items: center; gap: 6px; color: var(--primary);">
         <span class="material-symbols-rounded" style="font-size: 20px;">verified</span>
@@ -789,17 +716,17 @@
       <h1>Вся музыка.<br>Без ограничений и подписок.</h1>
 
       <p class="lead">
-        Плеер со встроенным доступом к YouTube Music и SoundCloud, вращающимся винилом, пословным караоке, офлайн-режимом и встроенным обходом блокировок.
+        Плеер со свободным доступом к трекам YouTube Music и SoundCloud, умной волной рекомендаций, текстами песен, офлайн-режимом и встроенным обходом блокировок.
       </p>
 
       <div class="hero-cta">
         <a class="btn btn-primary btn-lg" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download>
           <span class="material-symbols-rounded">download</span> Скачать Melo для Android
         </a>
-        <a class="btn btn-outline btn-lg" href="https://www.rustore.ru" target="_blank" rel="noopener">
+        <a class="btn btn-outline btn-lg" href="https://www.rustore.ru/catalog/app/com.melo.music" target="_blank" rel="noopener">
           <span class="material-symbols-rounded">shopping_bag</span> RuStore
         </a>
-        <a class="btn btn-outline btn-lg" href="https://4pda.to" target="_blank" rel="noopener">
+        <a class="btn btn-outline btn-lg" href="https://4pda.to/forum/index.php?showtopic=1125767#entry144868704" target="_blank" rel="noopener">
           <span class="material-symbols-rounded">forum</span> 4PDA
         </a>
       </div>
@@ -809,13 +736,13 @@
       </div>
     </div>
 
-    <!-- Правая карточка с QR-кодом (заполняет правый край) -->
+    <!-- Правая карточка с QR-кодом -->
     <div class="hero-side-card right">
       <img src="https://api.qrserver.com/v1/create-qr-code/?size=104x104&data=https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" alt="QR-код" />
       <span class="label">Скачайте Melo на телефон</span>
     </div>
 
-    <!-- КРАЯ В КРАЙ: ПАНОРАМНАЯ ВИТРИНА С ПАРАЛЛАКСОМ -->
+    <!-- FULL-BLEED ПАНОРАМА: ЧИСТЫЕ МОКАПЫ БЕЗ ОВЕРЛЕЕВ -->
     <div class="panorama-wrap">
       <div class="panorama-track" id="panoTrack">
         <div class="pano-card outer" id="panoLeftOuter">
@@ -826,18 +753,6 @@
         </div>
         <div class="pano-card center" id="panoCenter">
           <img src="img/screen-player.png" alt="Экран плеера Melo" />
-
-          <!-- Интерактивный винил прямо на макете -->
-          <div class="vinyl-interactive-layer" id="vinylToggle" title="Нажмите, чтобы включить/остановить винил">
-            <div class="vinyl-disc" id="vinylDisc"></div>
-            <div class="vinyl-meta">
-              <div class="vinyl-title">Режим винила 3D</div>
-              <div class="vinyl-hint" id="vinylHint">Нажмите, чтобы запустить пластинку</div>
-            </div>
-            <div class="play-bubble" id="playBtn">
-              <span class="material-symbols-rounded" id="playIcon" style="font-size: 20px;">play_arrow</span>
-            </div>
-          </div>
         </div>
         <div class="pano-card inner" id="panoRightInner">
           <img src="img/screen-search.png" alt="Результаты поиска" />
@@ -854,7 +769,7 @@
     <div class="category-nav">
       <button class="pill-tab active" data-target="all">Все разделы</button>
       <button class="pill-tab" data-target="card-streams">Каталог</button>
-      <button class="pill-tab" data-target="card-vinyl">Винил и тексты</button>
+      <button class="pill-tab" data-target="card-wave">Волна Sea</button>
       <button class="pill-tab" data-target="card-byedpi">Обход ByeDPI</button>
       <button class="pill-tab" data-target="card-offline">Офлайн</button>
       <a class="btn btn-primary" style="padding: 8px 18px; font-size: 13.5px;" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download>
@@ -863,7 +778,7 @@
     </div>
   </div>
 
-  <!-- КАРТОЧКИ: БОГАТЫЙ ВИЗУАЛ СНИЗУ БЕЗ ПУСТОТЫ -->
+  <!-- КАРТОЧКИ: ОСНОВНЫЕ ФИЧИ (БЕЗ АКЦЕНТА НА МИКРОФИЧАХ) -->
   <div class="features-container">
     <div class="cards-grid">
 
@@ -878,7 +793,6 @@
           </a>
         </div>
 
-        <!-- Визуальный блок внизу карточки -->
         <div class="card-visual-bottom">
           <div class="mock-track-pill">
             <div class="mock-icon-box" style="color: #00875a;">
@@ -895,7 +809,7 @@
               <span class="material-symbols-rounded">graphic_eq</span>
             </div>
             <div style="flex:1;">
-              <div class="mock-track-title">SoundCloud Remixes</div>
+              <div class="mock-track-title">SoundCloud Audio Stream</div>
               <div class="mock-track-sub">Прямой поток без рекламы</div>
             </div>
             <span class="material-symbols-rounded" style="color: #137333;">check_circle</span>
@@ -903,30 +817,33 @@
         </div>
       </div>
 
-      <!-- Карточка 2: Винил -->
-      <div class="m3-card card-purple" id="card-vinyl">
+      <!-- Карточка 2: Бесконечная персональная волна Sea -->
+      <div class="m3-card card-purple" id="card-wave">
         <div>
-          <div class="card-tag">Интерфейс и тактильность</div>
-          <h3>Анимированный винил и караоке</h3>
-          <p>Пластинка с физикой вращения, световыми отражениями и 3D-параллаксом по гироскопу. Синхронные тексты песен подсвечиваются по словам в такт вокалу.</p>
-          <a class="card-footer-link" href="https://github.com/Bebrazui/Melo" target="_blank" rel="noopener">
-            Исходный код плеера на GitHub <span class="material-symbols-rounded">arrow_forward</span>
+          <div class="card-tag">Умные рекомендации</div>
+          <h3>Бесконечная волна под ваш вкус</h3>
+          <p>Поток похожих треков, который подстраивается под ваши предпочтения. Алгоритм учитывает историю прослушиваний и пропуски, исключая повторы и нелюбимые жанры.</p>
+          <a class="card-footer-link" href="#faq">
+            Подробнее об алгоритме Sea <span class="material-symbols-rounded">arrow_forward</span>
           </a>
         </div>
 
-        <!-- Визуальный блок внизу карточки -->
         <div class="card-visual-bottom">
-          <div class="karaoke-visual">
-            <div class="lrc-bubble">
-              <span class="lrc-dim">Tous les soirs </span>
-              <span class="lrc-active">dans ma chambre... 🎵</span>
+          <div class="wave-visual-box">
+            <div class="wave-chip-list">
+              <span class="wave-chip active"><span class="material-symbols-rounded" style="font-size: 16px;">graphic_eq</span> Моя волна Sea</span>
+              <span class="wave-chip">Похоже на любимое</span>
+              <span class="wave-chip">Свежие находки</span>
             </div>
-            <div class="vinyl-stamp"></div>
+            <div class="wave-now-playing">
+              <span class="material-symbols-rounded" style="color: #8e24aa; font-size: 20px;">radio</span>
+              <span>Непрерывный поток персонального радио</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Карточка 3: Сеть / ByeDPI -->
+      <!-- Карточка 3: ByeDPI -->
       <div class="m3-card card-yellow" id="card-byedpi">
         <div>
           <div class="card-tag">Сетевая независимость</div>
@@ -937,7 +854,6 @@
           </a>
         </div>
 
-        <!-- Визуальный блок внизу карточки -->
         <div class="card-visual-bottom">
           <div class="net-visual-box">
             <div class="net-status-left">
@@ -963,7 +879,6 @@
           </a>
         </div>
 
-        <!-- Визуальный блок внизу карточки -->
         <div class="card-visual-bottom">
           <div class="offline-visual-box">
             <div style="display: flex; align-items: center; gap: 12px;">
@@ -1011,7 +926,7 @@
         <span class="material-symbols-rounded">expand_more</span>
       </summary>
       <div class="faq-body">
-        Скачайте файл по кнопке «Скачать Melo» и запустите его. Разрешите установку из неизвестных источников в настройках безопасности Android. Также приложение доступно в российском магазине RuStore.
+        Скачайте файл по кнопке «Скачать Melo» и запустите его. Разрешите установку из неизвестных источников в настройках безопасности Android. Также приложение доступно в официальном магазине RuStore.
       </div>
     </details>
 
@@ -1038,7 +953,7 @@
 
 </main>
 
-<!-- FOOTER: ПОЛНАЯ ШИРИНА -->
+<!-- FOOTER -->
 <footer>
   <div class="footer-inner">
     <div style="max-width: 360px;">
@@ -1054,8 +969,8 @@
     <div class="footer-links-group">
       <h4>Приложение</h4>
       <a href="https://github.com/Bebrazui/Melo-Releases/releases" target="_blank" rel="noopener">Все релизы APK</a>
-      <a href="https://www.rustore.ru" target="_blank" rel="noopener">Каталог RuStore</a>
-      <a href="https://4pda.to" target="_blank" rel="noopener">Обсуждение на 4PDA</a>
+      <a href="https://www.rustore.ru/catalog/app/com.melo.music" target="_blank" rel="noopener">Каталог RuStore</a>
+      <a href="https://4pda.to/forum/index.php?showtopic=1125767#entry144868704" target="_blank" rel="noopener">Обсуждение на 4PDA</a>
     </div>
 
     <div class="footer-links-group">
@@ -1072,7 +987,7 @@
   </div>
 </footer>
 
-<!-- ЖИВОЙ ПАРАЛЛАКС СКРОЛЛА И ИНТЕРАКТИВ -->
+<!-- ЖИВОЙ ПАРАЛЛАКС СКРОЛЛА И ИНТЕРАКТИВНЫЕ ТАБЫ -->
 <script>
   // 1. ПАРАЛЛАКС СКРОЛЛА ДЛЯ ПАНОРАМНОЙ ВИТРИНЫ
   const leftOuter = document.getElementById('panoLeftOuter');
@@ -1105,29 +1020,7 @@
     }
   }, { passive: true });
 
-  // 2. ИНТЕРАКТИВНЫЙ ВИНИЛ
-  const vinylToggle = document.getElementById('vinylToggle');
-  const vinylDisc = document.getElementById('vinylDisc');
-  const playIcon = document.getElementById('playIcon');
-  const vinylHint = document.getElementById('vinylHint');
-  let isPlaying = false;
-
-  if (vinylToggle) {
-    vinylToggle.addEventListener('click', () => {
-      isPlaying = !isPlaying;
-      if (isPlaying) {
-        vinylDisc.classList.add('spinning');
-        playIcon.textContent = 'pause';
-        vinylHint.textContent = 'Винил вращается · 33⅓ RPM';
-      } else {
-        vinylDisc.classList.remove('spinning');
-        playIcon.textContent = 'play_arrow';
-        vinylHint.textContent = 'Нажмите, чтобы запустить пластинку';
-      }
-    });
-  }
-
-  // 3. ИНТЕРАКТИВНЫЕ ВКЛАДКИ
+  // 2. ИНТЕРАКТИВНЫЕ ВКЛАДКИ
   const tabs = document.querySelectorAll('.pill-tab');
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
@@ -1138,8 +1031,6 @@
         const el = document.getElementById(targetId);
         if (el) {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.style.boxShadow = '0 0 0 4px rgba(0, 135, 90, 0.25)';
-          setTimeout(() => { el.style.boxShadow = ''; }, 1200);
         }
       }
     });
