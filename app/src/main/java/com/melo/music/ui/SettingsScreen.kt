@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -830,6 +831,117 @@ fun SettingsScreen(
 
         // ── 🎨 Иконка приложения (Bento Card) ────────────────────
         IconPickerSection()
+
+        Spacer(Modifier.height(16.dp))
+
+        // ── 📜 Логи приложения (Bento Card) ──────────────────────
+        val logs = com.melo.music.util.MeloLog.entries
+        var showLogs by remember { mutableStateOf(false) }
+
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = Color.White.copy(alpha = 0.05f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Диагностические логи",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            "Логи синхронизации, сетевых вызовов и плеера (${logs.size} зап.)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.65f),
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = cs.primary.copy(alpha = 0.2f),
+                            modifier = Modifier.clickable {
+                                ClickFeedback.play()
+                                showLogs = !showLogs
+                            },
+                        ) {
+                            Text(
+                                text = if (showLogs) "Скрыть" else "Показать",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = cs.primary,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.White.copy(alpha = 0.1f),
+                            modifier = Modifier.clickable {
+                                ClickFeedback.play()
+                                com.melo.music.util.MeloLog.clear()
+                            },
+                        ) {
+                            Text(
+                                text = "Очистить",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            )
+                        }
+                    }
+                }
+
+                if (showLogs) {
+                    Spacer(Modifier.height(14.dp))
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = Color.Black.copy(alpha = 0.4f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 280.dp),
+                    ) {
+                        if (logs.isEmpty()) {
+                            Text(
+                                "Логов пока нет. Нажмите «Синхронизировать» для записи событий.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.padding(14.dp),
+                            )
+                        } else {
+                            androidx.compose.foundation.lazy.LazyColumn(
+                                modifier = Modifier.padding(10.dp),
+                                reverseLayout = true,
+                            ) {
+                                items(logs.size) { idx ->
+                                    val log = logs[logs.size - 1 - idx]
+                                    Text(
+                                        text = log,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                            fontSize = 11.sp,
+                                        ),
+                                        color = if (log.contains("ERROR")) Color(0xFFFF6E6E) else Color.White.copy(alpha = 0.8f),
+                                        modifier = Modifier.padding(vertical = 2.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         Spacer(Modifier.height(36.dp))
     }

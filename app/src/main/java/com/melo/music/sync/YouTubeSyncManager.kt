@@ -8,13 +8,13 @@ import com.melo.music.extractor.Source
 import com.melo.music.extractor.TrackItem
 import com.melo.music.favorites.FavoritesManager
 import com.melo.music.playlists.PlaylistManager
+import com.melo.music.util.MeloLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -43,13 +43,21 @@ object YouTubeSyncManager {
         context: Context,
         onProgress: (String) -> Unit = {}
     ): SyncResult = withContext(Dispatchers.IO) {
+        MeloLog.d("YouTubeSync", "Старт синхронизации...")
         if (!YouTubeAccountManager.isLoggedIn) {
+            MeloLog.e("YouTubeSync", "Пользователь не авторизован в YouTubeAccountManager")
             return@withContext SyncResult(0, 0, "Сначала войдите в Google аккаунт в настройках")
         }
 
+        val cookies = YouTubeAccountManager.getCookies()
+        MeloLog.d("YouTubeSync", "Куки найдены: длина=${cookies?.length ?: 0}")
+
         try {
             onProgress("Загрузка понравившихся треков...")
+            MeloLog.d("YouTubeSync", "Запрос понравившихся треков...")
             val likedTracks = fetchLikedMusic(context)
+            MeloLog.d("YouTubeSync", "Найдено понравившихся треков: ${likedTracks.size}")
+
             var addedLikes = 0
             likedTracks.forEach { track ->
                 if (!FavoritesManager.isLiked(track.url)) {
@@ -59,12 +67,16 @@ object YouTubeSyncManager {
             }
 
             onProgress("Поиск ваших плейлистов...")
+            MeloLog.d("YouTubeSync", "Запрос списка плейлистов библиотеки...")
             val ytPlaylists = fetchUserPlaylists(context)
-            var addedPlaylists = 0
+            MeloLog.d("YouTubeSync", "Найдено плейлистов: ${ytPlaylists.size}")
 
+            var addedPlaylists = 0
             ytPlaylists.forEach { (name, browseId) ->
                 onProgress("Синхронизация «$name»...")
+                MeloLog.d("YouTubeSync", "Загрузка плейлиста «$name» (id=$browseId)...")
                 val tracks = fetchPlaylistTracks(context, browseId)
+                MeloLog.d("YouTubeSync", "Плейлист «$name»: треков=${tracks.size}")
                 if (tracks.isNotEmpty()) {
                     val existing = PlaylistManager.getAll().find { it.name.equals(name, ignoreCase = true) }
                     if (existing != null) {
@@ -77,9 +89,10 @@ object YouTubeSyncManager {
                 }
             }
 
+            MeloLog.d("YouTubeSync", "Синхронизация завершена успешно! Лайков: ${likedTracks.size}, плейлистов: $addedPlaylists")
             SyncResult(likedTracks.size, addedPlaylists)
         } catch (e: Exception) {
-            android.util.Log.e("MeloSync", "syncLibrary error: ${e.message}", e)
+            MeloLog.e("YouTubeSync", "Сбой синхронизации: ${e.message}", e)
             SyncResult(0, 0, e.message ?: "Ошибка синхронизации")
         }
     }
@@ -95,6 +108,7 @@ object YouTubeSyncManager {
         }.getOrNull()
 
         if (!viaNewPipe.isNullOrEmpty()) {
+            MeloLog.d("YouTubeSync", "Liked Music успешно получены через NewPipe: ${viaNewPipe.size}")
             return viaNewPipe
         }
 
@@ -115,7 +129,6 @@ object YouTubeSyncManager {
         val responseJson = postInnerTube(BROWSE_URL, bodyJson) ?: return emptyList()
 
         val jsonStr = responseJson.toString()
-        // Регулярка для извлечения названия и browseId плейлистов
         val regex = Regex(""""title":\{"runs":\[\{"text":"([^"]+)"\}\]\}.*?"browseId":"(VLPL[^"]+|FEmusic_library_privately_owned_playlist[^"]+|PL[^"]+)"""")
         regex.findAll(jsonStr).forEach { match ->
             val title = match.groupValues[1]
@@ -208,7 +221,7 @@ object YouTubeSyncManager {
     private fun postInnerTube(url: String, json: JSONObject): JSONObject? {
         val cookies = YouTubeAccountManager.getCookies()
         val auth = YouTubeAccountManager.getSapisidHash()
-        android.util.Log.e("MeloSync", "postInnerTube: url=$url, cookiesLen=${cookies?.length ?: 0}, hasAuth=${!auth.isNullOrBlank()}")
+        MeloLog.d("YouTubeSync", "postInnerTube: url=$url, cookiesLen=${cookies?.length ?: 0}, hasAuth=${!auth.isNullOrBlank()}")
 
         val reqBuilder = Request.Builder()
             .url(url)
@@ -222,14 +235,17 @@ object YouTubeSyncManager {
 
         return try {
             client.newCall(reqBuilder.build()).execute().use { resp ->
-                android.util.Log.e("MeloSync", "postInnerTube response code=${resp.code}")
-                if (!resp.isSuccessful) return null
+                MeloLog.d("YouTubeSync", "postInnerTube ответ код=${resp.code}")
+                if (!resp.isSuccessful) {
+                    MeloLog.e("YouTubeSync", "postInnerTube ошибка HTTP ${resp.code}: ${resp.message}")
+                    return null
+                }
                 val bodyStr = resp.body?.string() ?: return null
-                android.util.Log.e("MeloSync", "postInnerTube body len=${bodyStr.length}")
+                MeloLog.d("YouTubeSync", "postInnerTube ответ body=${bodyStr.take(150)}...")
                 JSONObject(bodyStr)
             }
         } catch (e: Exception) {
-            android.util.Log.e("MeloSync", "postInnerTube error: ${e.message}", e)
+            MeloLog.e("YouTubeSync", "postInnerTube сетевое исключение: ${e.message}", e)
             null
         }
     }
