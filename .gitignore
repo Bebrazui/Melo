@@ -20,3 +20,4 @@ keystore.properties
 # Черновые скриншоты и kotlin-логи
 screenshots/
 .kotlin/
+**/build/

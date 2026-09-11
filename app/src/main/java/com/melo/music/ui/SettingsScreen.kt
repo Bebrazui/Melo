@@ -42,6 +42,13 @@ import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.VpnLock
 import androidx.compose.material.icons.rounded.Waves
+import android.content.Intent
+import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.runtime.rememberCoroutineScope
+import com.melo.music.update.DexPatchManager
+import com.melo.music.update.UpdateActivity
+import com.melo.music.update.UpdateManager
+import kotlinx.coroutines.launch
 import com.melo.music.byedpi.ByeDpiProxy
 import com.melo.music.ui.sound.ClickFeedback
 import androidx.compose.material3.Icon
@@ -370,6 +377,121 @@ fun SettingsScreen(
                         checkedTrackColor = cs.primary,
                     ),
                 )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // ── 🚀 Обновления и патчи (Bento Card) ──────────────────────
+        val context = LocalContext.current
+        val coroutineScope = rememberCoroutineScope()
+        val patchVersion = remember { DexPatchManager.getCurrentPatchVersion(context) }
+        var isCheckingUpdates by remember { mutableStateOf(false) }
+        var updateStatusText by remember { mutableStateOf(UpdateManager.lastCheckStatus) }
+
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = Color.White.copy(alpha = 0.05f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = cs.primaryContainer,
+                        modifier = Modifier.size(48.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Rounded.SystemUpdate,
+                                contentDescription = null,
+                                tint = cs.onPrimaryContainer,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Автообновление",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            "Автоматически обновлять компоненты и приложение в фоне без системных диалогов",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.65f),
+                        )
+                    }
+                    Switch(
+                        checked = AppSettings.autoUpdate,
+                        onCheckedChange = {
+                            ClickFeedback.play()
+                            AppSettings.updateAutoUpdate(it)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = cs.onPrimary,
+                            checkedTrackColor = cs.primary,
+                        ),
+                    )
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            text = "Версия ${com.melo.music.BuildConfig.VERSION_NAME}" + if (patchVersion > 0) " (Патч #$patchVersion)" else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White.copy(alpha = 0.7f),
+                        )
+                        updateStatusText?.let { status ->
+                            Text(
+                                text = status,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = cs.primary.copy(alpha = 0.85f),
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = cs.primary.copy(alpha = 0.15f),
+                        border = BorderStroke(1.dp, cs.primary.copy(alpha = 0.3f)),
+                        modifier = Modifier.clickable {
+                            ClickFeedback.play()
+                            isCheckingUpdates = true
+                            coroutineScope.launch {
+                                val res = UpdateManager.checkForUpdates(context, manual = true)
+                                isCheckingUpdates = false
+                                updateStatusText = UpdateManager.lastCheckStatus
+                                if (res != null && !AppSettings.autoUpdate) {
+                                    val intent = Intent(context, UpdateActivity::class.java)
+                                    context.startActivity(intent)
+                                }
+                            }
+                        },
+                    ) {
+                        Text(
+                            text = if (isCheckingUpdates) "Проверка..." else "Проверить",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = cs.primary,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
+                    }
+                }
             }
         }
 

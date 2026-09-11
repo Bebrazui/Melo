@@ -20,6 +20,7 @@ object AppSettings {
     private const val KEY_UI_SCALE = "ui_scale"
     private const val KEY_SEEN_WELCOME = "seen_welcome"
     private const val KEY_LAUNCHER_ICON = "launcher_icon"
+    private const val KEY_AUTO_UPDATE = "auto_update"
 
     private var prefs: SharedPreferences? = null
 
@@ -51,6 +52,10 @@ object AppSettings {
     var launcherIcon by mutableStateOf(IconPreset.DEFAULT.id)
         private set
 
+    /** Автообновление приложения и компонентов в фоне. */
+    var autoUpdate by mutableStateOf(true)
+        private set
+
     fun init(context: Context) {
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         karaoke = prefs?.getBoolean(KEY_KARAOKE, false) ?: false
@@ -60,6 +65,7 @@ object AppSettings {
         uiScale = prefs?.getFloat(KEY_UI_SCALE, 1.0f) ?: 1.0f
         seenWelcome = prefs?.getBoolean(KEY_SEEN_WELCOME, false) ?: false
         launcherIcon = prefs?.getString(KEY_LAUNCHER_ICON, IconPreset.DEFAULT.id) ?: IconPreset.DEFAULT.id
+        autoUpdate = prefs?.getBoolean(KEY_AUTO_UPDATE, true) ?: true
     }
 
     fun setSeenWelcome() {
@@ -91,6 +97,11 @@ object AppSettings {
         val clamped = value.coerceIn(0.75f, 1.40f)
         uiScale = clamped
         prefs?.edit()?.putFloat(KEY_UI_SCALE, clamped)?.apply()
+    }
+
+    fun updateAutoUpdate(value: Boolean) {
+        autoUpdate = value
+        prefs?.edit()?.putBoolean(KEY_AUTO_UPDATE, value)?.apply()
     }
 
     /**

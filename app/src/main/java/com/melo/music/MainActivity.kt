@@ -25,6 +25,7 @@ import com.melo.music.playback.PlaybackService
 import com.melo.music.ui.PlayerScreen
 import com.melo.music.ui.theme.MeloTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
@@ -44,6 +45,11 @@ class MainActivity : ComponentActivity() {
             { controller = controllerFuture.get() },
             ContextCompat.getMainExecutor(this),
         )
+
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            kotlinx.coroutines.delay(2500)
+            com.melo.music.update.UpdateManager.checkForUpdates(this@MainActivity)
+        }
 
         setContent {
             val baseDensity = androidx.compose.ui.platform.LocalDensity.current

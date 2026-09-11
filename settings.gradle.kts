@@ -24,3 +24,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Melo"
 include(":app")
+include(":desktop")
+

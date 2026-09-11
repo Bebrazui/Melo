@@ -1,0 +1,97 @@
+name: Release Melo APK & DEX Patch
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      patch_version:
+        description: 'Patch version number (e.g. 15)'
+        required: false
+        default: '1'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Grant Execute Permission for Gradlew
+        run: chmod +x gradlew
+
+      - name: Build Release APK
+        run: ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Prepare Patch & Release Metadata
+        id: prepare_assets
+        run: |
+          mkdir -p release_output
+          
+          # 1. Копируем скомпилированный APK
+          APK_FILE=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -f "$APK_FILE" ]; then
+            cp "$APK_FILE" release_output/melo-latest.apk
+            APK_SHA=$(sha256sum release_output/melo-latest.apk | awk '{print $1}')
+          else
+            echo "APK not found!"
+            exit 1
+          fi
+
+          # 2. Если есть скомпилированный patch DEX, упаковываем его
+          PATCH_VERSION="${{ github.event.inputs.patch_version || '1' }}"
+          PATCH_FILE="release_output/patch-v${PATCH_VERSION}.dex"
+          
+          # Если d8 доступен, создаем микро-патч из скомпилированных классов
+          if [ -d "app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes" ]; then
+            $ANDROID_HOME/build-tools/34.0.0/d8 $(find app/build/intermediates/javac/release -name "*.class") --output release_output/ || true
+            if [ -f "release_output/classes.dex" ]; then
+              mv release_output/classes.dex "$PATCH_FILE"
+            fi
+          fi
+
+          PATCH_SHA=""
+          if [ -f "$PATCH_FILE" ]; then
+            PATCH_SHA=$(sha256sum "$PATCH_FILE" | awk '{print $1}')
+          fi
+
+          # 3. Генерируем метаданные релиза release_info.json
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          cat <<EOF > release_output/release_info.json
+          {
+            "versionName": "${TAG_NAME:-v1.0.0}",
+            "apkName": "melo-latest.apk",
+            "apkSha256": "$APK_SHA",
+            "patchVersion": $PATCH_VERSION,
+            "patchName": "patch-v${PATCH_VERSION}.dex",
+            "patchSha256": "$PATCH_SHA",
+            "publishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release_output/*.apk
+            release_output/*.dex
+            release_output/release_info.json
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

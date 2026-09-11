@@ -1111,6 +1111,33 @@ fun PlayerScreen(
                   .graphicsLayer { alpha = if (playerExpanded) 0f else 1f },
               onPositioned = { miniPlayerBounds = it },
           )
+
+          // ── Плашка доступного обновления (когда выключено автообновление) ──
+          val updateAvailable = com.melo.music.update.UpdateManager.availableUpdate
+          var updateBannerDismissed by remember { mutableStateOf(false) }
+          val screenContext = androidx.compose.ui.platform.LocalContext.current
+
+          androidx.compose.animation.AnimatedVisibility(
+              visible = updateAvailable != null && !com.melo.music.settings.AppSettings.autoUpdate && !updateBannerDismissed && !playerExpanded,
+              enter = androidx.compose.animation.slideInVertically(initialOffsetY = { -it }) + androidx.compose.animation.fadeIn(),
+              exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { -it }) + androidx.compose.animation.fadeOut(),
+              modifier = Modifier
+                  .align(Alignment.TopCenter)
+                  .padding(top = 4.dp),
+          ) {
+              updateAvailable?.let { info ->
+                  com.melo.music.ui.components.UpdatePillBanner(
+                      updateInfo = info,
+                      onUpdateClick = {
+                          val intent = android.content.Intent(screenContext, com.melo.music.update.UpdateActivity::class.java)
+                          screenContext.startActivity(intent)
+                      },
+                      onDismiss = {
+                          updateBannerDismissed = true
+                      },
+                  )
+              }
+          }
         }
        }
 
