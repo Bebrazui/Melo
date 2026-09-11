@@ -2098,6 +2098,72 @@ private fun AccountTab(
             }
         }
 
+        // Синхронизация с YouTube Music (если выполнен вход)
+        if (com.melo.music.auth.YouTubeAccountManager.isLoggedIn) {
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            var isSyncingLib by remember { mutableStateOf(false) }
+            var syncMsg by remember { mutableStateOf<String?>(null) }
+
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = cs.primaryContainer.copy(alpha = 0.25f),
+                border = BorderStroke(1.dp, cs.primary.copy(alpha = 0.35f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 14.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .clickable {
+                        if (isSyncingLib) return@clickable
+                        ClickFeedback.play()
+                        isSyncingLib = true
+                        accountScope.launch {
+                            val res = com.melo.music.sync.YouTubeSyncManager.syncLibrary(ctx) {
+                                syncMsg = it
+                            }
+                            isSyncingLib = false
+                            playlists = PlaylistManager.getAll().toList()
+                            syncMsg = if (res.error != null) res.error else "Синхронизировано: ${res.likedCount} лайков, ${res.playlistsCount} плейлистов"
+                        }
+                    },
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = cs.primaryContainer,
+                        modifier = Modifier.size(44.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.CloudDownload,
+                                contentDescription = null,
+                                tint = cs.onPrimaryContainer,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            if (isSyncingLib) "Синхронизация с YouTube..." else "Синхронизировать YouTube Music",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                        )
+                        Text(
+                            syncMsg ?: "Подтянуть «Понравившиеся» и личные плейлисты",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (syncMsg != null) cs.primary else Color.White.copy(alpha = 0.65f),
+                        )
+                    }
+                }
+            }
+        }
+
         // Импорт плейлиста из других сервисов (Material 3 Expressive Frosted Card)
         Surface(
             shape = RoundedCornerShape(24.dp),

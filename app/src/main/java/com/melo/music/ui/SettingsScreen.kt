@@ -190,22 +190,72 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (isYtLoggedIn) {
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = Color.White.copy(alpha = 0.08f),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
-                            modifier = Modifier.clickable {
-                                ClickFeedback.play()
-                                com.melo.music.auth.YouTubeAccountManager.logout()
-                            },
+                        var isSyncing by remember { mutableStateOf(false) }
+                        var syncStatus by remember { mutableStateOf<String?>(null) }
+                        val coroutineScope = rememberCoroutineScope()
+                        val context = LocalContext.current
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                text = "Выйти",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White.copy(alpha = 0.8f),
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            )
+                            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                syncStatus?.let {
+                                    Text(
+                                        it,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = cs.primary,
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = cs.primary.copy(alpha = 0.2f),
+                                    border = BorderStroke(1.dp, cs.primary.copy(alpha = 0.4f)),
+                                    modifier = Modifier.clickable {
+                                        if (isSyncing) return@clickable
+                                        ClickFeedback.play()
+                                        isSyncing = true
+                                        coroutineScope.launch {
+                                            val res = com.melo.music.sync.YouTubeSyncManager.syncLibrary(context) { status ->
+                                                syncStatus = status
+                                            }
+                                            isSyncing = false
+                                            syncStatus = if (res.error != null) res.error else "Синхронизировано: ${res.likedCount} треков, ${res.playlistsCount} плейлистов"
+                                        }
+                                    },
+                                ) {
+                                    Text(
+                                        text = if (isSyncing) "Синхронизация..." else "Синхронизировать",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = cs.primary,
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                    )
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = Color.White.copy(alpha = 0.08f),
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                                    modifier = Modifier.clickable {
+                                        ClickFeedback.play()
+                                        com.melo.music.auth.YouTubeAccountManager.logout()
+                                    },
+                                ) {
+                                    Text(
+                                        text = "Выйти",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.White.copy(alpha = 0.8f),
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                    )
+                                }
+                            }
                         }
                     } else {
                         Surface(
