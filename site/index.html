@@ -595,6 +595,7 @@
     .hero-side-card { display: none; }
     .doodle-sun { display: none; }
     .doodle-notes { display: none; }
+    .doodle-arrow { left: -16px; top: -10px; width: 46px; }
     .nav-full { padding: 0 24px; }
     .features-container { padding: 40px 24px 70px; }
     .cards-grid { grid-template-columns: 1fr; }
@@ -640,15 +641,16 @@
     }
 
     h1 {
-      font-size: clamp(26px, 7vw, 36px);
+      font-size: clamp(24px, 6.8vw, 34px);
       line-height: 1.18;
       margin-bottom: 16px;
     }
 
     .doodle-arrow {
-      width: 38px;
-      top: -18px;
-      left: -14px;
+      position: absolute;
+      width: 34px;
+      top: -24px;
+      left: 0px;
     }
 
     .hero p.lead {
@@ -658,9 +660,9 @@
     }
 
     .doodle-underline {
-      width: 280px;
+      width: 260px;
       bottom: -22px;
-      height: 22px;
+      height: 20px;
     }
 
     .hero-cta {
@@ -709,12 +711,24 @@
     .category-nav-wrap {
       top: 60px;
       padding: 8px 0;
+      overflow: hidden;
     }
 
     .category-nav {
-      padding: 0 16px;
+      padding: 0 16px 20px 16px;
+      margin-bottom: -20px;
       justify-content: flex-start;
       gap: 8px;
+      overflow-x: scroll;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .category-nav::-webkit-scrollbar {
+      display: none !important;
+      width: 0 !important;
+      height: 0 !important;
     }
 
     .pill-tab {
