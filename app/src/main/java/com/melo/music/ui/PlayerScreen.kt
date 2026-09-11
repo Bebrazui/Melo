@@ -359,6 +359,7 @@ fun PlayerScreen(
     // Экран входа: при первом запуске обязателен (не закрыть), из «Аккаунта» — закрываемый.
     var authVisible by remember { mutableStateOf(!com.melo.music.settings.AppSettings.seenWelcome) }
     var authDismissible by remember { mutableStateOf(false) }
+    var showYouTubeLoginSheet by remember { mutableStateOf(false) }
     var importOpen by remember { mutableStateOf(false) }
     var libraryVersion by remember { mutableIntStateOf(0) }
     var showQueue by remember { mutableStateOf(false) }
@@ -1353,6 +1354,7 @@ fun PlayerScreen(
             onStartRegister = { e, p, n -> com.melo.music.auth.AuthManager.startEmailRegister(e, p, n) },
             onConfirmCode = { uid, c -> com.melo.music.auth.AuthManager.confirmEmailCode(uid, c) },
             onGoogle = { onGoogleLogin() },
+            onYouTubeLogin = { showYouTubeLoginSheet = true },
             onLocal = {
                 com.melo.music.settings.AppSettings.setSeenWelcome()
                 authVisible = false
@@ -1367,6 +1369,22 @@ fun PlayerScreen(
                 null
             },
             showGoogle = showGoogle,
+        )
+    }
+
+    if (showYouTubeLoginSheet) {
+        com.melo.music.ui.auth.GoogleLoginBottomSheet(
+            onDismiss = { showYouTubeLoginSheet = false },
+            onSuccess = {
+                showYouTubeLoginSheet = false
+                com.melo.music.settings.AppSettings.setSeenWelcome()
+                authVisible = false
+                // Автоматически запускаем синк в фоне
+                scope.launch {
+                    com.melo.music.sync.YouTubeSyncManager.syncLibrary(context)
+                    libraryVersion++
+                }
+            }
         )
     }
 

@@ -1,4 +1,4 @@
-﻿package com.melo.music.sync
+package com.melo.music.sync
 
 import android.content.Context
 import com.melo.music.auth.YouTubeAccountManager
@@ -37,7 +37,8 @@ object YouTubeSyncManager {
         .proxySelector(com.melo.music.net.MeloNet.byedpiSelector)
         .build()
 
-    private const val BROWSE_URL = "https://music.youtube.com/youtubei/v1/browse?prettyPrint=false"
+    private const val INNER_TUBE_KEY = "AIzaSyAO_FJ2SlqAE4Aq4NoXzvDYqBg55UMNy2w"
+    private const val BROWSE_URL = "https://music.youtube.com/youtubei/v1/browse?key=$INNER_TUBE_KEY&prettyPrint=false"
 
     suspend fun syncLibrary(
         context: Context,
@@ -112,9 +113,9 @@ object YouTubeSyncManager {
             return viaNewPipe
         }
 
-        // 2. Запрос через InnerTube browse
+        // 2. Запрос через InnerTube browse (VLLM = full Liked Music playlist)
         val bodyJson = createInnerTubeContext().apply {
-            put("browseId", "FEmusic_liked_videos")
+            put("browseId", "VLLM")
         }
         val responseJson = postInnerTube(BROWSE_URL, bodyJson) ?: return emptyList()
         parseTracksFromJson(responseJson, tracks)
@@ -124,11 +125,12 @@ object YouTubeSyncManager {
     private fun fetchUserPlaylists(context: Context): List<Pair<String, String>> {
         val playlists = mutableListOf<Pair<String, String>>()
         val bodyJson = createInnerTubeContext().apply {
-            put("browseId", "FEmusic_library_playlists")
+            put("browseId", "FEmusic_liked_playlists")
         }
         val responseJson = postInnerTube(BROWSE_URL, bodyJson) ?: return emptyList()
 
         val jsonStr = responseJson.toString()
+        MeloLog.d("YouTubeSync", "Playlists raw json length: ${jsonStr.length}, sample: ${jsonStr.take(300)}")
         val regex = Regex(""""title":\{"runs":\[\{"text":"([^"]+)"\}\]\}.*?"browseId":"(VLPL[^"]+|FEmusic_library_privately_owned_playlist[^"]+|PL[^"]+)"""")
         regex.findAll(jsonStr).forEach { match ->
             val title = match.groupValues[1]
@@ -164,36 +166,63 @@ object YouTubeSyncManager {
 
     private fun parseTracksFromJson(root: JSONObject, out: MutableList<TrackItem>) {
         val rootStr = root.toString()
-        val musicResponsiveItemRegex = Regex(""""musicResponsiveListItemRenderer":\{(.*?)\}\}\}\}""")
-        val items = musicResponsiveItemRegex.findAll(rootStr).map { it.groupValues[1] }.toList()
+        // Ищем каждый блок musicResponsiveListItemRenderer
+        val marker = "\"musicResponsiveListItemRenderer\":"
+        var idx = 0
+        while (true) {
+            val start = rootStr.indexOf(marker, idx)
+            if (start == -1) break
+            val sub = rootStr.substring(start + marker.length)
+            val chunk = sub.take(2000)
 
-        if (items.isNotEmpty()) {
-            for (item in items) {
-                val videoIdMatch = Regex(""""videoId":"([a-zA-Z0-9_-]{11})"""").find(item)
-                val videoId = videoIdMatch?.groupValues?.get(1) ?: continue
-                val titleMatch = Regex(""""text":"([^"]+)"""").find(item)
-                val title = titleMatch?.groupValues?.get(1) ?: "Трек"
+            val videoIdMatch = Regex(""""videoId":"([a-zA-Z0-9_-]{11})"""").find(chunk)
+            if (videoIdMatch != null) {
+                val videoId = videoIdMatch.groupValues[1]
 
-                out.add(
-                    TrackItem(
-                        title = title,
-                        uploader = "YouTube Music",
-                        url = "https://music.youtube.com/watch?v=$videoId",
-                        durationSeconds = 0,
-                        thumbnailUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
-                        source = Source.YOUTUBE_MUSIC,
-                        kind = ItemKind.TRACK
+                // Название трека: первое поле text в flexColumns[0]
+                val titleMatch = Regex(""""text":"([^"]+)"""").find(chunk)
+                val rawTitle = titleMatch?.groupValues?.get(1) ?: "Трек"
+
+                // Исполнитель: обычно в flexColumns[1] или последующих text
+                val allTexts = Regex(""""text":"([^"]+)"""").findAll(chunk)
+                    .map { it.groupValues[1] }
+                    .filter { text ->
+                        text != rawTitle &&
+                            text != "•" &&
+                            text != "YouTube Music" &&
+                            !text.matches(Regex("""\d+:\d+""")) &&
+                            !text.contains("просмотр", ignoreCase = true) &&
+                            !text.contains("воспроизведен", ignoreCase = true)
+                    }
+                    .toList()
+
+                val author = allTexts.firstOrNull()?.takeIf { it.isNotBlank() }
+
+                if (out.none { it.url == "https://music.youtube.com/watch?v=$videoId" }) {
+                    out.add(
+                        TrackItem(
+                            title = rawTitle,
+                            uploader = author,
+                            url = "https://music.youtube.com/watch?v=$videoId",
+                            durationSeconds = 0,
+                            thumbnailUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
+                            source = Source.YOUTUBE_MUSIC,
+                            kind = ItemKind.TRACK
+                        )
                     )
-                )
+                }
             }
-        } else {
+            idx = start + marker.length
+        }
+
+        if (out.isEmpty()) {
             val videoIdRegex = Regex(""""videoId":"([a-zA-Z0-9_-]{11})"""")
             val ids = videoIdRegex.findAll(rootStr).map { it.groupValues[1] }.distinct().toList()
             ids.forEach { vid ->
                 out.add(
                     TrackItem(
                         title = "Трек YouTube Music",
-                        uploader = "YouTube Music",
+                        uploader = null,
                         url = "https://music.youtube.com/watch?v=$vid",
                         durationSeconds = 0,
                         thumbnailUrl = "https://i.ytimg.com/vi/$vid/hqdefault.jpg",
@@ -228,7 +257,10 @@ object YouTubeSyncManager {
             .post(json.toString().toRequestBody("application/json".toMediaType()))
             .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0")
             .addHeader("Referer", "https://music.youtube.com/")
+            .addHeader("Origin", "https://music.youtube.com")
             .addHeader("X-Origin", "https://music.youtube.com")
+            .addHeader("X-YouTube-Client-Name", "67")
+            .addHeader("X-YouTube-Client-Version", "1.20240101.01.00")
 
         cookies?.let { reqBuilder.addHeader("Cookie", it) }
         auth?.let { reqBuilder.addHeader("Authorization", it) }
@@ -236,11 +268,12 @@ object YouTubeSyncManager {
         return try {
             client.newCall(reqBuilder.build()).execute().use { resp ->
                 MeloLog.d("YouTubeSync", "postInnerTube ответ код=${resp.code}")
+                val bodyStr = resp.body?.string()
                 if (!resp.isSuccessful) {
-                    MeloLog.e("YouTubeSync", "postInnerTube ошибка HTTP ${resp.code}: ${resp.message}")
+                    MeloLog.e("YouTubeSync", "postInnerTube ошибка HTTP ${resp.code}: ${resp.message} | Тело: $bodyStr")
                     return null
                 }
-                val bodyStr = resp.body?.string() ?: return null
+                if (bodyStr.isNullOrEmpty()) return null
                 MeloLog.d("YouTubeSync", "postInnerTube ответ body=${bodyStr.take(150)}...")
                 JSONObject(bodyStr)
             }

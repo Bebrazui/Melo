@@ -70,6 +70,8 @@ androidx-credentials = { group = "androidx.credentials", name = "credentials", v
 androidx-credentials-play-services = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
 googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
 play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
+androidx-webkit = { group = "androidx.webkit", name = "webkit", version = "1.12.0" }
+
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -158,6 +158,7 @@ dependencies {
     "googleImplementation"(libs.androidx.credentials.play.services)
     "googleImplementation"(libs.googleid)
     "googleImplementation"(libs.play.services.auth)
+    implementation(libs.androidx.webkit)
 
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 }

@@ -63,6 +63,7 @@ fun WelcomeScreen(
     onStartRegister: suspend (email: String, password: String, name: String) -> Result<String>,
     onConfirmCode: suspend (userId: String, code: String) -> Result<Unit>,
     onGoogle: suspend () -> Result<Unit>,
+    onYouTubeLogin: () -> Unit = {},
     onLocal: () -> Unit,
     onSuccess: () -> Unit,
     onClose: (() -> Unit)? = null,
@@ -284,6 +285,17 @@ fun WelcomeScreen(
                     Icon(Icons.Rounded.Cloud, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(10.dp))
                     Text("Войти через Google")
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                OutlinedButton(
+                    onClick = onYouTubeLogin,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text("Войти через YouTube Music", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                 }
 
                 Spacer(Modifier.height(22.dp))

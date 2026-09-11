@@ -50,6 +50,11 @@ class MainActivity : ComponentActivity() {
         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
             kotlinx.coroutines.delay(2500)
             com.melo.music.update.UpdateManager.checkForUpdates(this@MainActivity)
+            if (com.melo.music.auth.YouTubeAccountManager.isLoggedIn) {
+                runCatching {
+                    com.melo.music.sync.YouTubeSyncManager.syncLibrary(this@MainActivity)
+                }
+            }
         }
 
         setContent {
