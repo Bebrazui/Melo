@@ -188,19 +188,6 @@
     z-index: 10;
   }
 
-  .hero-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 16px;
-    border-radius: var(--radius-pill);
-    background: var(--primary-soft);
-    color: var(--primary);
-    font-size: 13.5px;
-    font-weight: 600;
-    margin-bottom: 20px;
-  }
-
   h1 {
     font-size: clamp(42px, 6vw, 72px);
     font-weight: 700;
@@ -260,7 +247,7 @@
     text-align: center;
   }
 
-  .hero-side-card.right img {
+  .hero-side-card.right .qr-img {
     width: 104px;
     height: 104px;
     border-radius: 10px;
@@ -387,14 +374,19 @@
 
   .m3-card {
     border-radius: var(--radius-card);
-    padding: 44px 44px 36px;
+    padding: 44px 44px 38px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    min-height: 460px;
+    min-height: 250px;
     position: relative;
     overflow: hidden;
     border: none;
+    transition: none;
+  }
+
+  .m3-card:hover {
+    transform: none;
   }
 
   .card-green { background-color: var(--card-green); }
@@ -412,10 +404,10 @@
   }
 
   .m3-card h3 {
-    font-size: clamp(26px, 3vw, 36px);
+    font-size: clamp(24px, 2.6vw, 32px);
     font-weight: 700;
     letter-spacing: -0.02em;
-    line-height: 1.14;
+    line-height: 1.18;
     margin-bottom: 14px;
   }
 
@@ -423,7 +415,8 @@
     font-size: 16px;
     color: var(--text-sub);
     line-height: 1.55;
-    max-width: 480px;
+    max-width: 500px;
+    margin-bottom: 24px;
   }
 
   .card-footer-link {
@@ -433,125 +426,10 @@
     font-weight: 600;
     font-size: 15px;
     color: var(--primary);
-    margin-top: 20px;
+    margin-top: auto;
   }
 
-  .card-footer-link:hover { text-decoration: underline; }
 
-  /* ВИЗУАЛ ВНУТРИ КАРТОЧЕК (ЧИСТЫЙ СПЕЙСИНГ БЕЗ ОБВОДОК) */
-  .card-visual-bottom {
-    margin-top: 36px;
-    border-top: none;
-  }
-
-  /* Визуал 1: Стриминг треков */
-  .mock-track-pill {
-    background: rgba(255, 255, 255, 0.85);
-    border-radius: 18px;
-    padding: 12px 18px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
-    margin-bottom: 8px;
-  }
-
-  .mock-icon-box {
-    width: 38px;
-    height: 38px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #ffffff;
-  }
-
-  .mock-track-title { font-size: 14px; font-weight: 700; color: var(--text); }
-  .mock-track-sub { font-size: 12px; color: var(--text-dim); }
-
-  /* Визуал 2: Волна Sea (Рекомендации вместо микрофичи винила) */
-  .wave-visual-box {
-    background: rgba(255, 255, 255, 0.88);
-    border-radius: 20px;
-    padding: 16px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
-  }
-
-  .wave-chip-list {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .wave-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: #ffffff;
-    border-radius: var(--radius-pill);
-    padding: 6px 14px;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--text-sub);
-    border: none;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  }
-
-  .wave-chip.active {
-    background: #f3e8fd;
-    color: #7b1fa2;
-    border: none;
-  }
-
-  .wave-now-playing {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 13px;
-    color: var(--text-sub);
-    font-weight: 500;
-  }
-
-  /* Визуал 3: ByeDPI Network */
-  .net-visual-box {
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 18px;
-    padding: 14px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
-  }
-
-  .net-status-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .net-status-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #137333;
-  }
-
-  .net-title { font-size: 13.5px; font-weight: 700; color: var(--text); }
-  .net-desc { font-size: 12px; color: var(--text-dim); }
-
-  /* Визуал 4: Офлайн хранилище */
-  .offline-visual-box {
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 18px;
-    padding: 14px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
-  }
 
   /* FAQ */
   .faq-wrap {
@@ -639,8 +517,67 @@
     padding-top: 24px;
   }
 
+  /* РУКОПИСНЫЕ DOODLE-ЭЛЕМЕНТЫ */
+  .doodle-item {
+    position: absolute;
+    pointer-events: none;
+    z-index: 18;
+    user-select: none;
+    will-change: transform;
+    transition: transform 0.1s linear;
+  }
+
+  .doodle-arrow {
+    left: -4px;
+    top: 14px;
+    width: 58px;
+    height: auto;
+    opacity: 0.95;
+  }
+
+  .doodle-underline {
+    position: absolute;
+    bottom: -32px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 360px;
+    max-width: 90%;
+    height: 32px;
+    opacity: 0.95;
+    pointer-events: none;
+  }
+
+  .doodle-sun {
+    left: 44px;
+    bottom: 145px;
+    width: 155px;
+    height: auto;
+    opacity: 0.92;
+  }
+
+  .doodle-notes {
+    right: 48px;
+    bottom: 50px;
+    width: 115px;
+    height: auto;
+    opacity: 0.92;
+  }
+
+  .doodle-circle {
+    position: absolute;
+    top: -26px;
+    left: -32px;
+    width: 210px;
+    height: 224px;
+    pointer-events: none;
+    z-index: 20;
+    opacity: 0.92;
+  }
+
   @media (max-width: 1200px) {
     .hero-side-card { display: none; }
+    .doodle-sun { display: none; }
+    .doodle-notes { display: none; }
     .nav-full { padding: 0 24px; }
     .features-container { padding: 40px 24px 70px; }
     .cards-grid { grid-template-columns: 1fr; }
@@ -701,26 +638,21 @@
 
     <!-- Центр -->
     <div class="hero-container">
-      <div class="hero-badge">
-        <span class="material-symbols-rounded" style="font-size: 18px;">auto_awesome</span>
-        Версия 0.3 для Android
+      <div style="position: relative; display: inline-block;">
+        <img src="img/doodle-arrow.png" class="doodle-item doodle-arrow" id="doodleArrow" alt="" />
+        <h1>Вся музыка.<br>Без ограничений и подписок.</h1>
       </div>
 
-      <h1>Вся музыка.<br>Без ограничений и подписок.</h1>
-
-      <p class="lead">
-        Плеер со свободным доступом к трекам YouTube Music и SoundCloud, умной волной рекомендаций, текстами песен, офлайн-режимом и встроенным обходом блокировок.
-      </p>
+      <div style="position: relative; max-width: 660px; margin: 0 auto 58px;">
+        <p class="lead" style="margin-bottom: 0;">
+          Плеер со свободным доступом к трекам YouTube Music и SoundCloud, умной волной рекомендаций, текстами песен, офлайн-режимом и встроенным обходом блокировок.
+        </p>
+        <img src="img/doodle-underline.svg" class="doodle-item doodle-underline" id="doodleUnderline" alt="" />
+      </div>
 
       <div class="hero-cta">
         <a class="btn btn-primary btn-lg" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download>
-          <span class="material-symbols-rounded">download</span> Скачать Melo для Android
-        </a>
-        <a class="btn btn-outline btn-lg" href="https://www.rustore.ru/catalog/app/com.melo.music" target="_blank" rel="noopener">
-          <span class="material-symbols-rounded">shopping_bag</span> RuStore
-        </a>
-        <a class="btn btn-outline btn-lg" href="https://4pda.to/forum/index.php?showtopic=1125767#entry144868704" target="_blank" rel="noopener">
-          <span class="material-symbols-rounded">forum</span> 4PDA
+          <span class="material-symbols-rounded">android</span> Скачать Melo
         </a>
       </div>
 
@@ -730,10 +662,17 @@
     </div>
 
     <!-- Правая карточка с QR-кодом -->
-    <div class="hero-side-card right">
-      <img src="https://api.qrserver.com/v1/create-qr-code/?size=104x104&data=https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" alt="QR-код" />
+    <div class="hero-side-card right" style="position: absolute;">
+      <img src="img/doodle-circle-sharp.png" class="doodle-circle" id="doodleCircle" alt="" />
+      <div style="width: 104px; height: 104px;">
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=104x104&data=https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" alt="QR-код" />
+      </div>
       <span class="label">Скачайте Melo на телефон</span>
     </div>
+
+    <!-- Нарисованное солнце слева внизу и нотки справа внизу -->
+    <img src="img/doodle-sun.png" class="doodle-item doodle-sun" id="doodleSun" alt="" />
+    <img src="img/doodle-notes.png" class="doodle-item doodle-notes" id="doodleNotes" alt="" />
 
     <!-- FULL-BLEED ПАНОРАМА: 3 УНИКАЛЬНЫХ ЭКРАНА БЕЗ ПОВТОРОВ -->
     <div class="panorama-wrap">
@@ -779,29 +718,6 @@
             Как устроено воспроизведение <span class="material-symbols-rounded">arrow_forward</span>
           </a>
         </div>
-
-        <div class="card-visual-bottom">
-          <div class="mock-track-pill">
-            <div class="mock-icon-box" style="color: #00875a;">
-              <span class="material-symbols-rounded">music_note</span>
-            </div>
-            <div style="flex:1;">
-              <div class="mock-track-title">Marina — Ecoute Chérie</div>
-              <div class="mock-track-sub">YouTube Music · 3:24 · 320 kbps</div>
-            </div>
-            <span class="material-symbols-rounded" style="color: #00875a;">equalizer</span>
-          </div>
-          <div class="mock-track-pill" style="opacity: 0.85;">
-            <div class="mock-icon-box" style="color: #e65100;">
-              <span class="material-symbols-rounded">graphic_eq</span>
-            </div>
-            <div style="flex:1;">
-              <div class="mock-track-title">SoundCloud Audio Stream</div>
-              <div class="mock-track-sub">Прямой поток без рекламы</div>
-            </div>
-            <span class="material-symbols-rounded" style="color: #137333;">check_circle</span>
-          </div>
-        </div>
       </div>
 
       <!-- Карточка 2: Бесконечная персональная волна Sea -->
@@ -813,20 +729,6 @@
           <a class="card-footer-link" href="#faq">
             Подробнее об алгоритме Sea <span class="material-symbols-rounded">arrow_forward</span>
           </a>
-        </div>
-
-        <div class="card-visual-bottom">
-          <div class="wave-visual-box">
-            <div class="wave-chip-list">
-              <span class="wave-chip active"><span class="material-symbols-rounded" style="font-size: 16px;">graphic_eq</span> Моя волна Sea</span>
-              <span class="wave-chip">Похоже на любимое</span>
-              <span class="wave-chip">Свежие находки</span>
-            </div>
-            <div class="wave-now-playing">
-              <span class="material-symbols-rounded" style="color: #8e24aa; font-size: 20px;">radio</span>
-              <span>Непрерывный поток персонального радио</span>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -840,19 +742,6 @@
             Подробнее о работе прокси <span class="material-symbols-rounded">arrow_forward</span>
           </a>
         </div>
-
-        <div class="card-visual-bottom">
-          <div class="net-visual-box">
-            <div class="net-status-left">
-              <span class="net-status-dot"></span>
-              <div>
-                <div class="net-title">ByeDPI C-Engine · 127.0.0.1:1080</div>
-                <div class="net-desc">Desync split TLS · 0% loss · Обход активен</div>
-              </div>
-            </div>
-            <span class="material-symbols-rounded" style="color: #b58105; font-size: 26px;">verified_user</span>
-          </div>
-        </div>
       </div>
 
       <!-- Карточка 4: Офлайн -->
@@ -864,19 +753,6 @@
           <a class="card-footer-link" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download>
             Скачать и слушать офлайн <span class="material-symbols-rounded">arrow_forward</span>
           </a>
-        </div>
-
-        <div class="card-visual-bottom">
-          <div class="offline-visual-box">
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <span class="material-symbols-rounded" style="color: #1a73e8; font-size: 28px;">cloud_done</span>
-              <div>
-                <div class="net-title">Сохранено на устройстве</div>
-                <div class="net-desc">Локальный кеш аудио · Автономный плеер</div>
-              </div>
-            </div>
-            <span class="material-symbols-rounded" style="color: #1a73e8;">download_done</span>
-          </div>
         </div>
       </div>
 
@@ -976,10 +852,16 @@
 
 <!-- ЖИВОЙ ПАРАЛЛАКС СКРОЛЛА И ИНТЕРАКТИВНЫЕ ТАБЫ -->
 <script>
-  // 1. ПАРАЛЛАКС СКРОЛЛА ДЛЯ ПАНОРАМНОЙ ВИТРИНЫ
+  // 1. ПАРАЛЛАКС СКРОЛЛА ДЛЯ ПАНОРАМНОЙ ВИТРИНЫ И РУКОПИСНЫХ DOODLE
   const leftCard = document.getElementById('panoLeft');
   const centerCard = document.getElementById('panoCenter');
   const rightCard = document.getElementById('panoRight');
+
+  const dSun = document.getElementById('doodleSun');
+  const dNotes = document.getElementById('doodleNotes');
+  const dArrow = document.getElementById('doodleArrow');
+  const dUnderline = document.getElementById('doodleUnderline');
+  const dCircle = document.getElementById('doodleCircle');
 
   let ticking = false;
 
@@ -992,6 +874,13 @@
       if (leftCard) leftCard.style.transform = `translateX(-${spread}px) translateY(${20 - offset * 0.5}px) scale(0.95)`;
       if (centerCard) centerCard.style.transform = `translateY(${-offset * 0.3}px) scale(1)`;
       if (rightCard) rightCard.style.transform = `translateX(${spread}px) translateY(${20 - offset * 0.5}px) scale(0.95)`;
+
+      // Параллакс рукописных элементов
+      if (dSun) dSun.style.transform = `translateY(${-scrollY * 0.18}px) rotate(${-scrollY * 0.03}deg)`;
+      if (dNotes) dNotes.style.transform = `translateY(${-scrollY * 0.22}px) rotate(${scrollY * 0.04}deg)`;
+      if (dArrow) dArrow.style.transform = `translateY(${-scrollY * 0.08}px) rotate(${-scrollY * 0.02}deg)`;
+      if (dUnderline) dUnderline.style.transform = `translateX(-50%) translateY(${-scrollY * 0.05}px)`;
+      if (dCircle) dCircle.style.transform = `rotate(${scrollY * 0.05}deg)`;
     }
     ticking = false;
   }
