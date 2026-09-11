@@ -1,12 +1,12 @@
-package com.melo.music.sync
+﻿package com.melo.music.sync
 
 import android.content.Context
 import com.melo.music.auth.YouTubeAccountManager
 import com.melo.music.extractor.ItemKind
+import com.melo.music.extractor.NewPipeResolver
 import com.melo.music.extractor.Source
 import com.melo.music.extractor.TrackItem
 import com.melo.music.favorites.FavoritesManager
-import com.melo.music.playlists.Playlist
 import com.melo.music.playlists.PlaylistManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -39,20 +39,17 @@ object YouTubeSyncManager {
 
     private const val BROWSE_URL = "https://music.youtube.com/youtubei/v1/browse?prettyPrint=false"
 
-    /**
-     * Выполняет полный синк лайков и плейлистов из YouTube Music.
-     */
     suspend fun syncLibrary(
         context: Context,
         onProgress: (String) -> Unit = {}
     ): SyncResult = withContext(Dispatchers.IO) {
         if (!YouTubeAccountManager.isLoggedIn) {
-            return@withContext SyncResult(0, 0, "Сначала выполните вход в Google аккаунт")
+            return@withContext SyncResult(0, 0, "Сначала войдите в Google аккаунт в настройках")
         }
 
         try {
             onProgress("Загрузка понравившихся треков...")
-            val likedTracks = fetchLikedMusic()
+            val likedTracks = fetchLikedMusic(context)
             var addedLikes = 0
             likedTracks.forEach { track ->
                 if (!FavoritesManager.isLiked(track.url)) {
@@ -61,13 +58,13 @@ object YouTubeSyncManager {
                 }
             }
 
-            onProgress("Загрузка ваших плейлистов...")
-            val ytPlaylists = fetchUserPlaylists()
+            onProgress("Поиск ваших плейлистов...")
+            val ytPlaylists = fetchUserPlaylists(context)
             var addedPlaylists = 0
 
             ytPlaylists.forEach { (name, browseId) ->
                 onProgress("Синхронизация «$name»...")
-                val tracks = fetchPlaylistTracks(browseId)
+                val tracks = fetchPlaylistTracks(context, browseId)
                 if (tracks.isNotEmpty()) {
                     val existing = PlaylistManager.getAll().find { it.name.equals(name, ignoreCase = true) }
                     if (existing != null) {
@@ -82,28 +79,35 @@ object YouTubeSyncManager {
 
             SyncResult(likedTracks.size, addedPlaylists)
         } catch (e: Exception) {
+            android.util.Log.e("MeloSync", "syncLibrary error: ${e.message}", e)
             SyncResult(0, 0, e.message ?: "Ошибка синхронизации")
         }
     }
 
-    /**
-     * Тянет треки из автоплейлиста "LM" (Liked Music).
-     */
-    private fun fetchLikedMusic(): List<TrackItem> {
+    private fun fetchLikedMusic(context: Context): List<TrackItem> {
         val tracks = mutableListOf<TrackItem>()
+        // 1. Попытка через NewPipe плейлист LM / LL (Likes)
+        val viaNewPipe = runCatching {
+            val res = kotlinx.coroutines.runBlocking {
+                NewPipeResolver.importPlaylist(context, "https://music.youtube.com/playlist?list=LM")
+            }
+            res.second
+        }.getOrNull()
+
+        if (!viaNewPipe.isNullOrEmpty()) {
+            return viaNewPipe
+        }
+
+        // 2. Запрос через InnerTube browse
         val bodyJson = createInnerTubeContext().apply {
             put("browseId", "FEmusic_liked_videos")
         }
         val responseJson = postInnerTube(BROWSE_URL, bodyJson) ?: return emptyList()
-
-        parseTracksFromBrowse(responseJson, tracks)
+        parseTracksFromJson(responseJson, tracks)
         return tracks
     }
 
-    /**
-     * Тянет список личных плейлистов (имя -> browseId).
-     */
-    private fun fetchUserPlaylists(): List<Pair<String, String>> {
+    private fun fetchUserPlaylists(context: Context): List<Pair<String, String>> {
         val playlists = mutableListOf<Pair<String, String>>()
         val bodyJson = createInnerTubeContext().apply {
             put("browseId", "FEmusic_library_playlists")
@@ -111,8 +115,8 @@ object YouTubeSyncManager {
         val responseJson = postInnerTube(BROWSE_URL, bodyJson) ?: return emptyList()
 
         val jsonStr = responseJson.toString()
-        // Ищем все вхождения плейлистов пользователя VLPL...
-        val regex = Regex(""""title":\{"runs":\[\{"text":"([^"]+)"\}\]\}.*?"browseId":"(VLPL[^"]+)"""")
+        // Регулярка для извлечения названия и browseId плейлистов
+        val regex = Regex(""""title":\{"runs":\[\{"text":"([^"]+)"\}\]\}.*?"browseId":"(VLPL[^"]+|FEmusic_library_privately_owned_playlist[^"]+|PL[^"]+)"""")
         regex.findAll(jsonStr).forEach { match ->
             val title = match.groupValues[1]
             val browseId = match.groupValues[2]
@@ -123,31 +127,59 @@ object YouTubeSyncManager {
         return playlists
     }
 
-    /**
-     * Загружает треки конкретного плейлиста.
-     */
-    private fun fetchPlaylistTracks(browseId: String): List<TrackItem> {
+    private fun fetchPlaylistTracks(context: Context, browseId: String): List<TrackItem> {
         val tracks = mutableListOf<TrackItem>()
+        val playlistId = if (browseId.startsWith("VL")) browseId.removePrefix("VL") else browseId
+        val viaNewPipe = runCatching {
+            val res = kotlinx.coroutines.runBlocking {
+                NewPipeResolver.importPlaylist(context, "https://music.youtube.com/playlist?list=$playlistId")
+            }
+            res.second
+        }.getOrNull()
+
+        if (!viaNewPipe.isNullOrEmpty()) {
+            return viaNewPipe
+        }
+
         val bodyJson = createInnerTubeContext().apply {
             put("browseId", browseId)
         }
         val responseJson = postInnerTube(BROWSE_URL, bodyJson) ?: return emptyList()
-        parseTracksFromBrowse(responseJson, tracks)
+        parseTracksFromJson(responseJson, tracks)
         return tracks
     }
 
-    private fun parseTracksFromBrowse(root: JSONObject, out: MutableList<TrackItem>) {
+    private fun parseTracksFromJson(root: JSONObject, out: MutableList<TrackItem>) {
         val rootStr = root.toString()
-        // Извлекаем videoId, title, author
-        val videoIdRegex = Regex(""""videoId":"([a-zA-Z0-9_-]{11})"""")
-        val ids = videoIdRegex.findAll(rootStr).map { it.groupValues[1] }.distinct().toList()
+        val musicResponsiveItemRegex = Regex(""""musicResponsiveListItemRenderer":\{(.*?)\}\}\}\}""")
+        val items = musicResponsiveItemRegex.findAll(rootStr).map { it.groupValues[1] }.toList()
 
-        ids.forEach { vid ->
-            if (vid.length == 11 && !vid.startsWith("FEmusic") && !vid.startsWith("VLPL")) {
-                // Ищем title рядом с videoId если возможно
+        if (items.isNotEmpty()) {
+            for (item in items) {
+                val videoIdMatch = Regex(""""videoId":"([a-zA-Z0-9_-]{11})"""").find(item)
+                val videoId = videoIdMatch?.groupValues?.get(1) ?: continue
+                val titleMatch = Regex(""""text":"([^"]+)"""").find(item)
+                val title = titleMatch?.groupValues?.get(1) ?: "Трек"
+
                 out.add(
                     TrackItem(
-                        title = "YouTube Music Track",
+                        title = title,
+                        uploader = "YouTube Music",
+                        url = "https://music.youtube.com/watch?v=$videoId",
+                        durationSeconds = 0,
+                        thumbnailUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
+                        source = Source.YOUTUBE_MUSIC,
+                        kind = ItemKind.TRACK
+                    )
+                )
+            }
+        } else {
+            val videoIdRegex = Regex(""""videoId":"([a-zA-Z0-9_-]{11})"""")
+            val ids = videoIdRegex.findAll(rootStr).map { it.groupValues[1] }.distinct().toList()
+            ids.forEach { vid ->
+                out.add(
+                    TrackItem(
+                        title = "Трек YouTube Music",
                         uploader = "YouTube Music",
                         url = "https://music.youtube.com/watch?v=$vid",
                         durationSeconds = 0,
@@ -174,6 +206,10 @@ object YouTubeSyncManager {
     }
 
     private fun postInnerTube(url: String, json: JSONObject): JSONObject? {
+        val cookies = YouTubeAccountManager.getCookies()
+        val auth = YouTubeAccountManager.getSapisidHash()
+        android.util.Log.e("MeloSync", "postInnerTube: url=$url, cookiesLen=${cookies?.length ?: 0}, hasAuth=${!auth.isNullOrBlank()}")
+
         val reqBuilder = Request.Builder()
             .url(url)
             .post(json.toString().toRequestBody("application/json".toMediaType()))
@@ -181,16 +217,19 @@ object YouTubeSyncManager {
             .addHeader("Referer", "https://music.youtube.com/")
             .addHeader("X-Origin", "https://music.youtube.com")
 
-        YouTubeAccountManager.getCookies()?.let { reqBuilder.addHeader("Cookie", it) }
-        YouTubeAccountManager.getSapisidHash()?.let { reqBuilder.addHeader("Authorization", it) }
+        cookies?.let { reqBuilder.addHeader("Cookie", it) }
+        auth?.let { reqBuilder.addHeader("Authorization", it) }
 
         return try {
             client.newCall(reqBuilder.build()).execute().use { resp ->
+                android.util.Log.e("MeloSync", "postInnerTube response code=${resp.code}")
                 if (!resp.isSuccessful) return null
                 val bodyStr = resp.body?.string() ?: return null
+                android.util.Log.e("MeloSync", "postInnerTube body len=${bodyStr.length}")
                 JSONObject(bodyStr)
             }
         } catch (e: Exception) {
+            android.util.Log.e("MeloSync", "postInnerTube error: ${e.message}", e)
             null
         }
     }
