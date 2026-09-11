@@ -574,6 +574,7 @@
     opacity: 0.92;
   }
 
+  /* АДАПТИВНОСТЬ ДЛЯ ПЛАНШЕТОВ И СМАРТФОНОВ */
   @media (max-width: 1200px) {
     .hero-side-card { display: none; }
     .doodle-sun { display: none; }
@@ -583,6 +584,188 @@
     .cards-grid { grid-template-columns: 1fr; }
     .pano-card.outer { display: none; }
     .nav-links { display: none; }
+  }
+
+  @media (max-width: 768px) {
+    /* Хедер */
+    .nav-full {
+      height: 60px;
+      padding: 0 16px;
+      gap: 12px;
+    }
+
+    .brand {
+      font-size: 19px;
+      gap: 8px;
+    }
+
+    .brand img {
+      width: 32px;
+      height: 32px;
+    }
+
+    .header-btn-github {
+      display: none;
+    }
+
+    .header-btn-apk {
+      padding: 8px 14px;
+      font-size: 13px;
+    }
+
+    /* Hero */
+    .hero {
+      padding: 36px 0 16px;
+      overflow-x: hidden;
+    }
+
+    .hero-container {
+      padding: 0 16px;
+    }
+
+    h1 {
+      font-size: clamp(28px, 7.5vw, 36px);
+      line-height: 1.15;
+      margin-bottom: 16px;
+    }
+
+    .doodle-arrow {
+      width: 42px;
+      top: -6px;
+      left: -12px;
+    }
+
+    .hero p.lead {
+      font-size: 15px;
+      line-height: 1.5;
+      margin-bottom: 0;
+    }
+
+    .doodle-underline {
+      width: 280px;
+      bottom: -22px;
+      height: 22px;
+    }
+
+    .hero-cta {
+      margin-top: 14px;
+      margin-bottom: 14px;
+    }
+
+    .btn-lg {
+      width: 100%;
+      max-width: 320px;
+      padding: 14px 20px;
+      font-size: 15px;
+    }
+
+    .hero-meta {
+      font-size: 12px;
+      line-height: 1.4;
+      padding: 0 10px;
+    }
+
+    /* Панорама скриншотов на мобильных */
+    .panorama-wrap {
+      width: 100%;
+      margin: 0;
+      padding: 24px 0 36px;
+    }
+
+    .panorama-track {
+      width: 100%;
+      justify-content: center;
+      gap: 12px;
+      padding: 0 16px;
+    }
+
+    .pano-card.side {
+      display: none;
+    }
+
+    .pano-card.center {
+      width: 86vw;
+      max-width: 320px;
+      border-radius: 28px;
+    }
+
+    /* Панель вкладок */
+    .category-nav-wrap {
+      top: 60px;
+      padding: 8px 0;
+    }
+
+    .category-nav {
+      padding: 0 16px;
+      justify-content: flex-start;
+      gap: 8px;
+    }
+
+    .pill-tab {
+      padding: 7px 14px;
+      font-size: 13px;
+    }
+
+    /* Карточки фич */
+    .features-container {
+      padding: 30px 16px 60px;
+    }
+
+    .cards-grid {
+      gap: 16px;
+    }
+
+    .m3-card {
+      border-radius: 24px;
+      padding: 24px 20px 22px;
+      min-height: auto;
+    }
+
+    .m3-card h3 {
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+
+    .m3-card p {
+      font-size: 14.5px;
+      margin-bottom: 18px;
+    }
+
+    /* FAQ */
+    .faq-wrap {
+      padding: 40px 16px 60px;
+    }
+
+    .faq-wrap h2 {
+      font-size: 26px;
+      margin-bottom: 24px;
+    }
+
+    summary {
+      padding: 16px 0;
+      font-size: 16px;
+    }
+
+    .faq-body {
+      font-size: 14px;
+      padding-bottom: 16px;
+    }
+
+    /* Футер */
+    footer {
+      padding: 40px 16px 30px;
+    }
+
+    .footer-inner {
+      gap: 28px;
+      margin-bottom: 30px;
+    }
+
+    .footer-bottom {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+    }
   }
 </style>
 </head>
@@ -603,10 +786,10 @@
       <a href="#faq">FAQ</a>
     </nav>
     <div class="spacer"></div>
-    <a class="btn btn-outline" href="https://github.com/Bebrazui/Melo" target="_blank" rel="noopener">
+    <a class="btn btn-outline header-btn-github" href="https://github.com/Bebrazui/Melo" target="_blank" rel="noopener">
       <span class="material-symbols-rounded">code</span> GitHub
     </a>
-    <a class="btn btn-primary" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download>
+    <a class="btn btn-primary header-btn-apk" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download>
       <span class="material-symbols-rounded">download</span> Скачать APK
     </a>
   </div>
@@ -867,20 +1050,27 @@
 
   function updateParallax() {
     const scrollY = window.pageYOffset;
+    const isMobile = window.innerWidth <= 768;
+
     if (scrollY < 1200) {
       const offset = scrollY * 0.12;
       const spread = scrollY * 0.08;
 
-      if (leftCard) leftCard.style.transform = `translateX(-${spread}px) translateY(${20 - offset * 0.5}px) scale(0.95)`;
-      if (centerCard) centerCard.style.transform = `translateY(${-offset * 0.3}px) scale(1)`;
-      if (rightCard) rightCard.style.transform = `translateX(${spread}px) translateY(${20 - offset * 0.5}px) scale(0.95)`;
+      if (!isMobile) {
+        if (leftCard) leftCard.style.transform = `translateX(-${spread}px) translateY(${20 - offset * 0.5}px) scale(0.95)`;
+        if (centerCard) centerCard.style.transform = `translateY(${-offset * 0.3}px) scale(1)`;
+        if (rightCard) rightCard.style.transform = `translateX(${spread}px) translateY(${20 - offset * 0.5}px) scale(0.95)`;
 
-      // Параллакс рукописных элементов
-      if (dSun) dSun.style.transform = `translateY(${-scrollY * 0.18}px) rotate(${-scrollY * 0.03}deg)`;
-      if (dNotes) dNotes.style.transform = `translateY(${-scrollY * 0.22}px) rotate(${scrollY * 0.04}deg)`;
-      if (dArrow) dArrow.style.transform = `translateY(${-scrollY * 0.08}px) rotate(${-scrollY * 0.02}deg)`;
-      if (dUnderline) dUnderline.style.transform = `translateX(-50%) translateY(${-scrollY * 0.05}px)`;
-      if (dCircle) dCircle.style.transform = `rotate(${scrollY * 0.05}deg)`;
+        if (dSun) dSun.style.transform = `translateY(${-scrollY * 0.18}px) rotate(${-scrollY * 0.03}deg)`;
+        if (dNotes) dNotes.style.transform = `translateY(${-scrollY * 0.22}px) rotate(${scrollY * 0.04}deg)`;
+        if (dCircle) dCircle.style.transform = `rotate(${scrollY * 0.05}deg)`;
+      } else {
+        if (centerCard) centerCard.style.transform = 'none';
+      }
+
+      // Стрелка и волна на любых экранах
+      if (dArrow) dArrow.style.transform = `translateY(${-scrollY * 0.06}px) rotate(${-scrollY * 0.02}deg)`;
+      if (dUnderline) dUnderline.style.transform = `translateX(-50%) translateY(${-scrollY * 0.04}px)`;
     }
     ticking = false;
   }
