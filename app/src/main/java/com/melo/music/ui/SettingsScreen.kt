@@ -135,6 +135,110 @@ fun SettingsScreen(
             )
         }
 
+        // ── 🌐 Google / YouTube Music Аккаунт (Bento Card) ──────
+        var showGoogleLoginSheet by remember { mutableStateOf(false) }
+        val isYtLoggedIn = com.melo.music.auth.YouTubeAccountManager.isLoggedIn
+
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = Color.White.copy(alpha = 0.05f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = if (isYtLoggedIn) cs.primaryContainer else Color.White.copy(alpha = 0.1f),
+                        modifier = Modifier.size(48.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = if (isYtLoggedIn) "YT" else "G",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Black,
+                                color = if (isYtLoggedIn) cs.onPrimaryContainer else Color.White,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "YouTube Music / Google",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            if (isYtLoggedIn) "Вход выполнен • треки 18+ разблокированы"
+                            else "Войдите для доступа к трекам 18+ и вашей медиатеке",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isYtLoggedIn) cs.primary else Color.White.copy(alpha = 0.65f),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (isYtLoggedIn) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color.White.copy(alpha = 0.08f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                            modifier = Modifier.clickable {
+                                ClickFeedback.play()
+                                com.melo.music.auth.YouTubeAccountManager.logout()
+                            },
+                        ) {
+                            Text(
+                                text = "Выйти",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White.copy(alpha = 0.8f),
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        }
+                    } else {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = cs.primary.copy(alpha = 0.2f),
+                            border = BorderStroke(1.dp, cs.primary.copy(alpha = 0.4f)),
+                            modifier = Modifier.clickable {
+                                ClickFeedback.play()
+                                showGoogleLoginSheet = true
+                            },
+                        ) {
+                            Text(
+                                text = "Войти в аккаунт",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = cs.primary,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showGoogleLoginSheet) {
+            com.melo.music.ui.auth.GoogleLoginBottomSheet(
+                onDismiss = { showGoogleLoginSheet = false },
+                onSuccess = { showGoogleLoginSheet = false },
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+
         // ── 🎛️ Эквалайзер (Bento Card) ───────────────────────────
         EqualizerSection()
 

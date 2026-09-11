@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         GoogleAuthHelper.init(this)
+        com.melo.music.auth.YouTubeAccountManager.init(this)
 
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         controllerFuture = MediaController.Builder(this, token).buildAsync()

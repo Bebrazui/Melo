@@ -187,8 +187,17 @@ class PlaybackService : MediaSessionService() {
             .retryOnConnectionFailure(true)
             .connectionPool(okhttp3.ConnectionPool(12, 5, java.util.concurrent.TimeUnit.MINUTES))
             .addInterceptor { chain ->
-                val req = chain.request()
+                var req = chain.request()
                 val host = req.url.host
+                if (com.melo.music.auth.YouTubeAccountManager.isLoggedIn) {
+                    if (host.contains("googlevideo.com") || host.contains("youtube.com")) {
+                        com.melo.music.auth.YouTubeAccountManager.getCookies()?.let { cookies ->
+                            val curCookie = req.header("Cookie")
+                            val newCookie = if (!curCookie.isNullOrBlank()) "$curCookie; $cookies" else cookies
+                            req = req.newBuilder().header("Cookie", newCookie).build()
+                        }
+                    }
+                }
                 try {
                     val resp = chain.proceed(req)
                     val tag = if (resp.code !in 200..299) req.url.toString().take(180) else host

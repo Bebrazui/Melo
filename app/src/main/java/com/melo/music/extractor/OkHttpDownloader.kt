@@ -81,6 +81,22 @@ class OkHttpDownloader(
             }
         }
 
+        // Подмешиваем авторизацию YouTube, если пользователь вошёл в Google
+        if (com.melo.music.auth.YouTubeAccountManager.isLoggedIn) {
+            val hostLower = runCatching { URI(url).host?.lowercase() }.getOrNull().orEmpty()
+            if (hostLower.contains("youtube") || hostLower.contains("googlevideo") || hostLower.contains("ytimg")) {
+                com.melo.music.auth.YouTubeAccountManager.getCookies()?.let { cookies ->
+                    val existingCookie = headers["Cookie"]?.firstOrNull() ?: headers["cookie"]?.firstOrNull()
+                    val mergedCookie = if (!existingCookie.isNullOrBlank()) "$existingCookie; $cookies" else cookies
+                    requestBuilder.header("Cookie", mergedCookie)
+                }
+                com.melo.music.auth.YouTubeAccountManager.getSapisidHash()?.let { authHash ->
+                    requestBuilder.header("Authorization", authHash)
+                    requestBuilder.header("X-Origin", "https://music.youtube.com")
+                }
+            }
+        }
+
         val activeClient = if (ByeDpiProxy.isEnabled()) {
             dynamicProxyClient
         } else {
