@@ -297,64 +297,58 @@ fun SettingsScreen(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                .padding(20.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
         ) {
             val meloDir = File(System.getProperty("user.home"), ".melo")
             var cacheSizeBytes by remember { mutableStateOf(AudioCacheManager.getCacheSizeBytes()) }
 
-            Text(
-                text = "Директория профиля и кэш",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = meloDir.absolutePath,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = "Размер кэша аудио: ${cacheSizeBytes / (1024 * 1024)} МБ (до 2 ГБ)",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = MeloPrimary,
-            )
-            Text(
-                text = "Прослушанные треки сохраняются на диск для быстрого повторного воспроизведения и экономии трафика.",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(
-                    onClick = {
-                        AudioCacheManager.clearCache()
-                        val cache = File(meloDir, "cache")
-                        if (cache.exists()) cache.deleteRecursively()
-                        cacheSizeBytes = 0L
-                    },
-                    shape = RoundedCornerShape(8.dp),
-                ) {
-                    Text("Очистить кэш треков и обложек")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column {
+                    Text(
+                        text = "Кэш треков и обложек",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${cacheSizeBytes / (1024 * 1024)} МБ",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MeloPrimary,
+                    )
                 }
 
-                OutlinedButton(
-                    onClick = {
-                        try {
-                            val audioDir = File(meloDir, "cache/audio")
-                            audioDir.mkdirs()
-                            if (Desktop.isDesktopSupported()) Desktop.getDesktop().open(audioDir)
-                            else ProcessBuilder("explorer.exe", audioDir.absolutePath).start()
-                        } catch (_: Exception) {}
-                    },
-                    shape = RoundedCornerShape(8.dp),
-                ) {
-                    Text("Открыть папку кэша аудио")
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            AudioCacheManager.clearCache()
+                            val cache = File(meloDir, "cache")
+                            if (cache.exists()) cache.deleteRecursively()
+                            cacheSizeBytes = 0L
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                    ) {
+                        Text("Очистить кэш", fontSize = 13.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                val audioDir = File(meloDir, "cache/audio")
+                                audioDir.mkdirs()
+                                if (Desktop.isDesktopSupported()) Desktop.getDesktop().open(audioDir)
+                                else ProcessBuilder("explorer.exe", audioDir.absolutePath).start()
+                            } catch (_: Exception) {}
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                    ) {
+                        Text("Открыть папку", fontSize = 13.sp)
+                    }
                 }
             }
         }
@@ -372,23 +366,25 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Column(
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                .padding(20.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
         ) {
             Text(
-                text = "Melo Desktop 1.0.0",
+                text = "Версия приложения",
                 fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Музыкальный плеер со свободным доступом к трекам, персональной волной рекомендаций и синхронизированными текстами песен.",
+                text = "Melo Desktop 1.0.0",
                 fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
