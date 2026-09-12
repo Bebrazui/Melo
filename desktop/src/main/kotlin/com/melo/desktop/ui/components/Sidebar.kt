@@ -110,31 +110,40 @@ fun Sidebar(
                 )
             }
 
-            // Аватарка справа от текста Melo
+            // Аватарка справа от текста Melo — открывает профиль
+            val isProfileSelected = currentDestination == NavDestination.PROFILE
             val avatarInteractionSource = remember { MutableInteractionSource() }
             val isAvatarHovered by avatarInteractionSource.collectIsHoveredAsState()
-            val avatarScale by animateFloatAsState(if (isAvatarHovered) 1.08f else 1f, label = "avatarScale")
+            val avatarScale by animateFloatAsState(
+                if (isAvatarHovered || isProfileSelected) 1.08f else 1f,
+                label = "avatarScale"
+            )
 
             Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .size(36.dp)
                     .graphicsLayer {
                         scaleX = avatarScale
                         scaleY = avatarScale
                     }
                     .clip(CircleShape)
+                    .then(
+                        if (isProfileSelected) {
+                            Modifier.border(androidx.compose.foundation.BorderStroke(2.dp, MeloPrimary), CircleShape)
+                        } else Modifier
+                    )
                     .background(if (isAnyLoggedIn) MeloPrimary else Color.White.copy(alpha = 0.12f))
                     .clickable(
                         interactionSource = avatarInteractionSource,
                         indication = null,
-                        onClick = { onOpenAuth?.invoke() }
+                        onClick = { onNavigate(NavDestination.PROFILE) }
                     ),
                 contentAlignment = Alignment.Center,
             ) {
                 if (!userAvatar.isNullOrBlank()) {
                     AsyncCoverImage(
                         url = userAvatar,
-                        modifier = Modifier.size(34.dp),
+                        modifier = Modifier.size(if (isProfileSelected) 32.dp else 36.dp),
                         shape = CircleShape,
                     )
                 } else if (isAnyLoggedIn) {
@@ -147,8 +156,8 @@ fun Sidebar(
                 } else {
                     Icon(
                         imageVector = Icons.Rounded.Person,
-                        contentDescription = "Вход в аккаунт",
-                        tint = Color.White.copy(alpha = 0.7f),
+                        contentDescription = "Профиль",
+                        tint = if (isProfileSelected) MeloPrimary else Color.White.copy(alpha = 0.7f),
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -157,8 +166,8 @@ fun Sidebar(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Пункты меню с плавной анимацией и hover эффектом
-        NavDestination.values().forEach { destination ->
+        // Пункты меню с плавной анимацией и hover эффектом (профиль доступен по аватарке в шапке)
+        NavDestination.values().filter { it != NavDestination.PROFILE }.forEach { destination ->
             val isSelected = currentDestination == destination
             val interactionSource = remember { MutableInteractionSource() }
             val isHovered by interactionSource.collectIsHoveredAsState()

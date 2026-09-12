@@ -50,6 +50,7 @@ import com.melo.desktop.ui.components.NowPlayingOverlay
 import com.melo.desktop.ui.components.Sidebar
 import com.melo.desktop.ui.screens.HomeScreen
 import com.melo.desktop.ui.screens.LibraryScreen
+import com.melo.desktop.ui.screens.ProfileScreen
 import com.melo.desktop.ui.screens.SearchScreen
 import com.melo.desktop.ui.screens.SettingsScreen
 import com.melo.desktop.ui.theme.MeloDesktopTheme
@@ -435,6 +436,14 @@ fun MeloAppContent() {
                                 onPlayTrack = { track -> MeloAppController.playTrack(track) },
                             )
                             NavDestination.SETTINGS -> SettingsScreen(onOpenAuth = { isAuthOpen = true })
+                            NavDestination.PROFILE -> ProfileScreen(
+                                onPlayTrack = { track -> MeloAppController.playTrack(track) },
+                                onOpenFavorites = { currentDestination = NavDestination.FAVORITES },
+                                onOpenPlaylists = { currentDestination = NavDestination.PLAYLISTS },
+                                onOpenHistory = { currentDestination = NavDestination.HISTORY },
+                                onOpenAuth = { isAuthOpen = true },
+                                onBack = { currentDestination = NavDestination.HOME },
+                            )
                         }
                     }
                 }
