@@ -99,7 +99,7 @@ fun GoogleLoginBottomSheet(
                         color = Color.White
                     )
                     Text(
-                        "Для доступа к трекам 18+ и вашей медиатеке",
+                        "Синхронизация медиатеки и плейлистов",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.6f)
                     )
@@ -280,7 +280,7 @@ fun GoogleLoginBottomSheet(
             text = {
                 Column {
                     Text(
-                        "Если страница входа не загружается из-за блокировок, вы можете вставить Cookie из браузера (содержащие SAPISID / __Secure-3PAPISID и SID / LOGIN_INFO):",
+                        "Вставьте Cookie из браузера для ручного входа:",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.7f)
                     )

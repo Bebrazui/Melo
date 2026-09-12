@@ -323,7 +323,7 @@ fun SettingsScreen(
                 color = MeloPrimary,
             )
             Text(
-                text = "Прослушанные треки сохраняются на диск. Следующий трек в очереди предзагружается в фоне для мгновенного переключения (0 мс).",
+                text = "Прослушанные треки сохраняются на диск для быстрого повторного воспроизведения и экономии трафика.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -387,7 +387,7 @@ fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Музыкальный стриминговый плеер с поддержкой YouTube Music, SoundCloud, встроенным обходом DPI (Zapret / ByeDPI) без VPN, синхронизированными текстами и умной персональной волной.",
+                text = "Музыкальный плеер со свободным доступом к трекам, персональной волной рекомендаций и синхронизированными текстами песен.",
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -660,7 +660,7 @@ private fun YouTubeMusicAuthView(onSuccess: () -> Unit) {
             val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
             
             Text(
-                text = "Если страница входа не загружается из-за блокировок, вы можете вставить Cookie из браузера (содержащие SAPISID / __Secure-3PAPISID и SID / LOGIN_INFO):",
+                text = "Вставьте Cookie из браузера для ручного входа:",
                 fontSize = 12.sp,
                 color = Color.White.copy(alpha = 0.65f),
                 lineHeight = 16.sp,
@@ -671,7 +671,7 @@ private fun YouTubeMusicAuthView(onSuccess: () -> Unit) {
             OutlinedTextField(
                 value = cookieText,
                 onValueChange = { cookieText = it },
-                label = { Text("SAPISID=...; SID=...") },
+                label = { Text("Cookie") },
                 maxLines = 4,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),

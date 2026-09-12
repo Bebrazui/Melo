@@ -180,8 +180,8 @@ fun SettingsScreen(
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            if (isYtLoggedIn) "Вход выполнен • треки 18+ разблокированы"
-                            else "Войдите для доступа к трекам 18+ и вашей медиатеке",
+                            if (isYtLoggedIn) "Подключено"
+                            else "Войдите для доступа к вашей медиатеке",
                             style = MaterialTheme.typography.bodySmall,
                             color = if (isYtLoggedIn) cs.primary else Color.White.copy(alpha = 0.65f),
                         )
@@ -683,7 +683,7 @@ fun SettingsScreen(
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            "Автономный обход ограничений без VPN. Можно отключить при нестабильной мобильной сети/в машине.",
+                            "Оптимизация сетевого подключения при нестабильной связи",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.65f),
                         )
