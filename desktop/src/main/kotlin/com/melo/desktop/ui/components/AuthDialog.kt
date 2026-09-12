@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -55,6 +56,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.melo.desktop.auth.BrowserYouTubeAuthHelper
 import com.melo.desktop.auth.DesktopAuthManager
 import com.melo.desktop.auth.DesktopYouTubeAuthManager
 import com.melo.desktop.auth.YouTubeWebLoginWindow
@@ -69,8 +71,11 @@ import java.net.URI
 fun AuthDialog(
     onDismiss: () -> Unit,
 ) {
-    var selectedTab by remember { mutableStateOf(0) } // 0: Почта/Melo, 1: Google, 2: YouTube Music
-    val scope = rememberCoroutineScope()
+    val isYtLoggedIn = DesktopYouTubeAuthManager.isLoggedIn
+    val isMeloLoggedIn = DesktopAuthManager.isLoggedIn
+    val isAnyLoggedIn = isYtLoggedIn || isMeloLoggedIn
+
+    var selectedTab by remember { mutableStateOf(0) } // 0: YouTube Music, 1: Melo / Почта
 
     Box(
         modifier = Modifier
@@ -85,7 +90,7 @@ fun AuthDialog(
     ) {
         Surface(
             modifier = Modifier
-                .width(440.dp)
+                .width(460.dp)
                 .clickable(
                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                     indication = null,
@@ -108,7 +113,7 @@ fun AuthDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = "Вход в аккаунт",
+                        text = if (isAnyLoggedIn) "Мой профиль" else "Вход в аккаунт",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
@@ -120,45 +125,256 @@ fun AuthDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Вкладки выбора метода авторизации
-                TabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = Color(0xFF1E2822),
-                    contentColor = MeloPrimary,
-                    indicator = { tabPositions ->
-                        TabRowDefaults.Indicator(
-                            Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                            color = MeloPrimary,
-                            height = 3.dp,
+                if (isAnyLoggedIn) {
+                    UserProfileView(onDismiss = onDismiss)
+                } else {
+                    // Вкладки выбора метода авторизации для неавторизованных
+                    TabRow(
+                        selectedTabIndex = selectedTab,
+                        containerColor = Color(0xFF1E2822),
+                        contentColor = MeloPrimary,
+                        indicator = { tabPositions ->
+                            TabRowDefaults.Indicator(
+                                Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                                color = MeloPrimary,
+                                height = 3.dp,
+                            )
+                        },
+                        modifier = Modifier.clip(RoundedCornerShape(12.dp)),
+                    ) {
+                        Tab(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            text = { Text("YouTube Music", fontSize = 13.sp, fontWeight = FontWeight.SemiBold) },
                         )
-                    },
-                    modifier = Modifier.clip(RoundedCornerShape(12.dp)),
-                ) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        text = { Text("Melo / Почта", fontSize = 13.sp, fontWeight = FontWeight.SemiBold) },
-                    )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        text = { Text("Google", fontSize = 13.sp, fontWeight = FontWeight.SemiBold) },
-                    )
-                    Tab(
-                        selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 },
-                        text = { Text("YT Music", fontSize = 13.sp, fontWeight = FontWeight.SemiBold) },
-                    )
-                }
+                        Tab(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            text = { Text("Melo / Почта", fontSize = 13.sp, fontWeight = FontWeight.SemiBold) },
+                        )
+                    }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
-                when (selectedTab) {
-                    0 -> EmailAuthView(onSuccess = onDismiss)
-                    1 -> GoogleAuthView(onSuccess = onDismiss)
-                    2 -> YouTubeMusicAuthView(onSuccess = onDismiss)
+                    when (selectedTab) {
+                        0 -> YouTubeMusicAuthView(onSuccess = onDismiss)
+                        1 -> EmailAuthView(onSuccess = onDismiss)
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun UserProfileView(onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val isYtLoggedIn = DesktopYouTubeAuthManager.isLoggedIn
+    val isMeloLoggedIn = DesktopAuthManager.isLoggedIn
+    val userName = DesktopYouTubeAuthManager.accountName ?: DesktopAuthManager.name ?: "Пользователь"
+    val userHandle = DesktopYouTubeAuthManager.accountHandle ?: DesktopAuthManager.email.orEmpty()
+    val userAvatar = DesktopYouTubeAuthManager.accountAvatarUrl
+
+    var isSyncing by remember { mutableStateOf(false) }
+    var syncMessage by remember { mutableStateOf<String?>(null) }
+    var showAddMelo by remember { mutableStateOf(false) }
+    var showAddYt by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Профиль карточка с аватаркой и ником
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.White.copy(alpha = 0.05f))
+                .padding(16.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(MeloPrimary),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!userAvatar.isNullOrBlank()) {
+                    AsyncCoverImage(
+                        url = userAvatar,
+                        modifier = Modifier.size(56.dp),
+                        shape = CircleShape,
+                    )
+                } else {
+                    Text(
+                        text = userName.take(1).uppercase(),
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0A2012),
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = userName,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                )
+                if (userHandle.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = userHandle,
+                        fontSize = 13.sp,
+                        color = MeloPrimary,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        // Блок YouTube Music
+        if (isYtLoggedIn) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.White.copy(alpha = 0.04f))
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+                    .padding(16.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFF0000).copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Rounded.MusicNote,
+                                contentDescription = null,
+                                tint = Color(0xFFFF4E4E),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text("YouTube Music", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            Text("Сессия активна • 18+ треки", fontSize = 11.sp, color = MeloPrimary)
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            DesktopYouTubeAuthManager.logout()
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Text("Отключить", color = Color(0xFFEF4444), fontSize = 11.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Кнопка синхронизации медиатеки
+                Button(
+                    onClick = {
+                        if (isSyncing) return@Button
+                        isSyncing = true
+                        scope.launch {
+                            val res = com.melo.desktop.sync.DesktopYouTubeSyncManager.syncLibrary { msg ->
+                                syncMessage = msg
+                            }
+                            isSyncing = false
+                            syncMessage = if (res.error != null) res.error else "Синхронизировано: ${res.likedCount} лайков, ${res.playlistsCount} плейлистов"
+                        }
+                    },
+                    enabled = !isSyncing,
+                    colors = ButtonDefaults.buttonColors(containerColor = MeloPrimary),
+                    modifier = Modifier.fillMaxWidth().height(40.dp),
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    if (isSyncing) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color(0xFF0A2012))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Синхронизация...", color = Color(0xFF0A2012), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    } else {
+                        Text("Синхронизировать медиатеку", color = Color(0xFF0A2012), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                if (syncMessage != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = syncMessage!!,
+                        fontSize = 12.sp,
+                        color = if (syncMessage!!.contains("Ошибка", ignoreCase = true)) Color(0xFFEF4444) else MeloPrimary,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    )
+                }
+            }
+        } else if (!showAddYt) {
+            OutlinedButton(
+                onClick = { showAddYt = true },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = Color(0xFFFF4E4E), modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Подключить YouTube Music", color = Color.White, fontSize = 13.sp)
+            }
+        } else {
+            YouTubeMusicAuthView(onSuccess = { showAddYt = false })
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Блок Melo Cloud
+        if (isMeloLoggedIn) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.White.copy(alpha = 0.04f))
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                    .padding(14.dp),
+            ) {
+                Column {
+                    Text("Melo Cloud", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                    Text(DesktopAuthManager.email.orEmpty(), fontSize = 11.sp, color = Color.White.copy(alpha = 0.6f))
+                }
+                OutlinedButton(
+                    onClick = {
+                        scope.launch { DesktopAuthManager.logout() }
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    Text("Выйти", color = Color(0xFFEF4444), fontSize = 11.sp)
+                }
+            }
+        } else if (!showAddMelo) {
+            TextButton(
+                onClick = { showAddMelo = true },
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            ) {
+                Text("+ Привязать аккаунт Melo (облако)", color = MeloPrimary, fontSize = 13.sp)
+            }
+        } else {
+            EmailAuthView(onSuccess = { showAddMelo = false })
         }
     }
 }
@@ -369,86 +585,20 @@ private fun GoogleAuthView(onSuccess: () -> Unit) {
 @Composable
 private fun YouTubeMusicAuthView(onSuccess: () -> Unit) {
     var cookieText by remember { mutableStateOf("") }
-    var accountName by remember { mutableStateOf(DesktopYouTubeAuthManager.accountName ?: "") }
+    var accountName by remember { mutableStateOf("") }
     var showManualInput by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                if (DesktopYouTubeAuthManager.isLoggedIn) {
-                    val avatar = DesktopYouTubeAuthManager.accountAvatarUrl
-                    val name = DesktopYouTubeAuthManager.accountName ?: "YouTube Music"
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(MeloPrimary),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (!avatar.isNullOrBlank()) {
-                            AsyncCoverImage(
-                                url = avatar,
-                                modifier = Modifier.size(40.dp),
-                                shape = CircleShape,
-                            )
-                        } else {
-                            Text(
-                                text = name.take(1).uppercase(),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF0A2012),
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                }
-
-                Column {
-                    Text(
-                        text = if (DesktopYouTubeAuthManager.isLoggedIn) (DesktopYouTubeAuthManager.accountName ?: "YouTube Music") else "YouTube Music Сессия",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                    )
-                    Text(
-                        text = if (DesktopYouTubeAuthManager.isLoggedIn) (DesktopYouTubeAuthManager.accountHandle ?: "Подключено") else "Не подключено",
-                        fontSize = 12.sp,
-                        color = if (DesktopYouTubeAuthManager.isLoggedIn) MeloPrimary else Color.White.copy(alpha = 0.5f),
-                    )
-                }
-            }
-
-            if (DesktopYouTubeAuthManager.isLoggedIn) {
-                OutlinedButton(
-                    onClick = {
-                        DesktopYouTubeAuthManager.logout()
-                    },
-                    shape = RoundedCornerShape(10.dp),
-                ) {
-                    Text("Отключить", color = Color(0xFFEF4444), fontSize = 12.sp)
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
         Text(
-            text = "Авторизуйтесь в своем YouTube Music аккаунте, чтобы синхронизировать плейлисты, медиатеку и рекомендации:",
+            text = "Войдите в свой YouTube Music аккаунт, чтобы синхронизировать плейлисты, медиатеку и рекомендации:",
             fontSize = 13.sp,
             color = Color.White.copy(alpha = 0.75f),
             lineHeight = 18.sp,
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(18.dp))
 
-        // Основная кнопка: Запуск окна веб-авторизации 1 в 1 как в мобильной версии
+        // Основная кнопка: Запуск окна веб-авторизации
         Button(
             onClick = {
                 YouTubeWebLoginWindow.open(
@@ -474,6 +624,25 @@ private fun YouTubeMusicAuthView(onSuccess: () -> Unit) {
             )
         }
 
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Вторая кнопка: Вход через внешний браузер
+        OutlinedButton(
+            onClick = {
+                BrowserYouTubeAuthHelper.openBrowserLogin(
+                    onSuccess = { onSuccess() }
+                )
+            },
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+            shape = RoundedCornerShape(12.dp),
+        ) {
+            Text(
+                "Войти через браузер по умолчанию",
+                color = Color.White.copy(alpha = 0.85f),
+                fontSize = 13.sp,
+            )
+        }
+
         Spacer(modifier = Modifier.height(12.dp))
 
         TextButton(
@@ -481,7 +650,7 @@ private fun YouTubeMusicAuthView(onSuccess: () -> Unit) {
             modifier = Modifier.align(Alignment.CenterHorizontally),
         ) {
             Text(
-                if (showManualInput) "Скрыть ручной ввод" else "Или ввести Cookie вручную",
+                if (showManualInput) "Скрыть ручной ввод" else "Или ввести Cookie вручную...",
                 fontSize = 12.sp,
                 color = Color.White.copy(alpha = 0.6f),
             )
@@ -530,7 +699,7 @@ private fun YouTubeMusicAuthView(onSuccess: () -> Unit) {
                             cookies = cookieText,
                             name = accountName.trim().ifBlank { "YouTube Music" },
                         )
-                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                        CoroutineScope(Dispatchers.IO).launch {
                             DesktopYouTubeAuthManager.fetchUserProfile()
                         }
                         onSuccess()
