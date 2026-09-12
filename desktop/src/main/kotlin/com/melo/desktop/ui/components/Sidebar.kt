@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -72,12 +73,21 @@ fun Sidebar(
             .background(MeloDarkSurface)
             .padding(horizontal = 16.dp, vertical = 20.dp),
     ) {
-        // Фирменный логотип-надпись Melo
-        Box(
+        // ── Шапка: Логотип Melo и аватарка профиля справа ───────────────────
+        val isMeloLoggedIn = com.melo.desktop.auth.DesktopAuthManager.isLoggedIn
+        val isYtLoggedIn = com.melo.desktop.auth.DesktopYouTubeAuthManager.isLoggedIn
+        val isAnyLoggedIn = isMeloLoggedIn || isYtLoggedIn
+        val userName = com.melo.desktop.auth.DesktopAuthManager.name 
+            ?: com.melo.desktop.auth.DesktopYouTubeAuthManager.accountName 
+            ?: "Профиль"
+        val userAvatar = com.melo.desktop.auth.DesktopYouTubeAuthManager.accountAvatarUrl
+
+        Row(
             modifier = Modifier
-                .padding(horizontal = 12.dp, vertical = 12.dp)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
                 .fillMaxWidth(),
-            contentAlignment = Alignment.CenterStart,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             val logoBitmap = remember {
                 val stream = Thread.currentThread().contextClassLoader.getResourceAsStream("melo_wordmark_white.png")
@@ -87,10 +97,61 @@ fun Sidebar(
                 androidx.compose.foundation.Image(
                     bitmap = logoBitmap,
                     contentDescription = "Melo",
-                    modifier = Modifier.height(30.dp),
+                    modifier = Modifier.height(28.dp),
                     contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                     filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
                 )
+            } else {
+                Text(
+                    text = "Melo",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+            }
+
+            // Аватарка справа от текста Melo
+            val avatarInteractionSource = remember { MutableInteractionSource() }
+            val isAvatarHovered by avatarInteractionSource.collectIsHoveredAsState()
+            val avatarScale by animateFloatAsState(if (isAvatarHovered) 1.08f else 1f, label = "avatarScale")
+
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .graphicsLayer {
+                        scaleX = avatarScale
+                        scaleY = avatarScale
+                    }
+                    .clip(CircleShape)
+                    .background(if (isAnyLoggedIn) MeloPrimary else Color.White.copy(alpha = 0.12f))
+                    .clickable(
+                        interactionSource = avatarInteractionSource,
+                        indication = null,
+                        onClick = { onOpenAuth?.invoke() }
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!userAvatar.isNullOrBlank()) {
+                    AsyncCoverImage(
+                        url = userAvatar,
+                        modifier = Modifier.size(34.dp),
+                        shape = CircleShape,
+                    )
+                } else if (isAnyLoggedIn) {
+                    Text(
+                        text = userName.take(1).uppercase(),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0A2012),
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Rounded.Person,
+                        contentDescription = "Вход в аккаунт",
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
         }
 
@@ -241,75 +302,6 @@ fun Sidebar(
                         )
                     }
                 }
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-        }
-
-        // ── Профиль / Вход в аккаунт ────────────────────────────────────────
-        val isMeloLoggedIn = com.melo.desktop.auth.DesktopAuthManager.isLoggedIn
-        val isYtLoggedIn = com.melo.desktop.auth.DesktopYouTubeAuthManager.isLoggedIn
-        val userName = com.melo.desktop.auth.DesktopAuthManager.name 
-            ?: com.melo.desktop.auth.DesktopYouTubeAuthManager.accountName 
-            ?: "Войти в аккаунт"
-        val userAvatar = com.melo.desktop.auth.DesktopYouTubeAuthManager.accountAvatarUrl
-        val userHandle = com.melo.desktop.auth.DesktopYouTubeAuthManager.accountHandle
-        val userSubtitle = when {
-            isMeloLoggedIn && isYtLoggedIn -> userHandle ?: "Melo & YouTube Music"
-            isMeloLoggedIn -> "Melo Аккаунт"
-            isYtLoggedIn -> userHandle ?: "YouTube Music"
-            else -> "Google, Почта, YT Music"
-        }
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color.White.copy(alpha = 0.05f))
-                .clickable { onOpenAuth?.invoke() }
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(if (isMeloLoggedIn || isYtLoggedIn) MeloPrimary else Color.White.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (!userAvatar.isNullOrBlank()) {
-                    AsyncCoverImage(
-                        url = userAvatar,
-                        modifier = Modifier.size(34.dp),
-                        shape = CircleShape,
-                    )
-                } else {
-                    Text(
-                        text = userName.take(1).uppercase(),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isMeloLoggedIn || isYtLoggedIn) Color(0xFF0A2012) else Color.White,
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = userName,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = userSubtitle,
-                    fontSize = 11.sp,
-                    color = if (isMeloLoggedIn || isYtLoggedIn) MeloPrimary else Color.White.copy(alpha = 0.5f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
         }
     }
