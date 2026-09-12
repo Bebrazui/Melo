@@ -205,89 +205,140 @@ object DesktopYouTubeSyncManager {
     }
 
     private fun parseTracksFromJson(root: JSONObject, out: MutableList<TrackItem>) {
-        val rootStr = root.toString()
-        val marker = "\"musicResponsiveListItemRenderer\":"
-        var idx = 0
-        while (true) {
-            val start = rootStr.indexOf(marker, idx)
-            if (start == -1) break
-            val sub = rootStr.substring(start + marker.length)
-            val chunk = sub.take(4000)
-
-            val videoIdMatch = Regex(""""videoId":"([a-zA-Z0-9_-]{11})"""").find(chunk)
-            if (videoIdMatch != null) {
-                val videoId = videoIdMatch.groupValues[1]
-
-                val colMarker = "\"musicResponsiveListItemFlexColumnRenderer\":"
-                val cols = mutableListOf<String>()
-                var colIdx = 0
-                while (true) {
-                    val cStart = chunk.indexOf(colMarker, colIdx)
-                    if (cStart == -1) break
-                    val cSub = chunk.substring(cStart + colMarker.length).take(1500)
-                    cols.add(cSub)
-                    colIdx = cStart + colMarker.length
-                }
-
-                var trackTitle: String? = null
-                var trackAuthor: String? = null
-
-                if (cols.isNotEmpty()) {
-                    val titleRuns = Regex(""""text":"([^"]+)"""").findAll(cols[0]).map { it.groupValues[1] }.toList()
-                    trackTitle = titleRuns.firstOrNull { it.isNotBlank() && it != "•" }
-                }
-
-                if (cols.size > 1) {
-                    val authorRuns = Regex(""""text":"([^"]+)"""").findAll(cols[1]).map { it.groupValues[1] }.toList()
-                    trackAuthor = authorRuns.firstOrNull { text ->
-                        text.isNotBlank() &&
-                                text != "•" &&
-                                text != "." &&
-                                text != trackTitle &&
-                                text != "YouTube Music" &&
-                                !text.matches(Regex("""\d+:\d+""")) &&
-                                !text.contains("просмотр", ignoreCase = true)
+        fun searchRenderers(obj: Any) {
+            when (obj) {
+                is JSONObject -> {
+                    if (obj.has("musicResponsiveListItemRenderer")) {
+                        val item = obj.optJSONObject("musicResponsiveListItemRenderer")
+                        if (item != null) parseSingleTrack(item, out)
+                    } else {
+                        val keys = obj.keys()
+                        while (keys.hasNext()) {
+                            val k = keys.next()
+                            searchRenderers(obj.get(k))
+                        }
                     }
                 }
-
-                val title = trackTitle ?: "Трек"
-                val author = trackAuthor ?: "Неизвестный исполнитель"
-                val url = "https://www.youtube.com/watch?v=$videoId"
-
-                if (out.none { it.url == url }) {
-                    out.add(
-                        TrackItem(
-                            url = url,
-                            title = title,
-                            uploader = author,
-                            durationSeconds = 0,
-                            thumbnailUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
-                        )
-                    )
+                is org.json.JSONArray -> {
+                    for (i in 0 until obj.length()) {
+                        searchRenderers(obj.get(i))
+                    }
                 }
             }
-            idx = start + marker.length
         }
 
-        // Резервный фолбэк как в мобильной версии: если musicResponsiveListItemRenderer не нашел треки,
-        // но в JSON есть videoId
-        if (out.isEmpty()) {
-            val videoIdRegex = Regex(""""videoId":"([a-zA-Z0-9_-]{11})"""")
-            val ids = videoIdRegex.findAll(rootStr).map { it.groupValues[1] }.distinct().toList()
-            ids.take(100).forEach { vid ->
-                val trackUrl = "https://www.youtube.com/watch?v=$vid"
-                if (out.none { it.url == trackUrl }) {
-                    out.add(
-                        TrackItem(
-                            url = trackUrl,
-                            title = "Трек YouTube Music",
-                            uploader = "YouTube Music",
-                            durationSeconds = 0,
-                            thumbnailUrl = "https://i.ytimg.com/vi/$vid/hqdefault.jpg",
-                        )
-                    )
+        searchRenderers(root)
+    }
+
+    private fun parseSingleTrack(item: JSONObject, out: MutableList<TrackItem>) {
+        // 1. videoId
+        var videoId: String? = null
+        if (item.has("playlistItemData")) {
+            videoId = item.optJSONObject("playlistItemData")?.optString("videoId")?.takeIf { it.isNotBlank() }
+        }
+        if (videoId.isNullOrBlank()) {
+            videoId = item.optJSONObject("overlay")
+                ?.optJSONObject("musicItemThumbnailOverlayRenderer")
+                ?.optJSONObject("content")
+                ?.optJSONObject("musicPlayButtonRenderer")
+                ?.optJSONObject("playNavigationEndpoint")
+                ?.optJSONObject("watchEndpoint")
+                ?.optString("videoId")?.takeIf { it.isNotBlank() }
+        }
+        if (videoId.isNullOrBlank()) {
+            videoId = item.optJSONObject("navigationEndpoint")
+                ?.optJSONObject("watchEndpoint")
+                ?.optString("videoId")?.takeIf { it.isNotBlank() }
+        }
+
+        // Если это кнопка "Перемешать все" или нет videoId — пропускаем
+        if (videoId.isNullOrBlank()) return
+
+        // 2. Название трека и исполнитель
+        var title: String? = null
+        var author: String? = null
+        var durationSeconds = 0
+
+        val flexColumns = item.optJSONArray("flexColumns")
+        if (flexColumns != null && flexColumns.length() > 0) {
+            // Колонка 0 — название трека
+            val col0Runs = flexColumns.optJSONObject(0)
+                ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                ?.optJSONObject("text")
+                ?.optJSONArray("runs")
+            if (col0Runs != null && col0Runs.length() > 0) {
+                title = col0Runs.optJSONObject(0)?.optString("text")?.takeIf { it.isNotBlank() && it != "•" }
+            }
+
+            // Колонка 1 — исполнитель и метаданные
+            if (flexColumns.length() > 1) {
+                val col1Runs = flexColumns.optJSONObject(1)
+                    ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                    ?.optJSONObject("text")
+                    ?.optJSONArray("runs")
+                if (col1Runs != null) {
+                    for (c in 0 until col1Runs.length()) {
+                        val t = col1Runs.optJSONObject(c)?.optString("text")?.trim().orEmpty()
+                        if (t.isNotBlank() && t != "•" && t != "." && t != "YouTube Music" && !t.contains("просмотр", ignoreCase = true)) {
+                            if (t.matches(Regex("""\d+:\d+"""))) {
+                                val parts = t.split(":")
+                                if (parts.size == 2) {
+                                    durationSeconds = (parts[0].toIntOrNull() ?: 0) * 60 + (parts[1].toIntOrNull() ?: 0)
+                                }
+                            } else if (author == null) {
+                                author = t
+                            }
+                        }
+                    }
                 }
             }
+        }
+
+        // Резервный источник: accessibilityPlayData ("Title - Artist - Duration")
+        if (title.isNullOrBlank() || author.isNullOrBlank()) {
+            val label = item.optJSONObject("overlay")
+                ?.optJSONObject("musicItemThumbnailOverlayRenderer")
+                ?.optJSONObject("content")
+                ?.optJSONObject("musicPlayButtonRenderer")
+                ?.optJSONObject("accessibilityPlayData")
+                ?.optJSONObject("accessibilityData")
+                ?.optString("label")
+            if (!label.isNullOrBlank()) {
+                val parts = label.split(" - ")
+                if (parts.isNotEmpty() && title.isNullOrBlank()) {
+                    title = parts[0].trim()
+                }
+                if (parts.size > 1 && author.isNullOrBlank()) {
+                    author = parts[1].trim()
+                }
+            }
+        }
+
+        // Обложка трека
+        var thumb = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+        val thumbnails = item.optJSONObject("thumbnail")
+            ?.optJSONObject("musicThumbnailRenderer")
+            ?.optJSONObject("thumbnail")
+            ?.optJSONArray("thumbnails")
+        if (thumbnails != null && thumbnails.length() > 0) {
+            val lastUrl = thumbnails.optJSONObject(thumbnails.length() - 1)?.optString("url")
+            if (!lastUrl.isNullOrBlank()) thumb = lastUrl
+        }
+
+        val finalTitle = title?.takeIf { it.isNotBlank() } ?: "Трек"
+        val finalAuthor = author?.takeIf { it.isNotBlank() } ?: "Исполнитель"
+        val trackUrl = "https://www.youtube.com/watch?v=$videoId"
+
+        if (out.none { it.url == trackUrl }) {
+            out.add(
+                TrackItem(
+                    url = trackUrl,
+                    title = finalTitle,
+                    uploader = finalAuthor,
+                    durationSeconds = durationSeconds.toLong(),
+                    thumbnailUrl = thumb,
+                )
+            )
         }
     }
 
