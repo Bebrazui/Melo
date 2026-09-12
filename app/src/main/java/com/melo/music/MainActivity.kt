@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
         )
 
         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-            kotlinx.coroutines.delay(2500)
+            kotlinx.coroutines.delay(2000)
             com.melo.music.update.UpdateManager.checkForUpdates(this@MainActivity)
             if (com.melo.music.auth.YouTubeAccountManager.isLoggedIn) {
                 runCatching {
@@ -97,6 +97,17 @@ class MainActivity : ComponentActivity() {
                         audioSessionIdProvider = { PlaybackService.audioSessionId },
                         showGoogle = BuildConfig.FLAVOR == "google",
                     )
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (com.melo.music.auth.YouTubeAccountManager.isLoggedIn) {
+            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                runCatching {
+                    com.melo.music.sync.YouTubeSyncManager.syncLibrary(this@MainActivity)
                 }
             }
         }

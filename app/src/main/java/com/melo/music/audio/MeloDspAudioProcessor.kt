@@ -45,6 +45,18 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
     var eqEnabled: Boolean = false
     private val eqBands = Array(5) { BiquadPeakFilter() }
 
+    // ── Crystal Audio™ (Super-Resolution Harmonic Exciter) ──
+    @Volatile
+    var crystalEnabled: Boolean = false
+    @Volatile
+    var crystalIntensity: Float = 0.65f // 0.0f .. 1.0f
+
+    // Фильтры полосового захвата (7.5 - 14.5 кГц) и High-Pass (14 кГц) для гармоник
+    private val crystalBandL = BiquadBandPassFilter()
+    private val crystalBandR = BiquadBandPassFilter()
+    private val crystalHighPassL = BiquadHighPassFilter()
+    private val crystalHighPassR = BiquadHighPassFilter()
+
     // DSP буферы для реверберации и стерео-расширителя
     private var sampleRate: Int = 44100
     private val delayBufferLeft = FloatArray(4410)
@@ -79,7 +91,17 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         }
         sampleRate = inputAudioFormat.sampleRate.coerceAtLeast(8000)
         initEqFilters(sampleRate)
+        initCrystalFilters(sampleRate)
         return inputAudioFormat
+    }
+
+    private fun initCrystalFilters(sr: Int) {
+        val centerFreq = (6500f).coerceAtMost(sr * 0.40f)
+        val hpFreq = (9500f).coerceAtMost(sr * 0.45f)
+        crystalBandL.set(centerFreq, 0.9f, sr.toFloat())
+        crystalBandR.set(centerFreq, 0.9f, sr.toFloat())
+        crystalHighPassL.set(hpFreq, 0.707f, sr.toFloat())
+        crystalHighPassR.set(hpFreq, 0.707f, sr.toFloat())
     }
 
     override fun isActive(): Boolean {
@@ -214,13 +236,37 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 right = right * (1f - reverbWet * 0.30f) + revOut * reverbWet
             }
 
-            // 4. Усиление громкости (Gain Booster)
+            // 4. Crystal Audio™ Super-Resolution (Психоакустический синтез утраченных ВЧ)
+            if (crystalEnabled) {
+                // Выделяем полосу частот 5 - 9 кГц как фундаментальный источник гармоник
+                val srcL = crystalBandL.process(left)
+                val srcR = crystalBandR.process(right)
+
+                // Нормализация диапазона (-1..1) с лёгким предусилением для уверенного возбуждения нелинейности
+                val normSrcL = (srcL / 24000f).coerceIn(-1.5f, 1.5f)
+                val normSrcR = (srcR / 24000f).coerceIn(-1.5f, 1.5f)
+
+                // Генерация гармоник (четные обертоны x^2 придают шелковистый блеск, нечетные x^3 - звонкость и текстуру)
+                val harmL = (0.75f * normSrcL * normSrcL - 0.40f * normSrcL * normSrcL * normSrcL) * 28000f
+                val harmR = (0.75f * normSrcR * normSrcR - 0.40f * normSrcR * normSrcR * normSrcR) * 28000f
+
+                // Отсекаем всё ниже 9.5 кГц High-Pass фильтром, оставляя чистый кристальный ВЧ-спектр (10 - 20+ кГц)
+                val crystalL = crystalHighPassL.process(harmL)
+                val crystalR = crystalHighPassR.process(harmR)
+
+                // Подмешиваем к основному сигналу с учётом интенсивности
+                val mixGain = crystalIntensity * 1.35f
+                left += crystalL * mixGain
+                right += crystalR * mixGain
+            }
+
+            // 5. Усиление громкости (Gain Booster)
             if (gain != 1.0f) {
                 left *= gain
                 right *= gain
             }
 
-            // 5. Мягкий лимитер (Soft-Clipping / Tanh), предотвращающий перегруз и хрипы на пиках
+            // 6. Мягкий лимитер (Soft-Clipping / Tanh), предотвращающий перегруз и хрипы на пиках
             val normL = left / 32768f
             val normR = right / 32768f
             val limitedL = if (abs(normL) > 0.95f) sign(normL) * (0.95f + 0.05f * tanh((abs(normL) - 0.95f) / 0.5f)) else normL
@@ -248,6 +294,8 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         sideAirStore = 0f
         comb1.reset(); comb2.reset(); comb3.reset(); comb4.reset()
         allpass1.reset(); allpass2.reset()
+        crystalBandL.reset(); crystalBandR.reset()
+        crystalHighPassL.reset(); crystalHighPassR.reset()
         bassLpStore = 0f
         bassEnergyAccum = 0f
         bassSampleCount = 0
@@ -316,6 +364,70 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
             b2 = (1.0f - alpha * a) / a0
             a1 = (-2.0f * cosW) / a0
             a2 = (1.0f - alpha / a) / a0
+        }
+
+        fun process(x: Float): Float {
+            val y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+            x2 = x1; x1 = x
+            y2 = y1; y1 = y
+            return if (y.isNaN()) 0f else y
+        }
+
+        fun reset() {
+            x1 = 0f; x2 = 0f; y1 = 0f; y2 = 0f
+        }
+    }
+
+    /**
+     * Полосовой фильтр 2-го порядка (Constant 0 dB peak gain BPF)
+     */
+    private class BiquadBandPassFilter {
+        var b0 = 0f; var b1 = 0f; var b2 = 0f; var a1 = 0f; var a2 = 0f
+        var x1 = 0f; var x2 = 0f; var y1 = 0f; var y2 = 0f
+
+        fun set(freq: Float, q: Float, sr: Float) {
+            val w0 = (2.0 * Math.PI * freq / sr).toFloat()
+            val alpha = (sin(w0.toDouble()) / (2.0 * q)).toFloat()
+            val cosW = cos(w0.toDouble()).toFloat()
+
+            val a0 = 1.0f + alpha
+            b0 = alpha / a0
+            b1 = 0f
+            b2 = -alpha / a0
+            a1 = (-2.0f * cosW) / a0
+            a2 = (1.0f - alpha) / a0
+        }
+
+        fun process(x: Float): Float {
+            val y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+            x2 = x1; x1 = x
+            y2 = y1; y1 = y
+            return if (y.isNaN()) 0f else y
+        }
+
+        fun reset() {
+            x1 = 0f; x2 = 0f; y1 = 0f; y2 = 0f
+        }
+    }
+
+    /**
+     * Фильтр высоких частот 2-го порядка (HPF)
+     */
+    private class BiquadHighPassFilter {
+        var b0 = 1f; var b1 = 0f; var b2 = 0f; var a1 = 0f; var a2 = 0f
+        var x1 = 0f; var x2 = 0f; var y1 = 0f; var y2 = 0f
+
+        fun set(freq: Float, q: Float, sr: Float) {
+            val w0 = (2.0 * Math.PI * freq / sr).toFloat()
+            val alpha = (sin(w0.toDouble()) / (2.0 * q)).toFloat()
+            val cosW = cos(w0.toDouble()).toFloat()
+
+            val a0 = 1.0f + alpha
+            b0 = ((1.0f + cosW) / 2.0f) / a0
+            b1 = (-(1.0f + cosW)) / a0
+            b2 = ((1.0f + cosW) / 2.0f) / a0
+            a1 = (-2.0f * cosW) / a0
+            a2 = (1.0f - alpha) / a0
         }
 
         fun process(x: Float): Float {

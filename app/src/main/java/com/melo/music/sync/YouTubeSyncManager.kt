@@ -100,7 +100,7 @@ object YouTubeSyncManager {
 
     private fun fetchLikedMusic(context: Context): List<TrackItem> {
         val tracks = mutableListOf<TrackItem>()
-        // 1. Попытка через NewPipe плейлист LM / LL (Likes)
+        // 1. Сначала пробуем NewPipe LM
         val viaNewPipe = runCatching {
             val res = kotlinx.coroutines.runBlocking {
                 NewPipeResolver.importPlaylist(context, "https://music.youtube.com/playlist?list=LM")
@@ -108,7 +108,7 @@ object YouTubeSyncManager {
             res.second
         }.getOrNull()
 
-        if (!viaNewPipe.isNullOrEmpty()) {
+        if (!viaNewPipe.isNullOrEmpty() && viaNewPipe.none { it.title == "Трек" || it.title == "Трек YouTube Music" }) {
             MeloLog.d("YouTubeSync", "Liked Music успешно получены через NewPipe: ${viaNewPipe.size}")
             return viaNewPipe
         }
@@ -118,27 +118,65 @@ object YouTubeSyncManager {
             put("browseId", "VLLM")
         }
         val responseJson = postInnerTube(BROWSE_URL, bodyJson) ?: return emptyList()
-        parseTracksFromJson(responseJson, tracks)
+        parseTracksFromJson(context, responseJson, tracks)
         return tracks
     }
 
     private fun fetchUserPlaylists(context: Context): List<Pair<String, String>> {
         val playlists = mutableListOf<Pair<String, String>>()
-        val bodyJson = createInnerTubeContext().apply {
-            put("browseId", "FEmusic_liked_playlists")
-        }
-        val responseJson = postInnerTube(BROWSE_URL, bodyJson) ?: return emptyList()
+        val browseIdsToTry = listOf(
+            "FEmusic_liked_playlists",
+            "FEmusic_library_privately_owned_playlists",
+            "FEmusic_library_landing"
+        )
 
-        val jsonStr = responseJson.toString()
-        MeloLog.d("YouTubeSync", "Playlists raw json length: ${jsonStr.length}, sample: ${jsonStr.take(300)}")
-        val regex = Regex(""""title":\{"runs":\[\{"text":"([^"]+)"\}\]\}.*?"browseId":"(VLPL[^"]+|FEmusic_library_privately_owned_playlist[^"]+|PL[^"]+)"""")
-        regex.findAll(jsonStr).forEach { match ->
-            val title = match.groupValues[1]
-            val browseId = match.groupValues[2]
-            if (playlists.none { it.second == browseId }) {
-                playlists.add(title to browseId)
+        for (bId in browseIdsToTry) {
+            val bodyJson = createInnerTubeContext().apply {
+                put("browseId", bId)
+            }
+            val responseJson = postInnerTube(BROWSE_URL, bodyJson) ?: continue
+            val jsonStr = responseJson.toString()
+            MeloLog.d("YouTubeSync", "Playlists ($bId) raw json length: ${jsonStr.length}")
+
+            // 1. Парсинг через musicTwoRowItemRenderer
+            val twoRowMarker = "\"musicTwoRowItemRenderer\":"
+            var idx = 0
+            while (true) {
+                val start = jsonStr.indexOf(twoRowMarker, idx)
+                if (start == -1) break
+                val chunk = jsonStr.substring(start + twoRowMarker.length).take(3000)
+
+                val browseIdMatch = Regex(""""browseId":"(VLPL[a-zA-Z0-9_-]+|PL[a-zA-Z0-9_-]+|FEmusic_library_privately_owned_playlist[a-zA-Z0-9_-]*)"""").find(chunk)
+                val titleMatch = Regex(""""title":\{"runs":\[\{"text":"([^"]+)"""").find(chunk)
+                    ?: Regex(""""text":"([^"]+)"""").find(chunk)
+
+                if (browseIdMatch != null && titleMatch != null) {
+                    val rawBrowseId = browseIdMatch.groupValues[1]
+                    val title = titleMatch.groupValues[1]
+                    if (title != "Плейлист" && title != "Альбом" && title.isNotBlank()) {
+                        val fixedBrowseId = if (rawBrowseId.startsWith("VL")) rawBrowseId else "VL$rawBrowseId"
+                        if (playlists.none { it.second == fixedBrowseId }) {
+                            playlists.add(title to fixedBrowseId)
+                            MeloLog.d("YouTubeSync", "Найден плейлист: «$title» ($fixedBrowseId)")
+                        }
+                    }
+                }
+                idx = start + twoRowMarker.length
+            }
+
+            // 2. Дополнительный regex поиск любых плейлистов VLPL / PL
+            val regex = Regex(""""title":\{"runs":\[\{"text":"([^"]+)"\}\]\}.*?"browseId":"(VLPL[a-zA-Z0-9_-]+|PL[a-zA-Z0-9_-]+)"""")
+            regex.findAll(jsonStr).forEach { match ->
+                val title = match.groupValues[1]
+                val browseId = match.groupValues[2]
+                val fixedBrowseId = if (browseId.startsWith("VL")) browseId else "VL$browseId"
+                if (playlists.none { it.second == fixedBrowseId }) {
+                    playlists.add(title to fixedBrowseId)
+                    MeloLog.d("YouTubeSync", "Найден плейлист (regex): «$title» ($fixedBrowseId)")
+                }
             }
         }
+
         return playlists
     }
 
@@ -152,7 +190,7 @@ object YouTubeSyncManager {
             res.second
         }.getOrNull()
 
-        if (!viaNewPipe.isNullOrEmpty()) {
+        if (!viaNewPipe.isNullOrEmpty() && viaNewPipe.none { it.title == "Трек" || it.title == "Трек YouTube Music" }) {
             return viaNewPipe
         }
 
@@ -160,49 +198,86 @@ object YouTubeSyncManager {
             put("browseId", browseId)
         }
         val responseJson = postInnerTube(BROWSE_URL, bodyJson) ?: return emptyList()
-        parseTracksFromJson(responseJson, tracks)
+        parseTracksFromJson(context, responseJson, tracks)
         return tracks
     }
 
-    private fun parseTracksFromJson(root: JSONObject, out: MutableList<TrackItem>) {
+    private fun parseTracksFromJson(context: Context, root: JSONObject, out: MutableList<TrackItem>) {
         val rootStr = root.toString()
-        // Ищем каждый блок musicResponsiveListItemRenderer
         val marker = "\"musicResponsiveListItemRenderer\":"
         var idx = 0
         while (true) {
             val start = rootStr.indexOf(marker, idx)
             if (start == -1) break
             val sub = rootStr.substring(start + marker.length)
-            val chunk = sub.take(2000)
+            val chunk = sub.take(4000)
 
             val videoIdMatch = Regex(""""videoId":"([a-zA-Z0-9_-]{11})"""").find(chunk)
             if (videoIdMatch != null) {
                 val videoId = videoIdMatch.groupValues[1]
 
-                // Название трека: первое поле text в flexColumns[0]
-                val titleMatch = Regex(""""text":"([^"]+)"""").find(chunk)
-                val rawTitle = titleMatch?.groupValues?.get(1) ?: "Трек"
+                // Извлекаем все flexColumns
+                val colMarker = "\"musicResponsiveListItemFlexColumnRenderer\":"
+                val cols = mutableListOf<String>()
+                var colIdx = 0
+                while (true) {
+                    val cStart = chunk.indexOf(colMarker, colIdx)
+                    if (cStart == -1) break
+                    val cSub = chunk.substring(cStart + colMarker.length).take(1500)
+                    cols.add(cSub)
+                    colIdx = cStart + colMarker.length
+                }
 
-                // Исполнитель: обычно в flexColumns[1] или последующих text
-                val allTexts = Regex(""""text":"([^"]+)"""").findAll(chunk)
-                    .map { it.groupValues[1] }
-                    .filter { text ->
-                        text != rawTitle &&
+                var trackTitle: String? = null
+                var trackAuthor: String? = null
+
+                if (cols.isNotEmpty()) {
+                    // Первая колонка — ВСЕГДА название песни
+                    val titleRuns = Regex(""""text":"([^"]+)"""").findAll(cols[0]).map { it.groupValues[1] }.toList()
+                    trackTitle = titleRuns.firstOrNull { it.isNotBlank() && it != "•" }
+                }
+
+                if (cols.size > 1) {
+                    // Вторая колонка — исполнитель, альбом, просмотры, время
+                    val authorRuns = Regex(""""text":"([^"]+)"""").findAll(cols[1]).map { it.groupValues[1] }.toList()
+                    trackAuthor = authorRuns.firstOrNull { text ->
+                        text.isNotBlank() &&
                             text != "•" &&
+                            text != "." &&
+                            text != trackTitle &&
+                            text != "YouTube Music" &&
+                            !text.matches(Regex("""\d+:\d+""")) &&
+                            !text.contains("просмотр", ignoreCase = true) &&
+                            !text.contains("воспроизведен", ignoreCase = true) &&
+                            !text.contains("views", ignoreCase = true) &&
+                            !text.contains("plays", ignoreCase = true)
+                    }
+                }
+
+                // Фолбэк на общий поиск runs
+                if (trackTitle.isNullOrBlank()) {
+                    val allTexts = Regex(""""text":"([^"]+)"""").findAll(chunk).map { it.groupValues[1] }.toList()
+                    val filtered = allTexts.filter { text ->
+                        text.isNotBlank() &&
+                            text != "•" &&
+                            text != "." &&
                             text != "YouTube Music" &&
                             !text.matches(Regex("""\d+:\d+""")) &&
                             !text.contains("просмотр", ignoreCase = true) &&
                             !text.contains("воспроизведен", ignoreCase = true)
                     }
-                    .toList()
+                    trackTitle = filtered.firstOrNull() ?: "Трек"
+                    trackAuthor = filtered.drop(1).firstOrNull()
+                }
 
-                val author = allTexts.firstOrNull()?.takeIf { it.isNotBlank() }
+                val finalTitle = trackTitle ?: "Трек"
+                val finalAuthor = trackAuthor?.takeIf { it.isNotBlank() && it != "." && it != "•" }
 
                 if (out.none { it.url == "https://music.youtube.com/watch?v=$videoId" }) {
                     out.add(
                         TrackItem(
-                            title = rawTitle,
-                            uploader = author,
+                            title = finalTitle,
+                            uploader = finalAuthor,
                             url = "https://music.youtube.com/watch?v=$videoId",
                             durationSeconds = 0,
                             thumbnailUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
@@ -215,17 +290,45 @@ object YouTubeSyncManager {
             idx = start + marker.length
         }
 
+        // Если InnerTube отдал только videoId или названия все еще "Трек",
+        // подтягиваем реальные метаданные через NewPipe для первых треков или недостающих
+        for (i in out.indices) {
+            val item = out[i]
+            if (item.title == "Трек" || item.title == "Трек YouTube Music" || item.uploader.isNullOrBlank()) {
+                val resolvedMeta = runCatching {
+                    kotlinx.coroutines.runBlocking {
+                        NewPipeResolver.resolveSingleTrack(context, item.url)
+                    }
+                }.getOrNull()
+                if (resolvedMeta != null && resolvedMeta.title.isNotBlank()) {
+                    out[i] = item.copy(
+                        title = resolvedMeta.title,
+                        uploader = resolvedMeta.uploader ?: item.uploader,
+                        durationSeconds = resolvedMeta.durationSeconds,
+                        thumbnailUrl = resolvedMeta.thumbnailUrl ?: item.thumbnailUrl
+                    )
+                }
+            }
+        }
+
         if (out.isEmpty()) {
             val videoIdRegex = Regex(""""videoId":"([a-zA-Z0-9_-]{11})"""")
             val ids = videoIdRegex.findAll(rootStr).map { it.groupValues[1] }.distinct().toList()
-            ids.forEach { vid ->
+            ids.take(50).forEach { vid ->
+                val trackUrl = "https://music.youtube.com/watch?v=$vid"
+                val meta = runCatching {
+                    kotlinx.coroutines.runBlocking {
+                        NewPipeResolver.resolveSingleTrack(context, trackUrl)
+                    }
+                }.getOrNull()
+
                 out.add(
                     TrackItem(
-                        title = "Трек YouTube Music",
-                        uploader = null,
-                        url = "https://music.youtube.com/watch?v=$vid",
-                        durationSeconds = 0,
-                        thumbnailUrl = "https://i.ytimg.com/vi/$vid/hqdefault.jpg",
+                        title = meta?.title ?: "Трек YouTube Music",
+                        uploader = meta?.uploader,
+                        url = trackUrl,
+                        durationSeconds = meta?.durationSeconds ?: 0,
+                        thumbnailUrl = meta?.thumbnailUrl ?: "https://i.ytimg.com/vi/$vid/hqdefault.jpg",
                         source = Source.YOUTUBE_MUSIC,
                         kind = ItemKind.TRACK
                     )

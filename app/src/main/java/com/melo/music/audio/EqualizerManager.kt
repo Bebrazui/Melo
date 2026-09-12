@@ -22,6 +22,8 @@ object EqualizerManager {
     private const val KEY_REVERB = "reverb_preset"
     private const val KEY_SPATIAL = "spatial_audio"
     private const val KEY_SPATIAL_STRENGTH = "spatial_strength"
+    private const val KEY_CRYSTAL = "crystal_audio"
+    private const val KEY_CRYSTAL_INTENSITY = "crystal_intensity"
 
     /** Максимальное усиление (мДб) = +20 dB. */
     const val MAX_GAIN_MB = 2000
@@ -182,11 +184,32 @@ object EqualizerManager {
         dsp.reverbPreset = getReverbPreset()
         dsp.gainFactor = 1.0f + (getGain() / 1000f) * 0.75f
         dsp.eqEnabled = isEnabled()
+        dsp.crystalEnabled = isCrystalEnabled()
+        dsp.crystalIntensity = (getCrystalIntensity() / 100f).coerceIn(0f, 1f)
         val levels = loadBandLevels()
         for (i in 0 until 5) {
             val db = if (i < levels.size) levels[i] / 100f else 0f
             dsp.setBandGain(i, db)
         }
+    }
+
+    // ── Кристальный звук (Crystal Audio™ Super-Resolution) ───────────────────
+
+    fun isCrystalEnabled(): Boolean = prefs?.getBoolean(KEY_CRYSTAL, false) ?: false
+
+    fun getCrystalIntensity(): Int = prefs?.getInt(KEY_CRYSTAL_INTENSITY, 65) ?: 65
+
+    @Synchronized
+    fun setCrystalEnabled(enabled: Boolean) {
+        for (d in dspProcessors) d.crystalEnabled = enabled
+        prefs?.edit()?.putBoolean(KEY_CRYSTAL, enabled)?.apply()
+    }
+
+    @Synchronized
+    fun setCrystalIntensity(intensity: Int) {
+        val i = intensity.coerceIn(0, 100)
+        for (d in dspProcessors) d.crystalIntensity = (i / 100f).coerceIn(0f, 1f)
+        prefs?.edit()?.putInt(KEY_CRYSTAL_INTENSITY, i)?.apply()
     }
 
     // ── Пространственный звук 3D (Spatial Audio) ──────────────────────────────

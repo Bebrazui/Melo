@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.AspectRatio
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DownloadForOffline
 import androidx.compose.material.icons.rounded.GraphicEq
@@ -90,6 +91,10 @@ fun SettingsScreen(
 ) {
     BackHandler(onBack = onBack)
     val cs = MaterialTheme.colorScheme
+    val settingsContext = LocalContext.current
+    val settingsScope = rememberCoroutineScope()
+    var isSettingsSyncing by remember { mutableStateOf(false) }
+    var settingsSyncMsg by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -193,6 +198,34 @@ fun SettingsScreen(
                     if (isYtLoggedIn) {
                         Surface(
                             shape = RoundedCornerShape(14.dp),
+                            color = cs.primary.copy(alpha = 0.2f),
+                            border = BorderStroke(1.dp, cs.primary.copy(alpha = 0.4f)),
+                            modifier = Modifier.clickable {
+                                if (isSettingsSyncing) return@clickable
+                                ClickFeedback.play()
+                                isSettingsSyncing = true
+                                settingsScope.launch {
+                                    val res = com.melo.music.sync.YouTubeSyncManager.syncLibrary(settingsContext) {
+                                        settingsSyncMsg = it
+                                    }
+                                    isSettingsSyncing = false
+                                    settingsSyncMsg = if (res.error != null) res.error else "Синхронизировано: ${res.likedCount} лайков, ${res.playlistsCount} плейлистов"
+                                }
+                            },
+                        ) {
+                            Text(
+                                text = if (isSettingsSyncing) (settingsSyncMsg ?: "Синхронизация...") else "Синхронизировать",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = cs.primary,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            )
+                        }
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
                             color = Color.White.copy(alpha = 0.08f),
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
                             modifier = Modifier.clickable {
@@ -234,7 +267,12 @@ fun SettingsScreen(
         if (showGoogleLoginSheet) {
             com.melo.music.ui.auth.GoogleLoginBottomSheet(
                 onDismiss = { showGoogleLoginSheet = false },
-                onSuccess = { showGoogleLoginSheet = false },
+                onSuccess = {
+                    showGoogleLoginSheet = false
+                    settingsScope.launch {
+                        com.melo.music.sync.YouTubeSyncManager.syncLibrary(settingsContext)
+                    }
+                },
             )
         }
 
@@ -247,6 +285,11 @@ fun SettingsScreen(
 
         // ── 🎧 Пространственный звук 3D (Bento Card) ──────────────
         SpatialAudioSection()
+
+        Spacer(Modifier.height(16.dp))
+
+        // ── ✨ Кристальный звук (Melo Crystal Audio™ Super-Resolution) ─
+        CrystalAudioSection()
 
         Spacer(Modifier.height(16.dp))
 
@@ -896,6 +939,145 @@ private fun SpatialAudioSection() {
                             inactiveTrackColor = Color.White.copy(alpha = 0.1f),
                         ),
                         modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CrystalAudioSection() {
+    var enabled by remember { mutableStateOf(EqualizerManager.isCrystalEnabled()) }
+    var intensity by remember { mutableIntStateOf(EqualizerManager.getCrystalIntensity()) }
+    val cs = MaterialTheme.colorScheme
+
+    Surface(
+        shape = RoundedCornerShape(28.dp),
+        color = Color.White.copy(alpha = 0.05f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = cs.primaryContainer,
+                    modifier = Modifier.size(46.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.AutoAwesome,
+                            contentDescription = null,
+                            tint = cs.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Кристальный звук",
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = cs.primary.copy(alpha = 0.2f),
+                            border = BorderStroke(0.5.dp, cs.primary.copy(alpha = 0.5f)),
+                        ) {
+                            Text(
+                                "HD+",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                fontWeight = FontWeight.Black,
+                                color = cs.primary,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        if (enabled) "Синтез утраченных частот активен" else "Дорисовка частот выключена",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (enabled) cs.primary else Color.White.copy(alpha = 0.5f),
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = {
+                        ClickFeedback.play()
+                        enabled = it
+                        EqualizerManager.setCrystalEnabled(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = cs.onPrimary,
+                        checkedTrackColor = cs.primary,
+                    ),
+                )
+            }
+
+            AnimatedVisibility(
+                visible = enabled,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
+                Column {
+                    Spacer(Modifier.height(18.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            "Интенсивность восстановления",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.weight(1f),
+                        )
+                        Surface(
+                            shape = CircleShape,
+                            color = cs.primaryContainer.copy(alpha = 0.7f),
+                        ) {
+                            Text(
+                                "$intensity%",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = cs.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Slider(
+                        value = intensity.toFloat(),
+                        onValueChange = {
+                            intensity = it.toInt()
+                            EqualizerManager.setCrystalIntensity(intensity)
+                        },
+                        valueRange = 0f..100f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = cs.primary,
+                            activeTrackColor = cs.primary,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.1f),
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Психоакустический алгоритм генерирует ультра-высокие гармоники (14–22+ кГц), срезанные сжатием MP3/AAC, возвращая чистоту тарелкам, дыханию и струнам.",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                        color = Color.White.copy(alpha = 0.5f),
+                        lineHeight = 16.sp,
                     )
                 }
             }

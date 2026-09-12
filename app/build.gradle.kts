@@ -21,8 +21,8 @@ android {
         applicationId = "com.melo.music"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.3"
+        versionCode = 5
+        versionName = "0.4"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -59,7 +59,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             // Подписываем релиз только если есть keystore.properties.
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
