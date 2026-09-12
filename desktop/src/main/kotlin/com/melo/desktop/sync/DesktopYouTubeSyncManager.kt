@@ -1,0 +1,344 @@
+package com.melo.desktop.sync
+
+import com.melo.desktop.auth.DesktopYouTubeAuthManager
+import com.melo.desktop.extractor.DesktopExtractor
+import com.melo.desktop.extractor.TrackItem
+import com.melo.desktop.net.DesktopMeloNet
+import com.melo.desktop.storage.DesktopStorage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import org.schabi.newpipe.extractor.playlist.PlaylistInfo
+import java.util.concurrent.TimeUnit
+
+/**
+ * Синхронизация личной медиатеки из YouTube Music:
+ * 1 в 1 с логикой Android версии (YouTubeSyncManager.kt).
+ * - Понравившиеся треки (Liked Music / LM / VLLM)
+ * - Личные плейлисты пользователя (FEmusic_liked_playlists, FEmusic_library_landing)
+ */
+object DesktopYouTubeSyncManager {
+
+    data class SyncResult(
+        val likedCount: Int,
+        val playlistsCount: Int,
+        val error: String? = null,
+    )
+
+    private val client = DesktopMeloNet.okHttpClient.newBuilder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(25, TimeUnit.SECONDS)
+        .build()
+
+    private const val INNER_TUBE_KEY = "AIzaSyAO_FJ2SlqAE4Aq4NoXzvDYqBg55UMNy2w"
+    private const val BROWSE_URL = "https://music.youtube.com/youtubei/v1/browse?key=$INNER_TUBE_KEY&prettyPrint=false"
+
+    suspend fun syncLibrary(
+        onProgress: (String) -> Unit = {},
+    ): SyncResult = withContext(Dispatchers.IO) {
+        println("[DesktopYouTubeSync] Старт синхронизации...")
+        if (!DesktopYouTubeAuthManager.isLoggedIn) {
+            return@withContext SyncResult(0, 0, "Сначала войдите в аккаунт YouTube Music в настройках")
+        }
+
+        try {
+            onProgress("Загрузка понравившихся треков...")
+            val likedTracks = fetchLikedMusic()
+            println("[DesktopYouTubeSync] Найдено понравившихся треков: ${likedTracks.size}")
+
+            var addedLikes = 0
+            likedTracks.forEach { track ->
+                if (!DesktopStorage.isFavorite(track.url)) {
+                    DesktopStorage.toggleFavorite(track)
+                    addedLikes++
+                }
+            }
+
+            onProgress("Поиск ваших плейлистов...")
+            val ytPlaylists = fetchUserPlaylists()
+            println("[DesktopYouTubeSync] Найдено плейлистов: ${ytPlaylists.size}")
+
+            var addedPlaylists = 0
+            ytPlaylists.forEach { (name, browseId) ->
+                onProgress("Синхронизация «$name»...")
+                val tracks = fetchPlaylistTracks(browseId)
+                if (tracks.isNotEmpty()) {
+                    tracks.forEach { track ->
+                        DesktopStorage.addToPlaylist(name, track)
+                    }
+                    addedPlaylists++
+                }
+            }
+
+            println("[DesktopYouTubeSync] Синхронизация завершена! Лайков: ${likedTracks.size}, плейлистов: $addedPlaylists")
+            SyncResult(likedTracks.size, addedPlaylists)
+        } catch (e: Exception) {
+            System.err.println("[DesktopYouTubeSync] Ошибка синхронизации: ${e.message}")
+            SyncResult(0, 0, e.message ?: "Ошибка синхронизации")
+        }
+    }
+
+    private fun fetchLikedMusic(): List<TrackItem> {
+        val tracks = mutableListOf<TrackItem>()
+        // 1. NewPipe LM
+        val viaNewPipe = runCatching {
+            DesktopExtractor.ensureInit()
+            val info = PlaylistInfo.getInfo("https://music.youtube.com/playlist?list=LM")
+            info.relatedItems.mapNotNull { item ->
+                if (item is org.schabi.newpipe.extractor.stream.StreamInfoItem) {
+                    TrackItem(
+                        url = item.url,
+                        title = item.name,
+                        uploader = item.uploaderName,
+                        durationSeconds = item.duration,
+                        thumbnailUrl = item.thumbnails.lastOrNull()?.url,
+                    )
+                } else null
+            }
+        }.getOrNull()
+
+        if (!viaNewPipe.isNullOrEmpty() && viaNewPipe.none { it.title == "Трек" || it.title == "Трек YouTube Music" }) {
+            return viaNewPipe
+        }
+
+        // 2. InnerTube browse: пробуем FEmusic_liked_videos, затем VLLM
+        val browseIds = listOf("FEmusic_liked_videos", "VLLM")
+        for (bId in browseIds) {
+            val bodyJson = createInnerTubeContext().apply {
+                put("browseId", bId)
+            }
+            val responseJson = postInnerTube(BROWSE_URL, bodyJson)
+            if (responseJson != null) {
+                parseTracksFromJson(responseJson, tracks)
+                if (tracks.isNotEmpty()) break
+            }
+        }
+        return tracks
+    }
+
+    private fun fetchUserPlaylists(): List<Pair<String, String>> {
+        val playlists = mutableListOf<Pair<String, String>>()
+        val browseIdsToTry = listOf(
+            "FEmusic_liked_playlists",
+            "FEmusic_library_landing",
+        )
+
+        for (bId in browseIdsToTry) {
+            val bodyJson = createInnerTubeContext().apply {
+                put("browseId", bId)
+            }
+            val responseJson = postInnerTube(BROWSE_URL, bodyJson) ?: continue
+            val jsonStr = responseJson.toString()
+
+            val twoRowMarker = "\"musicTwoRowItemRenderer\":"
+            var idx = 0
+            while (true) {
+                val start = jsonStr.indexOf(twoRowMarker, idx)
+                if (start == -1) break
+                val chunk = jsonStr.substring(start + twoRowMarker.length).take(3000)
+
+                val browseIdMatch = Regex(""""browseId":"(VLPL[a-zA-Z0-9_-]+|PL[a-zA-Z0-9_-]+|FEmusic_library_privately_owned_playlist[a-zA-Z0-9_-]*)"""").find(chunk)
+                val titleMatch = Regex(""""title":\{"runs":\[\{"text":"([^"]+)"""").find(chunk)
+                    ?: Regex(""""text":"([^"]+)"""").find(chunk)
+
+                if (browseIdMatch != null && titleMatch != null) {
+                    val rawBrowseId = browseIdMatch.groupValues[1]
+                    val title = titleMatch.groupValues[1]
+                    if (title != "Плейлист" && title != "Альбом" && title.isNotBlank()) {
+                        val fixedBrowseId = if (rawBrowseId.startsWith("VL")) rawBrowseId else "VL$rawBrowseId"
+                        if (playlists.none { it.second == fixedBrowseId }) {
+                            playlists.add(title to fixedBrowseId)
+                        }
+                    }
+                }
+                idx = start + twoRowMarker.length
+            }
+
+            val regex = Regex(""""title":\{"runs":\[\{"text":"([^"]+)"\}\]\}.*?"browseId":"(VLPL[a-zA-Z0-9_-]+|PL[a-zA-Z0-9_-]+)"""")
+            regex.findAll(jsonStr).forEach { match ->
+                val title = match.groupValues[1]
+                val browseId = match.groupValues[2]
+                val fixedBrowseId = if (browseId.startsWith("VL")) browseId else "VL$browseId"
+                if (playlists.none { it.second == fixedBrowseId }) {
+                    playlists.add(title to fixedBrowseId)
+                }
+            }
+        }
+        return playlists
+    }
+
+    private fun fetchPlaylistTracks(browseId: String): List<TrackItem> {
+        val tracks = mutableListOf<TrackItem>()
+        val playlistId = if (browseId.startsWith("VL")) browseId.removePrefix("VL") else browseId
+        val viaNewPipe = runCatching {
+            DesktopExtractor.ensureInit()
+            val info = PlaylistInfo.getInfo("https://music.youtube.com/playlist?list=$playlistId")
+            info.relatedItems.mapNotNull { item ->
+                if (item is org.schabi.newpipe.extractor.stream.StreamInfoItem) {
+                    TrackItem(
+                        url = item.url,
+                        title = item.name,
+                        uploader = item.uploaderName,
+                        durationSeconds = item.duration,
+                        thumbnailUrl = item.thumbnails.lastOrNull()?.url,
+                    )
+                } else null
+            }
+        }.getOrNull()
+
+        if (!viaNewPipe.isNullOrEmpty() && viaNewPipe.none { it.title == "Трек" || it.title == "Трек YouTube Music" }) {
+            return viaNewPipe
+        }
+
+        val bodyJson = createInnerTubeContext().apply {
+            put("browseId", browseId)
+        }
+        val responseJson = postInnerTube(BROWSE_URL, bodyJson) ?: return emptyList()
+        parseTracksFromJson(responseJson, tracks)
+        return tracks
+    }
+
+    private fun parseTracksFromJson(root: JSONObject, out: MutableList<TrackItem>) {
+        val rootStr = root.toString()
+        val marker = "\"musicResponsiveListItemRenderer\":"
+        var idx = 0
+        while (true) {
+            val start = rootStr.indexOf(marker, idx)
+            if (start == -1) break
+            val sub = rootStr.substring(start + marker.length)
+            val chunk = sub.take(4000)
+
+            val videoIdMatch = Regex(""""videoId":"([a-zA-Z0-9_-]{11})"""").find(chunk)
+            if (videoIdMatch != null) {
+                val videoId = videoIdMatch.groupValues[1]
+
+                val colMarker = "\"musicResponsiveListItemFlexColumnRenderer\":"
+                val cols = mutableListOf<String>()
+                var colIdx = 0
+                while (true) {
+                    val cStart = chunk.indexOf(colMarker, colIdx)
+                    if (cStart == -1) break
+                    val cSub = chunk.substring(cStart + colMarker.length).take(1500)
+                    cols.add(cSub)
+                    colIdx = cStart + colMarker.length
+                }
+
+                var trackTitle: String? = null
+                var trackAuthor: String? = null
+
+                if (cols.isNotEmpty()) {
+                    val titleRuns = Regex(""""text":"([^"]+)"""").findAll(cols[0]).map { it.groupValues[1] }.toList()
+                    trackTitle = titleRuns.firstOrNull { it.isNotBlank() && it != "•" }
+                }
+
+                if (cols.size > 1) {
+                    val authorRuns = Regex(""""text":"([^"]+)"""").findAll(cols[1]).map { it.groupValues[1] }.toList()
+                    trackAuthor = authorRuns.firstOrNull { text ->
+                        text.isNotBlank() &&
+                                text != "•" &&
+                                text != "." &&
+                                text != trackTitle &&
+                                text != "YouTube Music" &&
+                                !text.matches(Regex("""\d+:\d+""")) &&
+                                !text.contains("просмотр", ignoreCase = true)
+                    }
+                }
+
+                val title = trackTitle ?: "Трек"
+                val author = trackAuthor ?: "Неизвестный исполнитель"
+                val url = "https://www.youtube.com/watch?v=$videoId"
+
+                if (out.none { it.url == url }) {
+                    out.add(
+                        TrackItem(
+                            url = url,
+                            title = title,
+                            uploader = author,
+                            durationSeconds = 0,
+                            thumbnailUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
+                        )
+                    )
+                }
+            }
+            idx = start + marker.length
+        }
+
+        // Резервный фолбэк как в мобильной версии: если musicResponsiveListItemRenderer не нашел треки,
+        // но в JSON есть videoId
+        if (out.isEmpty()) {
+            val videoIdRegex = Regex(""""videoId":"([a-zA-Z0-9_-]{11})"""")
+            val ids = videoIdRegex.findAll(rootStr).map { it.groupValues[1] }.distinct().toList()
+            ids.take(100).forEach { vid ->
+                val trackUrl = "https://www.youtube.com/watch?v=$vid"
+                if (out.none { it.url == trackUrl }) {
+                    out.add(
+                        TrackItem(
+                            url = trackUrl,
+                            title = "Трек YouTube Music",
+                            uploader = "YouTube Music",
+                            durationSeconds = 0,
+                            thumbnailUrl = "https://i.ytimg.com/vi/$vid/hqdefault.jpg",
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private fun createInnerTubeContext(): JSONObject {
+        return JSONObject().apply {
+            put(
+                "context",
+                JSONObject().apply {
+                    put(
+                        "client",
+                        JSONObject().apply {
+                            put("clientName", "WEB_REMIX")
+                            put("clientVersion", "1.20240101.01.00")
+                            put("hl", "ru")
+                            put("gl", "RU")
+                        }
+                    )
+                }
+            )
+        }
+    }
+
+    private fun postInnerTube(url: String, body: JSONObject): JSONObject? {
+        return try {
+            val reqBuilder = Request.Builder()
+                .url(url)
+                .post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0")
+                .header("Referer", "https://music.youtube.com/")
+                .header("Origin", "https://music.youtube.com")
+                .header("X-Origin", "https://music.youtube.com")
+                .header("X-YouTube-Client-Name", "67")
+                .header("X-YouTube-Client-Version", "1.20240101.01.00")
+                .header("X-Goog-AuthUser", "0")
+
+            DesktopYouTubeAuthManager.getCookies()?.let {
+                reqBuilder.header("Cookie", it)
+            }
+            DesktopYouTubeAuthManager.getSapisidHash()?.let {
+                reqBuilder.header("Authorization", it)
+            }
+
+            val resp = client.newCall(reqBuilder.build()).execute()
+            if (resp.isSuccessful) {
+                val bodyStr = resp.body?.string().orEmpty()
+                JSONObject(bodyStr)
+            } else {
+                val errBody = resp.body?.string().orEmpty().take(500)
+                System.err.println("[DesktopYouTubeSync] InnerTube response error: HTTP ${resp.code} for URL: $url, details: $errBody")
+                null
+            }
+        } catch (e: Exception) {
+            System.err.println("[DesktopYouTubeSync] InnerTube network error: ${e.message}")
+            null
+        }
+    }
+}
