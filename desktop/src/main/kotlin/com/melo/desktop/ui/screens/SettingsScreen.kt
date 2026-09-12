@@ -56,34 +56,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.melo.desktop.ui.components.AsyncCoverImage
 import java.awt.Desktop
 import java.io.File
 
 @Composable
 fun SettingsScreen(
+    onOpenAuth: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val coroutineScope = rememberCoroutineScope()
-
-    var dpiEngine by DesktopStorage.dpiEngine
-    var zapretPreset by DesktopStorage.zapretPreset
-    var zapretCustomArgs by DesktopStorage.zapretCustomArgs
-    var zapretCustomPath by DesktopStorage.zapretCustomPath
-
-    var byedpiEnabled by DesktopStorage.byedpiEnabled
-    var byedpiCmd by DesktopStorage.byedpiCmd
-
-    var isZapretRunning by remember { mutableStateOf(ZapretManager.isRunning()) }
-    var isByeDpiRunning by remember { mutableStateOf(ByeDpiManager.isRunning()) }
-
-    // Периодический опрос статусов процессов
-    LaunchedEffect(Unit) {
-        while (true) {
-            isZapretRunning = ZapretManager.isRunning(forceRefresh = true)
-            isByeDpiRunning = ByeDpiManager.isRunning()
-            delay(2000)
-        }
-    }
 
     Column(
         modifier = modifier
@@ -98,11 +80,22 @@ fun SettingsScreen(
             color = MaterialTheme.colorScheme.onSurface,
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
-        // ── Секция: Выбор режима DPI ─────────────────────────────────────────
+        // ── Секция: Аккаунт и профиль ─────────────────────────────────────────
+        var isAuthDialogVisible by remember { mutableStateOf(false) }
+        val isYtLoggedIn = com.melo.desktop.auth.DesktopYouTubeAuthManager.isLoggedIn
+        val userName = com.melo.desktop.auth.DesktopYouTubeAuthManager.accountName 
+            ?: com.melo.desktop.auth.DesktopAuthManager.name 
+            ?: "Гость"
+        val userAvatar = com.melo.desktop.auth.DesktopYouTubeAuthManager.accountAvatarUrl
+        val userHandle = com.melo.desktop.auth.DesktopYouTubeAuthManager.accountHandle
+        val scope = rememberCoroutineScope()
+        var isSyncing by remember { mutableStateOf(false) }
+        var syncStatusMessage by remember { mutableStateOf<String?>(null) }
+
         Text(
-            text = "СЕТЬ И ОБХОД БЛОКИРОВОК (DPI)",
+            text = "GOOGLE / YOUTUBE MUSIC",
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             color = MeloPrimary,
@@ -118,391 +111,175 @@ fun SettingsScreen(
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                 .padding(20.dp),
         ) {
-            Text(
-                text = "Режим работы обхода DPI",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = "Melo поддерживает как системный перехват Zapret (flowseal), так и локальный прокси ByeDPI.",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            DpiEngine.values().forEach { engine ->
-                val isSelected = dpiEngine == engine
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isSelected) MeloPrimary.copy(alpha = 0.12f) else Color.Transparent)
-                        .border(
-                            width = 1.dp,
-                            color = if (isSelected) MeloPrimary.copy(alpha = 0.4f) else Color.Transparent,
-                            shape = RoundedCornerShape(8.dp),
-                        )
-                        .clickable {
-                            dpiEngine = engine
-                            DesktopStorage.saveSettings()
-                        }
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    modifier = Modifier.weight(1f),
                 ) {
-                    RadioButton(
-                        selected = isSelected,
-                        onClick = {
-                            dpiEngine = engine
-                            DesktopStorage.saveSettings()
-                        },
-                        colors = RadioButtonDefaults.colors(
-                            selectedColor = MeloPrimary,
-                            unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    if (isYtLoggedIn) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(MeloPrimary),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (!userAvatar.isNullOrBlank()) {
+                                AsyncCoverImage(
+                                    url = userAvatar,
+                                    modifier = Modifier.size(44.dp),
+                                    shape = CircleShape,
+                                )
+                            } else {
+                                Text(
+                                    text = userName.take(1).uppercase(),
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0A2012),
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                    }
+
                     Column {
                         Text(
-                            text = engine.title,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            text = if (isYtLoggedIn) userName else "Google / YouTube Music",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = engine.subtitle,
+                            text = if (isYtLoggedIn) 
+                                (syncStatusMessage ?: (userHandle?.let { "$it • Доступ к трекам 18+ и медиатеке" } ?: "Подключено. Доступ к трекам 18+ и медиатеке"))
+                                else "Войдите для синхронизации плейлистов и снятия ограничений",
                             fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (isYtLoggedIn) MeloPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+
+                if (isYtLoggedIn) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                if (isSyncing) return@Button
+                                isSyncing = true
+                                scope.launch {
+                                    val res = com.melo.desktop.sync.DesktopYouTubeSyncManager.syncLibrary { msg ->
+                                        syncStatusMessage = msg
+                                    }
+                                    isSyncing = false
+                                    syncStatusMessage = if (res.error != null) res.error else "Синхронизировано: ${res.likedCount} лайков, ${res.playlistsCount} плейлистов"
+                                }
+                            },
+                            enabled = !isSyncing,
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MeloPrimary.copy(alpha = 0.25f)),
+                        ) {
+                            Text(
+                                text = if (isSyncing) "Синхронизация..." else "Синхронизировать",
+                                color = MeloPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                com.melo.desktop.auth.DesktopYouTubeAuthManager.logout()
+                                syncStatusMessage = null
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Text("Выйти", color = Color(0xFFEF4444), fontSize = 13.sp)
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = { onOpenAuth?.invoke() ?: run { isAuthDialogVisible = true } },
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MeloPrimary),
+                    ) {
+                        Text(
+                            text = "Войти в аккаунт",
+                            color = Color(0xFF0A2012),
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
             }
+        }
+
+        if (isAuthDialogVisible && onOpenAuth == null) {
+            com.melo.desktop.ui.components.AuthDialog(
+                onDismiss = { isAuthDialogVisible = false },
+            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ── Секция: Zapret (Flowseal) ─────────────────────────────────────────
-        if (dpiEngine == DpiEngine.AUTO || dpiEngine == DpiEngine.ZAPRET) {
-            Text(
-                text = "ZAPRET (FLOWSEAL / WINWS)",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = MeloPrimary,
-                letterSpacing = 1.sp,
-            )
+        // ── Секция: Интеграции ────────────────────────────────────────────────
+        Text(
+            text = "ИНТЕГРАЦИИ",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = MeloPrimary,
+            letterSpacing = 1.sp,
+        )
 
-            Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    .padding(20.dp),
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .padding(20.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                // Статус winws.exe
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(10.dp)
-                                .clip(CircleShape)
-                                .background(if (isZapretRunning) Color(0xFF10B981) else Color(0xFF6B7280)),
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (isZapretRunning) "winws.exe активен (WinDivert фильтрация пакетов)" else "winws.exe не запущен",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Пресеты оптимизированы проектом flowseal/zapret-discord-youtube для обхода замедления YouTube, звонков Discord и стриминга аудио на уровне ядра Windows без прокси.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Выбор стратегии Flowseal
-                Text(
-                    text = "Выберите стратегию Zapret:",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                ZapretPreset.values().forEach { preset ->
-                    val isPresetSelected = zapretPreset == preset
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isPresetSelected) MeloPrimary.copy(alpha = 0.1f) else Color.Transparent)
-                            .clickable {
-                                zapretPreset = preset
-                                DesktopStorage.saveSettings()
-                            }
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                    ) {
-                        RadioButton(
-                            selected = isPresetSelected,
-                            onClick = {
-                                zapretPreset = preset
-                                DesktopStorage.saveSettings()
-                            },
-                            colors = RadioButtonDefaults.colors(
-                                selectedColor = MeloPrimary,
-                                unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Column {
-                            Text(
-                                text = preset.title,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = preset.description,
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-
-                if (zapretPreset == ZapretPreset.CUSTOM) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Пользовательские аргументы winws.exe:",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = zapretCustomArgs,
-                        onValueChange = {
-                            zapretCustomArgs = it
-                            DesktopStorage.saveSettings()
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MeloPrimary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                            focusedContainerColor = MaterialTheme.colorScheme.surface,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Путь к бинарникам winws.exe
-                val locatedBinary = ZapretManager.findWinwsBinary(zapretCustomPath)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Расположение winws.exe: ",
-                        fontSize = 12.sp,
+                        text = "Discord Rich Presence",
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = locatedBinary?.absolutePath ?: "Не найден",
+                        text = "Отображать играющий трек, исполнителя и статус воспроизведения в вашем профиле Discord",
                         fontSize = 12.sp,
-                        color = if (locatedBinary != null) Color(0xFF10B981) else Color(0xFFEF4444),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.width(16.dp))
 
-                OutlinedTextField(
-                    value = zapretCustomPath,
-                    onValueChange = {
-                        zapretCustomPath = it
+                var discordRpcEnabled by DesktopStorage.discordRpcEnabled
+                Switch(
+                    checked = discordRpcEnabled,
+                    onCheckedChange = {
+                        discordRpcEnabled = it
                         DesktopStorage.saveSettings()
                     },
-                    placeholder = { Text("Пользовательский путь к winws.exe или папке zapret", fontSize = 12.sp) },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MeloPrimary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedTrackColor = MeloPrimary,
                     ),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Кнопки управления Zapret
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(
-                        onClick = {
-                            coroutineScope.launch(Dispatchers.IO) {
-                                ZapretManager.start(
-                                    preset = zapretPreset,
-                                    customArgs = zapretCustomArgs,
-                                    customPath = zapretCustomPath,
-                                )
-                                isZapretRunning = ZapretManager.isRunning(forceRefresh = true)
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MeloPrimary),
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Text("Запустить Zapret (UAC)")
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            coroutineScope.launch(Dispatchers.IO) {
-                                ZapretManager.stop()
-                                isZapretRunning = ZapretManager.isRunning(forceRefresh = true)
-                            }
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Text("Остановить Zapret")
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            val zapretDir = File(System.getProperty("user.home"), ".melo/bin/zapret")
-                            zapretDir.mkdirs()
-                            try {
-                                if (Desktop.isDesktopSupported()) Desktop.getDesktop().open(zapretDir)
-                                else ProcessBuilder("explorer.exe", zapretDir.absolutePath).start()
-                            } catch (_: Exception) {}
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Text("Открыть папку bin/zapret")
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-
-        // ── Секция: Обход DPI (ByeDPI) ────────────────────────────────────────
-        if (dpiEngine == DpiEngine.AUTO || dpiEngine == DpiEngine.BYEDPI) {
-            Text(
-                text = "BYEDPI (CIADPI / SOCKS5)",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = MeloPrimary,
-                letterSpacing = 1.sp,
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    .padding(20.dp),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Локальный ByeDPI прокси",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = "Десинхронизация TCP/TLS на 127.0.0.1:1080 без прав администратора.",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Switch(
-                        checked = byedpiEnabled,
-                        onCheckedChange = {
-                            byedpiEnabled = it
-                            ByeDpiManager.isEnabled = it
-                            if (it) ByeDpiManager.start(byedpiCmd) else ByeDpiManager.stop()
-                            DesktopStorage.saveSettings()
-                            isByeDpiRunning = ByeDpiManager.isRunning()
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                            checkedTrackColor = MeloPrimary,
-                        ),
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Статус подключения
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(if (isByeDpiRunning) Color(0xFF10B981) else Color(0xFF6B7280)),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (isByeDpiRunning) "SOCKS5 порт 1080 активен и отвечает" else "SOCKS5 порт 1080 не активен",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Параметры десинхронизации (CLI аргументы)",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = byedpiCmd,
-                    onValueChange = {
-                        byedpiCmd = it
-                        DesktopStorage.saveSettings()
-                    },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MeloPrimary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
                 )
             }
-
-            Spacer(modifier = Modifier.height(28.dp))
         }
+
+        Spacer(modifier = Modifier.height(28.dp))
 
         // ── Секция: Кэш и данные ──────────────────────────────────────────────
         Text(

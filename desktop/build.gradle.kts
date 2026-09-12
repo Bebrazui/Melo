@@ -33,8 +33,11 @@ dependencies {
     // JSON support on JVM
     implementation("org.json:json:20240303")
 
-    // JavaFX Media for audio playback
+    // JavaFX Media & WebView
     implementation("org.openjfx:javafx-media:21.0.5:$jfxClassifier")
+    implementation("org.openjfx:javafx-web:21.0.5:$jfxClassifier")
+    implementation("org.openjfx:javafx-swing:21.0.5:$jfxClassifier")
+    implementation("org.openjfx:javafx-controls:21.0.5:$jfxClassifier")
     implementation("org.openjfx:javafx-graphics:21.0.5:$jfxClassifier")
     implementation("org.openjfx:javafx-base:21.0.5:$jfxClassifier")
 }
@@ -66,3 +69,4 @@ tasks.register<JavaExec>("generateSnapshots") {
     mainClass.set("com.melo.desktop.SnapshotGenerator")
     classpath = sourceSets["main"].runtimeClasspath
 }
+

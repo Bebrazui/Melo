@@ -44,6 +44,8 @@ object DesktopStorage {
     var byedpiEnabled = mutableStateOf(true)
     var byedpiCmd = mutableStateOf(ByeDpiManager.DEFAULT_CMD)
 
+    var discordRpcEnabled = mutableStateOf(true)
+
     init {
         loadSettings()
         loadFavorites()
@@ -202,6 +204,7 @@ object DesktopStorage {
             byedpiEnabled.value = obj.optBoolean("byedpiEnabled", true)
             byedpiCmd.value = obj.optString("byedpiCmd", ByeDpiManager.DEFAULT_CMD)
             ByeDpiManager.isEnabled = byedpiEnabled.value
+            discordRpcEnabled.value = obj.optBoolean("discordRpcEnabled", true)
         }
     }
 
@@ -214,6 +217,7 @@ object DesktopStorage {
                 put("zapretCustomPath", zapretCustomPath.value)
                 put("byedpiEnabled", byedpiEnabled.value)
                 put("byedpiCmd", byedpiCmd.value)
+                put("discordRpcEnabled", discordRpcEnabled.value)
             }
             settingsFile.writeText(obj.toString(2))
         }

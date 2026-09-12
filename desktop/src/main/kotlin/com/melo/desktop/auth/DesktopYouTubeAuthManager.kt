@@ -3,6 +3,12 @@ package com.melo.desktop.auth
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
@@ -25,11 +31,22 @@ object DesktopYouTubeAuthManager {
     var accountEmail by mutableStateOf<String?>(null)
         private set
 
+    var accountAvatarUrl by mutableStateOf<String?>(null)
+        private set
+
+    var accountHandle by mutableStateOf<String?>(null)
+        private set
+
     @Volatile
     private var cachedCookieString: String? = null
 
     init {
         loadSession()
+        if (isLoggedIn && (accountAvatarUrl == null || accountName == "YouTube Music")) {
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                fetchUserProfile()
+            }
+        }
     }
 
     private fun loadSession() {
@@ -40,18 +57,28 @@ object DesktopYouTubeAuthManager {
             cachedCookieString = obj.optString("cookies").takeIf { it.isNotBlank() }
             accountName = obj.optString("name").takeIf { it.isNotBlank() }
             accountEmail = obj.optString("email").takeIf { it.isNotBlank() }
+            accountAvatarUrl = obj.optString("avatar").takeIf { it.isNotBlank() }
+            accountHandle = obj.optString("handle").takeIf { it.isNotBlank() }
             isLoggedIn = !cachedCookieString.isNullOrBlank()
         }
     }
 
     /**
-     * Сохраняет сессионные cookies YouTube Music
+     * Сохраняет сессионные cookies YouTube Music и профиль пользователя
      */
-    fun saveSession(cookies: String, name: String? = null, email: String? = null) {
+    fun saveSession(
+        cookies: String,
+        name: String? = null,
+        email: String? = null,
+        avatar: String? = null,
+        handle: String? = null,
+    ) {
         cachedCookieString = cookies.trim()
         isLoggedIn = true
-        accountName = name ?: accountName ?: "YouTube Music Аккаунт"
+        accountName = name ?: accountName ?: "YouTube Music"
         accountEmail = email ?: accountEmail
+        accountAvatarUrl = avatar ?: accountAvatarUrl
+        accountHandle = handle ?: accountHandle
 
         runCatching {
             sessionFile.parentFile?.mkdirs()
@@ -59,6 +86,8 @@ object DesktopYouTubeAuthManager {
                 put("cookies", cachedCookieString)
                 put("name", accountName.orEmpty())
                 put("email", accountEmail.orEmpty())
+                put("avatar", accountAvatarUrl.orEmpty())
+                put("handle", accountHandle.orEmpty())
             }
             sessionFile.writeText(obj.toString(2))
         }
@@ -82,11 +111,103 @@ object DesktopYouTubeAuthManager {
         return "SAPISIDHASH ${timestamp}_${sha1}"
     }
 
+    suspend fun fetchUserProfile(): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val cookies = cachedCookieString ?: return@withContext false
+        val authHash = getSapisidHash("https://www.youtube.com") ?: return@withContext false
+
+        try {
+            val key = "AIzaSyAO_FJ2SlqAE4Aq4NoXzvDYqBg55UMNy2w"
+            val url = "https://www.youtube.com/youtubei/v1/account/account_menu?key=$key&prettyPrint=false"
+
+            val body = JSONObject().apply {
+                put("context", JSONObject().apply {
+                    put("client", JSONObject().apply {
+                        put("clientName", "WEB")
+                        put("clientVersion", "2.20240101.01.00")
+                        put("hl", "ru")
+                        put("gl", "RU")
+                    })
+                })
+            }
+
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val req = okhttp3.Request.Builder()
+                .url(url)
+                .post(body.toString().toRequestBody(mediaType))
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0")
+                .header("Referer", "https://www.youtube.com/")
+                .header("Origin", "https://www.youtube.com")
+                .header("X-Origin", "https://www.youtube.com")
+                .header("X-YouTube-Client-Name", "1")
+                .header("X-YouTube-Client-Version", "2.20240101.01.00")
+                .header("X-Goog-AuthUser", "0")
+                .header("Authorization", authHash)
+                .header("Cookie", cookies)
+                .build()
+
+            val client = com.melo.desktop.net.DesktopMeloNet.okHttpClient
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val str = resp.body?.string().orEmpty()
+                    val json = JSONObject(str)
+
+                    var foundName: String? = null
+                    var foundAvatar: String? = null
+                    var foundHandle: String? = null
+
+                    fun search(obj: Any) {
+                        when (obj) {
+                            is JSONObject -> {
+                                if (obj.has("activeAccountHeaderRenderer")) {
+                                    val h = obj.getJSONObject("activeAccountHeaderRenderer")
+                                    foundName = h.optJSONObject("accountName")?.optString("simpleText")
+                                    foundHandle = h.optJSONObject("channelHandle")?.optString("simpleText")
+                                    val thumbs = h.optJSONObject("accountPhoto")?.optJSONArray("thumbnails")
+                                    if (thumbs != null && thumbs.length() > 0) {
+                                        foundAvatar = thumbs.getJSONObject(thumbs.length() - 1).optString("url")
+                                    }
+                                } else {
+                                    val it = obj.keys()
+                                    while (it.hasNext()) {
+                                        search(obj.get(it.next()))
+                                    }
+                                }
+                            }
+                            is org.json.JSONArray -> {
+                                for (i in 0 until obj.length()) {
+                                    search(obj.get(i))
+                                }
+                            }
+                        }
+                    }
+
+                    search(json)
+
+                    if (!foundName.isNullOrBlank() || !foundAvatar.isNullOrBlank()) {
+                        saveSession(
+                            cookies = cookies,
+                            name = foundName ?: accountName,
+                            email = accountEmail,
+                            avatar = foundAvatar ?: accountAvatarUrl,
+                            handle = foundHandle ?: accountHandle,
+                        )
+                        return@withContext true
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            System.err.println("[DesktopYouTubeAuth] Error fetching profile: ${e.message}")
+        }
+        false
+    }
+
     fun logout() {
         cachedCookieString = null
         isLoggedIn = false
         accountName = null
         accountEmail = null
+        accountAvatarUrl = null
+        accountHandle = null
         sessionFile.delete()
     }
 

@@ -228,6 +228,7 @@ object DesktopAudioPlayer {
         Platform.runLater {
             mediaPlayer?.pause()
             isPlaying = false
+            com.melo.desktop.discord.DiscordRpcClient.updateNow()
         }
     }
 
@@ -235,6 +236,7 @@ object DesktopAudioPlayer {
         Platform.runLater {
             mediaPlayer?.play()
             isPlaying = true
+            com.melo.desktop.discord.DiscordRpcClient.updateNow()
         }
     }
 

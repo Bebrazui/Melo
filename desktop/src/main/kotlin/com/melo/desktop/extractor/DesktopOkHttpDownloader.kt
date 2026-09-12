@@ -56,13 +56,14 @@ class DesktopOkHttpDownloader(
             .url(url)
             .addHeader("User-Agent", USER_AGENT)
 
-        headers.forEach { (name, values) ->
-            when {
-                values.size > 1 -> {
-                    requestBuilder.removeHeader(name)
-                    values.forEach { requestBuilder.addHeader(name, it) }
-                }
-                values.size == 1 -> requestBuilder.header(name, values[0])
+        // Подставляем авторизацию YouTube Music при наличии сессии
+        if (url.contains("youtube.com") || url.contains("googlevideo.com")) {
+            com.melo.desktop.auth.DesktopYouTubeAuthManager.getCookies()?.let { cookieStr ->
+                requestBuilder.header("Cookie", cookieStr)
+            }
+            com.melo.desktop.auth.DesktopYouTubeAuthManager.getSapisidHash()?.let { hash ->
+                requestBuilder.header("Authorization", hash)
+                requestBuilder.header("X-Origin", "https://music.youtube.com")
             }
         }
 

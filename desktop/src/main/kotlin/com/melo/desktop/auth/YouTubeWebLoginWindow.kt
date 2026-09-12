@@ -104,6 +104,7 @@ object YouTubeWebLoginWindow {
                         // Автоматический перенос медиатеки 1 в 1 сразу после авторизации
                         CoroutineScope(Dispatchers.IO).launch {
                             try {
+                                DesktopYouTubeAuthManager.fetchUserProfile()
                                 com.melo.desktop.sync.DesktopYouTubeSyncManager.syncLibrary()
                             } catch (_: Exception) {}
                         }

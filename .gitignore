@@ -21,3 +21,4 @@ keystore.properties
 screenshots/
 .kotlin/
 **/build/
+*.dex

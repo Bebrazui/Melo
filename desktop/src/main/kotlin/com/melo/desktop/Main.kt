@@ -1,10 +1,12 @@
 package com.melo.desktop
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,49 +54,38 @@ import com.melo.desktop.ui.screens.SearchScreen
 import com.melo.desktop.ui.screens.SettingsScreen
 import com.melo.desktop.ui.theme.MeloDesktopTheme
 import com.melo.desktop.zapret.ZapretManager
+import com.melo.desktop.discord.DiscordRpcClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-fun main() = application {
-    // Инициализация сервисов
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            LocalStreamServer.start()
-            when (DesktopStorage.dpiEngine.value) {
-                DpiEngine.AUTO -> {
-                    if (!ZapretManager.isRunning() && DesktopStorage.byedpiEnabled.value) {
-                        ByeDpiManager.start(DesktopStorage.byedpiCmd.value)
-                    }
-                }
-                DpiEngine.BYEDPI -> {
-                    if (DesktopStorage.byedpiEnabled.value) {
-                        ByeDpiManager.start(DesktopStorage.byedpiCmd.value)
-                    }
-                }
-                DpiEngine.ZAPRET -> {
-                    if (!ZapretManager.isRunning()) {
-                        ZapretManager.start(
-                            preset = DesktopStorage.zapretPreset.value,
-                            customArgs = DesktopStorage.zapretCustomArgs.value,
-                            customPath = DesktopStorage.zapretCustomPath.value,
-                        )
-                    }
-                }
-                DpiEngine.DISABLED -> {
-                    ByeDpiManager.stop()
-                }
-            }
-            DesktopExtractor.ensureInit()
-        }
+fun main() {
+    // Гарантированный запуск фоновых сервисов и интеграции с Discord RPC
+    if (DesktopStorage.discordRpcEnabled.value) {
+        DiscordRpcClient.start()
     }
+
+    application {
+        // Инициализация аудиосерверов и DPI обхода
+        LaunchedEffect(Unit) {
+            withContext(Dispatchers.IO) {
+                LocalStreamServer.start()
+                
+                // Автоматический DPI обход: запуск Zapret или встроенного ByeDPI
+                if (!ZapretManager.isRunning() && DesktopStorage.byedpiEnabled.value) {
+                    ByeDpiManager.start(DesktopStorage.byedpiCmd.value)
+                }
+                
+                DesktopExtractor.ensureInit()
+            }
+        }
 
     val windowState = rememberWindowState(width = 1180.dp, height = 760.dp)
 
     Window(
         onCloseRequest = ::exitApplication,
-        title = "Melo — Музыка без границ",
+        title = "Melo",
         state = windowState,
         onKeyEvent = { keyEvent ->
             if (keyEvent.type == KeyEventType.KeyDown) {
@@ -144,6 +135,7 @@ fun main() = application {
         MeloDesktopTheme {
             MeloAppContent()
         }
+    }
     }
 }
 
@@ -284,14 +276,38 @@ object MeloAppController {
 
             DesktopStorage.addToHistory(track)
 
+            // Мгновенное обновление UI и Discord RPC (название, автор, обложка) еще до окончания загрузки аудиопотока
+            val previewTrack = com.melo.desktop.extractor.ResolvedTrack(
+                title = track.title,
+                audioUrl = "",
+                thumbnailUrl = track.thumbnailUrl,
+                artist = track.uploader,
+                source = track.source,
+                originalUrl = track.url,
+                durationSeconds = track.durationSeconds,
+            )
+            withContext(Dispatchers.Main) {
+                DesktopAudioPlayer.setPreviewState(
+                    track = previewTrack,
+                    playing = true,
+                    posMs = 0L,
+                    durMs = track.durationSeconds * 1000L,
+                )
+            }
+            com.melo.desktop.discord.DiscordRpcClient.updateNow()
+
             runCatching {
                 var resolved = DesktopExtractor.resolveAudioUrl(track.url)
                 if (resolved.durationSeconds <= 0 && track.durationSeconds > 0) {
                     resolved = resolved.copy(durationSeconds = track.durationSeconds)
                 }
+                if (resolved.thumbnailUrl.isNullOrBlank() && !track.thumbnailUrl.isNullOrBlank()) {
+                    resolved = resolved.copy(thumbnailUrl = track.thumbnailUrl)
+                }
                 withContext(Dispatchers.Main) {
                     DesktopAudioPlayer.play(resolved)
                 }
+                com.melo.desktop.discord.DiscordRpcClient.updateNow()
 
                 // Фоновая предзагрузка следующего трека в очереди или из волны
                 val nextInQueue = queue.getOrNull(currentIndex + 1)
@@ -361,6 +377,7 @@ object MeloAppController {
 @Composable
 fun MeloAppContent() {
     var currentDestination by remember { mutableStateOf(NavDestination.HOME) }
+    var isAuthOpen by remember { mutableStateOf(false) }
     val isLyricsOpen = MeloAppController.isLyricsOpen
     val isNowPlayingOpen = MeloAppController.isNowPlayingOpen
     val currentTrack = DesktopAudioPlayer.currentTrack
@@ -377,36 +394,48 @@ fun MeloAppContent() {
                     .fillMaxWidth()
                     .weight(1f),
             ) {
-                // Левая боковая панель
+                // Левая боковая панель с индикатором, мини-плеером и профилем
                 Sidebar(
                     currentDestination = currentDestination,
                     onNavigate = { currentDestination = it },
+                    onOpenNowPlaying = { MeloAppController.isNowPlayingOpen = true },
+                    onOpenAuth = { isAuthOpen = true },
                 )
 
-                // Центральный экран
+                // Центральный экран с плавными переходами между разделами
                 Box(modifier = Modifier.weight(1f)) {
-                    when (currentDestination) {
-                        NavDestination.HOME -> HomeScreen(
-                            onPlayTrack = { track -> MeloAppController.playTrack(track) },
-                            onOpenSearch = { currentDestination = NavDestination.SEARCH },
-                            onOpenSettings = { currentDestination = NavDestination.SETTINGS },
-                        )
-                        NavDestination.SEARCH -> SearchScreen(
-                            onPlayTrack = { track -> MeloAppController.playTrack(track) },
-                        )
-                        NavDestination.FAVORITES -> LibraryScreen(
-                            initialTab = 0,
-                            onPlayTrack = { track -> MeloAppController.playTrack(track) },
-                        )
-                        NavDestination.HISTORY -> LibraryScreen(
-                            initialTab = 1,
-                            onPlayTrack = { track -> MeloAppController.playTrack(track) },
-                        )
-                        NavDestination.PLAYLISTS -> LibraryScreen(
-                            initialTab = 2,
-                            onPlayTrack = { track -> MeloAppController.playTrack(track) },
-                        )
-                        NavDestination.SETTINGS -> SettingsScreen()
+                    AnimatedContent(
+                        targetState = currentDestination,
+                        transitionSpec = {
+                            (fadeIn(animationSpec = androidx.compose.animation.core.tween(220)) +
+                                    androidx.compose.animation.scaleIn(initialScale = 0.98f, animationSpec = androidx.compose.animation.core.tween(220)))
+                                .togetherWith(fadeOut(animationSpec = androidx.compose.animation.core.tween(180)))
+                        },
+                        label = "screenTransition",
+                    ) { destination ->
+                        when (destination) {
+                            NavDestination.HOME -> HomeScreen(
+                                onPlayTrack = { track -> MeloAppController.playTrack(track) },
+                                onOpenSearch = { currentDestination = NavDestination.SEARCH },
+                                onOpenSettings = { currentDestination = NavDestination.SETTINGS },
+                            )
+                            NavDestination.SEARCH -> SearchScreen(
+                                onPlayTrack = { track -> MeloAppController.playTrack(track) },
+                            )
+                            NavDestination.FAVORITES -> LibraryScreen(
+                                initialTab = 0,
+                                onPlayTrack = { track -> MeloAppController.playTrack(track) },
+                            )
+                            NavDestination.HISTORY -> LibraryScreen(
+                                initialTab = 1,
+                                onPlayTrack = { track -> MeloAppController.playTrack(track) },
+                            )
+                            NavDestination.PLAYLISTS -> LibraryScreen(
+                                initialTab = 2,
+                                onPlayTrack = { track -> MeloAppController.playTrack(track) },
+                            )
+                            NavDestination.SETTINGS -> SettingsScreen(onOpenAuth = { isAuthOpen = true })
+                        }
                     }
                 }
 
@@ -439,5 +468,12 @@ fun MeloAppContent() {
             onPrevious = { MeloAppController.playPrev() },
             onNext = { MeloAppController.playNext() },
         )
+
+        // ── 4. Модальное окно авторизации (Melo, Google, YouTube Music) ───────
+        if (isAuthOpen) {
+            com.melo.desktop.ui.components.AuthDialog(
+                onDismiss = { isAuthOpen = false },
+            )
+        }
     }
 }
