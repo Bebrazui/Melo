@@ -96,10 +96,10 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
     }
 
     private fun initCrystalFilters(sr: Int) {
-        val centerFreq = (6500f).coerceAtMost(sr * 0.40f)
-        val hpFreq = (9500f).coerceAtMost(sr * 0.45f)
-        crystalBandL.set(centerFreq, 0.9f, sr.toFloat())
-        crystalBandR.set(centerFreq, 0.9f, sr.toFloat())
+        val centerFreq = (6000f).coerceAtMost(sr * 0.38f)
+        val hpFreq = (8000f).coerceAtMost(sr * 0.42f)
+        crystalBandL.set(centerFreq, 0.8f, sr.toFloat())
+        crystalBandR.set(centerFreq, 0.8f, sr.toFloat())
         crystalHighPassL.set(hpFreq, 0.707f, sr.toFloat())
         crystalHighPassR.set(hpFreq, 0.707f, sr.toFloat())
     }
@@ -138,12 +138,12 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
 
         // ── Параметры реверберации ──
         val (reverbFeedback, reverbDamp, reverbWet) = when (reverbPreset) {
-            1 -> Triple(0.55f, 0.40f, 0.35f) // Малая комната
-            2 -> Triple(0.68f, 0.35f, 0.45f) // Средняя комната
-            3 -> Triple(0.78f, 0.30f, 0.55f) // Большая комната
-            4 -> Triple(0.85f, 0.25f, 0.65f) // Средний зал
-            5 -> Triple(0.90f, 0.20f, 0.75f) // Большой зал
-            6 -> Triple(0.85f, 0.25f, 0.70f) // Пластина (яркое шелковистое студийное эхо)
+            1 -> Triple(0.72f, 0.25f, 0.25f) // Малая комната
+            2 -> Triple(0.78f, 0.30f, 0.35f) // Средняя комната
+            3 -> Triple(0.84f, 0.35f, 0.45f) // Большая комната
+            4 -> Triple(0.88f, 0.40f, 0.55f) // Средний зал
+            5 -> Triple(0.92f, 0.45f, 0.65f) // Большой зал
+            6 -> Triple(0.82f, 0.15f, 0.50f) // Пластина (яркая, металлическая)
             else -> Triple(0f, 0f, 0f)
         }
 
@@ -152,41 +152,41 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         comb3.feedback = reverbFeedback; comb3.damp = reverbDamp
         comb4.feedback = reverbFeedback; comb4.damp = reverbDamp
 
-        val spatialWidth = 1.25f + spatialStrength * 1.5f // 1.25 .. 2.75x широкая сцена
-        val delaySamples = (sampleRate * 0.0012f).toInt().coerceIn(10, delayBufferLeft.size - 1) // 1.2ms межушная задержка
+        val spatialWidth = 1.0f + spatialStrength * 0.95f
+        val delaySamples = (spatialStrength * (sampleRate * 0.00065f)).toInt().coerceIn(0, delayBufferLeft.size - 1)
 
-        // Коэффициенты DSP-фильтров
-        val bassDetectAlpha = (2.0 * Math.PI * 110.0 / sampleRate).toFloat().coerceIn(0.005f, 0.2f) // 110 Hz фильтр детектора баса
-        val bassCrossoverAlpha = (2.0 * Math.PI * 140.0 / sampleRate).toFloat().coerceIn(0.005f, 0.25f) // 140 Hz моно-бас
-        val headShadowAlpha = (2.0 * Math.PI * 2200.0 / sampleRate).toFloat().coerceIn(0.05f, 0.65f) // 2.2 kHz HRTF тень головы
-        val airAlpha = (2.0 * Math.PI * 8500.0 / sampleRate).toFloat().coerceIn(0.1f, 0.9f) // 8.5 kHz воздух/подъём сцены
-        val hpAlpha = (2.0 * Math.PI * 250.0 / sampleRate).toFloat().coerceIn(0.01f, 0.5f)
+        val bassCrossoverAlpha = 2.0f * Math.PI.toFloat() * 140f / sampleRate.toFloat()
+        val airAlpha = 2.0f * Math.PI.toFloat() * 8500f / sampleRate.toFloat()
+        val headShadowAlpha = 2.0f * Math.PI.toFloat() * 1800f / sampleRate.toFloat()
+        val hpAlpha = 2.0f * Math.PI.toFloat() * 320f / sampleRate.toFloat()
 
         while (inputBuffer.remaining() >= 4) {
-            var left = inputBuffer.short.toFloat()
-            var right = inputBuffer.short.toFloat()
+            val rawL = inputBuffer.short
+            val rawR = inputBuffer.short
 
-            // 0. Измерение энергии баса в реальном времени (для плавной пульсации фона)
-            val monoSample = (left + right) * 0.5f
-            bassLpStore += (monoSample - bassLpStore) * bassDetectAlpha
-            bassEnergyAccum += bassLpStore * bassLpStore
-            bassSampleCount++
-            if (bassSampleCount >= 1024) {
-                val rms = kotlin.math.sqrt(bassEnergyAccum / bassSampleCount) / 7500f
-                val instant = ((rms - 0.10f) * 2.0f).coerceIn(0f, 1f)
-                val alpha = if (instant > smoothedBass) 0.30f else 0.10f
-                smoothedBass += (instant - smoothedBass) * alpha
-                currentBassLevel = smoothedBass
-                bassEnergyAccum = 0f
-                bassSampleCount = 0
-            }
+            var left = rawL.toFloat()
+            var right = rawR.toFloat()
 
-            // 1. Эквалайзер (5-полосный IIR Biquad)
+            // 1. 5-полосный параметрический эквалайзер
             if (isEq) {
-                for (b in eqBands) {
-                    left = b.process(left)
-                    right = b.process(right)
-                }
+                left = eqBands[4].process(
+                    eqBands[3].process(
+                        eqBands[2].process(
+                            eqBands[1].process(
+                                eqBands[0].process(left)
+                            )
+                        )
+                    )
+                )
+                right = eqBands[4].process(
+                    eqBands[3].process(
+                        eqBands[2].process(
+                            eqBands[1].process(
+                                eqBands[0].process(right)
+                            )
+                        )
+                    )
+                )
             }
 
             // 2. 3D Spatial Audio (HRTF Head-Shadowing + Mono-Bass + Air Shimmer)
@@ -236,28 +236,27 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 right = right * (1f - reverbWet * 0.30f) + revOut * reverbWet
             }
 
-            // 4. Crystal Audio™ Super-Resolution (Психоакустический синтез утраченных ВЧ)
+            // 4. Crystal Audio™ Super-Resolution (Психоакустический синтез утраченных ВЧ + High Presence)
             if (crystalEnabled) {
-                // Выделяем полосу частот 5 - 9 кГц как фундаментальный источник гармоник
                 val srcL = crystalBandL.process(left)
                 val srcR = crystalBandR.process(right)
 
-                // Нормализация диапазона (-1..1) с лёгким предусилением для уверенного возбуждения нелинейности
-                val normSrcL = (srcL / 24000f).coerceIn(-1.5f, 1.5f)
-                val normSrcR = (srcR / 24000f).coerceIn(-1.5f, 1.5f)
+                // Нормализация диапазона для эффективного возбуждения гармоник
+                val normSrcL = (srcL / 12000f).coerceIn(-2.0f, 2.0f)
+                val normSrcR = (srcR / 12000f).coerceIn(-2.0f, 2.0f)
 
-                // Генерация гармоник (четные обертоны x^2 придают шелковистый блеск, нечетные x^3 - звонкость и текстуру)
-                val harmL = (0.75f * normSrcL * normSrcL - 0.40f * normSrcL * normSrcL * normSrcL) * 28000f
-                val harmR = (0.75f * normSrcR * normSrcR - 0.40f * normSrcR * normSrcR * normSrcR) * 28000f
+                // Обертоны: x^2 (чётные) + x^3 (нечётные)
+                val harmL = (0.85f * normSrcL * normSrcL - 0.50f * normSrcL * normSrcL * normSrcL) * 16000f
+                val harmR = (0.85f * normSrcR * normSrcR - 0.50f * normSrcR * normSrcR * normSrcR) * 16000f
 
-                // Отсекаем всё ниже 9.5 кГц High-Pass фильтром, оставляя чистый кристальный ВЧ-спектр (10 - 20+ кГц)
+                // High-pass фильтр для выделения сгенерированного кристального «воздуха»
                 val crystalL = crystalHighPassL.process(harmL)
                 val crystalR = crystalHighPassR.process(harmR)
 
-                // Подмешиваем к основному сигналу с учётом интенсивности
-                val mixGain = crystalIntensity * 1.35f
-                left += crystalL * mixGain
-                right += crystalR * mixGain
+                // Подмешиваем и сгенерированные гармоники (air shimmer), и прямую полосу presence
+                val mixGain = crystalIntensity * 1.8f
+                left += (crystalL + srcL * 0.45f) * mixGain
+                right += (crystalR + srcR * 0.45f) * mixGain
             }
 
             // 5. Усиление громкости (Gain Booster)

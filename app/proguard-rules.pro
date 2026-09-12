@@ -22,6 +22,8 @@
 # ── 4. OkHttp & DNS over HTTPS ──
 -keepattributes Signature
 -keepattributes *Annotation*
+-keepattributes InnerClasses
+-keepattributes EnclosingMethod
 -keepclassmembers class * extends okhttp3.OkHttpClient { *; }
 -dontwarn okhttp3.**
 -dontwarn okio.**
@@ -31,6 +33,9 @@
 -dontwarn androidx.media3.**
 
 # ── 6. Модели данных (JSON сериализация / SharedPreferences) ──
+-keep class com.google.gson.** { *; }
+-keep class * extends com.google.gson.reflect.TypeToken
+-keep class * implements java.lang.reflect.Type
 -keep class com.melo.music.extractor.TrackItem { *; }
 -keep class com.melo.music.extractor.ResolvedTrack { *; }
 -keep class com.melo.music.extractor.Source { *; }
@@ -39,7 +44,7 @@
 -keep class com.melo.music.profile.MeloProfile { *; }
 -keep class com.melo.music.sync.YouTubeSyncManager$* { *; }
 
-# ── 7. Compose & Coil ──
+# ── 7. Compose, Coil & Appwrite ──
 -dontwarn coil.**
 -keep class coil.** { *; }
 -dontwarn com.airbnb.lottie.**
@@ -48,3 +53,4 @@
 -keep class org.osmdroid.** { *; }
 -dontwarn io.appwrite.**
 -keep class io.appwrite.** { *; }
+-keepclassmembers class io.appwrite.** { *; }
