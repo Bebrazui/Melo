@@ -270,7 +270,7 @@ private fun UserProfileView(onDismiss: () -> Unit) {
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text("YouTube Music", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-                            Text("Сессия активна • 18+ треки", fontSize = 11.sp, color = MeloPrimary)
+                            Text("Сессия активна", fontSize = 11.sp, color = MeloPrimary)
                         }
                     }
 

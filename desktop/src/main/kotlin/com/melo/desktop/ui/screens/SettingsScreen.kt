@@ -156,8 +156,8 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = if (isYtLoggedIn) 
-                                (syncStatusMessage ?: (userHandle?.let { "$it • Доступ к трекам 18+ и медиатеке" } ?: "Подключено. Доступ к трекам 18+ и медиатеке"))
-                                else "Войдите для синхронизации плейлистов и снятия ограничений",
+                                (syncStatusMessage ?: (userHandle ?: "Подключено"))
+                                else "Войдите для синхронизации плейлистов",
                             fontSize = 12.sp,
                             color = if (isYtLoggedIn) MeloPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
