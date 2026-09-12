@@ -45,6 +45,9 @@ object DesktopYouTubeSyncManager {
         }
 
         try {
+            onProgress("Подключение к YouTube Music...")
+            warmUpSession()
+
             onProgress("Загрузка понравившихся треков...")
             val likedTracks = fetchLikedMusic()
             println("[DesktopYouTubeSync] Найдено понравившихся треков: ${likedTracks.size}")
@@ -339,6 +342,43 @@ object DesktopYouTubeSyncManager {
         } catch (e: Exception) {
             System.err.println("[DesktopYouTubeSync] InnerTube network error: ${e.message}")
             null
+        }
+    }
+
+    private fun warmUpSession() {
+        val currentCookies = DesktopYouTubeAuthManager.getCookies() ?: return
+        try {
+            val req = Request.Builder()
+                .url("https://music.youtube.com/")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0")
+                .header("Cookie", currentCookies)
+                .build()
+
+            val resp = client.newCall(req).execute()
+            val setCookies = resp.headers("Set-Cookie")
+            if (setCookies.isNotEmpty()) {
+                val cookieMap = mutableMapOf<String, String>()
+                currentCookies.split(";").forEach { c ->
+                    if (c.contains("=")) {
+                        val k = c.substringBefore("=").trim()
+                        val v = c.substringAfter("=").trim()
+                        if (k.isNotBlank()) cookieMap[k] = v
+                    }
+                }
+                setCookies.forEach { sc ->
+                    val pair = sc.substringBefore(";")
+                    if (pair.contains("=")) {
+                        val k = pair.substringBefore("=").trim()
+                        val v = pair.substringAfter("=").trim()
+                        if (k.isNotBlank()) cookieMap[k] = v
+                    }
+                }
+                val merged = cookieMap.entries.joinToString("; ") { "${it.key}=${it.value}" }
+                DesktopYouTubeAuthManager.saveSession(merged)
+            }
+            resp.close()
+        } catch (e: Exception) {
+            System.err.println("[DesktopYouTubeSync] Warmup error: ${e.message}")
         }
     }
 }
