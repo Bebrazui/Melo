@@ -1,9 +1,15 @@
 package com.melo.desktop.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,13 +38,12 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Login
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material3.Button
@@ -57,13 +63,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.melo.desktop.auth.DesktopAuthManager
@@ -72,10 +80,15 @@ import com.melo.desktop.extractor.TrackItem
 import com.melo.desktop.storage.DesktopStorage
 import com.melo.desktop.sync.DesktopYouTubeSyncManager
 import com.melo.desktop.ui.components.AsyncCoverImage
-import com.melo.desktop.ui.theme.MeloCardSurface
 import com.melo.desktop.ui.theme.MeloPrimary
-import com.melo.desktop.ui.theme.MeloSurfaceVariant
 import kotlinx.coroutines.launch
+
+// ── Асимметричные выразительные формы Material 3 Expressive ──────────────────
+private val HeroExpressiveShape = RoundedCornerShape(topStart = 44.dp, topEnd = 20.dp, bottomEnd = 44.dp, bottomStart = 24.dp)
+private val BentoLargeShape = RoundedCornerShape(topStart = 36.dp, topEnd = 16.dp, bottomEnd = 36.dp, bottomStart = 24.dp)
+private val BentoCardShapeA = RoundedCornerShape(topStart = 28.dp, topEnd = 36.dp, bottomEnd = 18.dp, bottomStart = 32.dp)
+private val BentoCardShapeB = RoundedCornerShape(topStart = 20.dp, topEnd = 32.dp, bottomEnd = 32.dp, bottomStart = 20.dp)
+private val TrackExpressiveShape = RoundedCornerShape(topStart = 26.dp, topEnd = 12.dp, bottomEnd = 26.dp, bottomStart = 12.dp)
 
 @Composable
 fun ProfileScreen(
@@ -103,287 +116,265 @@ fun ProfileScreen(
     val history = DesktopStorage.history
     val playlists = DesktopStorage.playlists.value
 
+    val topFavorite = favorites.firstOrNull() ?: history.firstOrNull()
+
     val scope = rememberCoroutineScope()
     var isSyncing by remember { mutableStateOf(false) }
     var syncStatusText by remember { mutableStateOf<String?>(null) }
 
+    // Бесконечная анимация свечения и пульсации для Expressive элементов
+    val infiniteTransition = rememberInfiniteTransition(label = "profileAura")
+    val auraGlow by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.75f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400, easing = FastOutSlowInEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "auraGlow"
+    )
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(Color(0xFF0C110E)),
         contentPadding = PaddingValues(horizontal = 32.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(28.dp),
+        verticalArrangement = Arrangement.spacedBy(26.dp),
     ) {
-        // ── 1. Верхняя панель навигации ─────────────────────────────────────────
+        // ── 1. Навигационная строка с Pill-кнопкой ────────────────────────────
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Surface(
                     shape = CircleShape,
                     color = Color.White.copy(alpha = 0.08f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
                     modifier = Modifier
-                        .size(42.dp)
                         .clip(CircleShape)
                         .clickable(onClick = onBack),
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = "Назад",
                             tint = Color.White,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(16.dp))
-                Text(
-                    text = "Профиль",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
-            }
-        }
-
-        // ── 2. Hero карточка пользователя (крупный аватар с двойным кольцом) ─────
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(Color.White.copy(alpha = 0.04f))
-                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), RoundedCornerShape(32.dp))
-                    .padding(vertical = 32.dp, horizontal = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                // Аватар с двойным кольцом и мягким свечением
-                Box(
-                    modifier = Modifier
-                        .size(118.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.03f))
-                        .border(BorderStroke(2.5.dp, MeloPrimary.copy(alpha = 0.55f)), CircleShape)
-                        .padding(7.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (!userAvatar.isNullOrBlank()) {
-                        AsyncCoverImage(
-                            url = userAvatar,
-                            modifier = Modifier
-                                .size(104.dp)
-                                .clip(CircleShape),
-                            shape = CircleShape,
-                        )
-                    } else {
-                        Surface(
-                            shape = CircleShape,
-                            color = MeloPrimary,
-                            modifier = Modifier.size(104.dp),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                if (isAnyLoggedIn) {
-                                    Text(
-                                        text = userName.take(1).uppercase(),
-                                        fontSize = 42.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color = Color(0xFF0A2012),
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Person,
-                                        contentDescription = null,
-                                        tint = Color(0xFF0A2012),
-                                        modifier = Modifier.size(54.dp),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                // Имя в выразительной типографике
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Text(
-                        text = userName,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = (-0.5).sp,
-                        color = Color.White,
-                        textAlign = TextAlign.Center,
-                    )
-                    if (isAnyLoggedIn) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = CircleShape,
-                            color = MeloPrimary.copy(alpha = 0.2f),
-                            modifier = Modifier.size(24.dp),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Verified,
-                                    contentDescription = "Верифицирован",
-                                    tint = MeloPrimary,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Handle или подпись
-                val subtitle = userHandle ?: userEmail ?: if (isAnyLoggedIn) "Подключен" else "Гостевой профиль"
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = subtitle,
-                    fontSize = 14.sp,
-                    color = if (userHandle != null) MeloPrimary else Color.White.copy(alpha = 0.65f),
-                    fontWeight = FontWeight.Medium,
-                )
-
-                // Чип статуса
-                Spacer(modifier = Modifier.height(14.dp))
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = if (isAnyLoggedIn) MeloPrimary.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.06f),
-                    border = BorderStroke(
-                        1.dp,
-                        if (isAnyLoggedIn) MeloPrimary.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f)
-                    ),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(if (isAnyLoggedIn) MeloPrimary else Color.White.copy(alpha = 0.4f)),
+                            modifier = Modifier.size(18.dp),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (isAnyLoggedIn) "Синхронизация активна" else "Локальный режим",
-                            fontSize = 12.sp,
+                            text = "Главная",
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (isAnyLoggedIn) MeloPrimary else Color.White.copy(alpha = 0.7f),
+                            color = Color.White,
+                        )
+                    }
+                }
+
+                // Индикатор живого музыкального статуса
+                Surface(
+                    shape = CircleShape,
+                    color = MeloPrimary.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, MeloPrimary.copy(alpha = 0.3f)),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ExpressiveWaveformIndicator(color = MeloPrimary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isAnyLoggedIn) "Melo Cloud Active" else "Offline Library",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MeloPrimary,
                         )
                     }
                 }
             }
         }
 
-        // ── 3. Интерактивные карточки статистики ────────────────────────────────
+        // ── 2. Главный Hero-модуль с необычной органической формой ────────────
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                ProfileStatCard(
-                    title = "Любимые треки",
-                    count = favorites.size.toString(),
-                    icon = Icons.Rounded.Favorite,
-                    iconTint = MeloPrimary,
-                    onClick = onOpenFavorites,
-                    modifier = Modifier.weight(1f),
-                )
-
-                ProfileStatCard(
-                    title = "Плейлисты",
-                    count = playlists.size.toString(),
-                    icon = Icons.AutoMirrored.Rounded.QueueMusic,
-                    iconTint = Color(0xFF60A5FA),
-                    onClick = onOpenPlaylists,
-                    modifier = Modifier.weight(1f),
-                )
-
-                ProfileStatCard(
-                    title = "История",
-                    count = history.size.toString(),
-                    icon = Icons.Rounded.History,
-                    iconTint = Color(0xFFFBBF24),
-                    onClick = onOpenHistory,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-
-        // ── 4. Подключенные аккаунты и Синхронизация ────────────────────────────
-        item {
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(26.dp))
-                    .background(MeloSurfaceVariant.copy(alpha = 0.35f))
-                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), RoundedCornerShape(26.dp))
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
+                    .clip(HeroExpressiveShape)
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFF1B2E22),
+                                Color(0xFF142018),
+                                Color(0xFF0F1713)
+                            ),
+                            start = Offset(0f, 0f),
+                            end = Offset(1000f, 600f)
+                        )
+                    )
+                    .border(
+                        BorderStroke(
+                            1.5.dp,
+                            Brush.linearGradient(
+                                listOf(
+                                    MeloPrimary.copy(alpha = 0.45f * auraGlow),
+                                    Color.White.copy(alpha = 0.12f),
+                                    Color.Transparent
+                                )
+                            )
+                        ),
+                        HeroExpressiveShape
+                    )
+                    .padding(32.dp)
             ) {
-                Text(
-                    text = "ПОДКЛЮЧЕННЫЕ СЕРВИСЫ",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MeloPrimary,
-                    letterSpacing = 1.sp,
-                )
-
-                // YouTube Music карточка
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color(0xFFEF4444).copy(alpha = 0.15f),
-                            modifier = Modifier.size(46.dp),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Rounded.LibraryMusic,
-                                    contentDescription = null,
-                                    tint = Color(0xFFEF4444),
-                                    modifier = Modifier.size(24.dp),
-                                )
+                    // Левая часть: Выразительный подиум аватара
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(contentAlignment = Alignment.Center) {
+                            // Внешний декоративный ореол асимметричной формы
+                            Box(
+                                modifier = Modifier
+                                    .size(126.dp)
+                                    .clip(RoundedCornerShape(topStart = 44.dp, topEnd = 24.dp, bottomEnd = 44.dp, bottomStart = 24.dp))
+                                    .background(
+                                        Brush.sweepGradient(
+                                            listOf(
+                                                MeloPrimary.copy(alpha = 0.6f),
+                                                Color(0xFF60A5FA).copy(alpha = 0.4f),
+                                                MeloPrimary.copy(alpha = 0.6f)
+                                            )
+                                        )
+                                    )
+                                    .padding(3.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(topStart = 41.dp, topEnd = 21.dp, bottomEnd = 41.dp, bottomStart = 21.dp))
+                                        .background(Color(0xFF101913)),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (!userAvatar.isNullOrBlank()) {
+                                        AsyncCoverImage(
+                                            url = userAvatar,
+                                            modifier = Modifier.fillMaxSize(),
+                                            shape = RoundedCornerShape(topStart = 41.dp, topEnd = 21.dp, bottomEnd = 41.dp, bottomStart = 21.dp),
+                                        )
+                                    } else {
+                                        Text(
+                                            text = userName.take(1).uppercase(),
+                                            fontSize = 44.sp,
+                                            fontWeight = FontWeight.Black,
+                                            color = MeloPrimary,
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Парящий бейдж верификации
+                            if (isAnyLoggedIn) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MeloPrimary,
+                                    border = BorderStroke(2.dp, Color(0xFF0F1713)),
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .align(Alignment.BottomEnd)
+                                        .offset(x = 4.dp, y = 4.dp),
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Verified,
+                                            contentDescription = null,
+                                            tint = Color(0xFF0A2012),
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                }
                             }
                         }
 
-                        Spacer(modifier = Modifier.width(14.dp))
+                        Spacer(modifier = Modifier.width(26.dp))
 
+                        // Информация профиля
                         Column {
-                            Text(
-                                text = "YouTube Music",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = if (isYtLoggedIn) {
-                                    syncStatusText ?: (DesktopYouTubeAuthManager.accountHandle ?: "Подключено")
-                                } else {
-                                    "Войдите для синхронизации плейлистов и лайков"
-                                },
-                                fontSize = 13.sp,
-                                color = if (isYtLoggedIn) MeloPrimary else Color.White.copy(alpha = 0.6f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = userName,
+                                    fontSize = 32.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = (-0.8).sp,
+                                    color = Color.White,
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                if (userHandle != null) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MeloPrimary.copy(alpha = 0.15f),
+                                    ) {
+                                        Text(
+                                            text = userHandle,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MeloPrimary,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                        )
+                                    }
+                                }
+
+                                if (userEmail != null && userEmail != userHandle) {
+                                    Text(
+                                        text = userEmail,
+                                        fontSize = 13.sp,
+                                        color = Color.White.copy(alpha = 0.65f),
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Динамическая полоса характеристик профиля
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                ProfilePillBadge(
+                                    icon = Icons.Rounded.Favorite,
+                                    text = "${favorites.size} любимых",
+                                    color = MeloPrimary,
+                                )
+                                ProfilePillBadge(
+                                    icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                                    text = "${playlists.size} плейлистов",
+                                    color = Color(0xFF60A5FA),
+                                )
+                                ProfilePillBadge(
+                                    icon = Icons.Rounded.History,
+                                    text = "${history.size} в истории",
+                                    color = Color(0xFFFBBF24),
+                                )
+                            }
                         }
                     }
 
-                    if (isYtLoggedIn) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Правая часть: Expressive Action Trigger
+                    Column(horizontalAlignment = Alignment.End) {
+                        if (isYtLoggedIn) {
                             Button(
                                 onClick = {
                                     if (!isSyncing) {
@@ -403,12 +394,16 @@ fun ProfileScreen(
                                     }
                                 },
                                 enabled = !isSyncing,
-                                shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MeloPrimary),
+                                shape = RoundedCornerShape(18.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MeloPrimary,
+                                    disabledContainerColor = MeloPrimary.copy(alpha = 0.6f)
+                                ),
+                                contentPadding = PaddingValues(horizontal = 22.dp, vertical = 14.dp),
                             ) {
                                 if (isSyncing) {
                                     CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
+                                        modifier = Modifier.size(18.dp),
                                         color = Color(0xFF0A2012),
                                         strokeWidth = 2.dp,
                                     )
@@ -417,7 +412,7 @@ fun ProfileScreen(
                                         imageVector = Icons.Rounded.Sync,
                                         contentDescription = null,
                                         tint = Color(0xFF0A2012),
-                                        modifier = Modifier.size(16.dp),
+                                        modifier = Modifier.size(18.dp),
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -425,45 +420,39 @@ fun ProfileScreen(
                                     text = if (isSyncing) "Синхронизация..." else "Синхронизировать",
                                     color = Color(0xFF0A2012),
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
+                                    fontSize = 14.sp,
                                 )
                             }
-
-                            IconButton(
-                                onClick = {
-                                    DesktopYouTubeAuthManager.logout()
-                                    syncStatusText = null
-                                },
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(Color.White.copy(alpha = 0.08f)),
+                        } else {
+                            Button(
+                                onClick = onOpenAuth,
+                                shape = RoundedCornerShape(18.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MeloPrimary),
+                                contentPadding = PaddingValues(horizontal = 22.dp, vertical = 14.dp),
                             ) {
                                 Icon(
-                                    imageVector = Icons.AutoMirrored.Rounded.Logout,
-                                    contentDescription = "Выйти из YouTube Music",
-                                    tint = Color.White.copy(alpha = 0.8f),
+                                    imageVector = Icons.AutoMirrored.Rounded.Login,
+                                    contentDescription = null,
+                                    tint = Color(0xFF0A2012),
                                     modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Подключить сервисы",
+                                    color = Color(0xFF0A2012),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
                                 )
                             }
                         }
-                    } else {
-                        Button(
-                            onClick = onOpenAuth,
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MeloPrimary),
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Rounded.Login,
-                                contentDescription = null,
-                                tint = Color(0xFF0A2012),
-                                modifier = Modifier.size(16.dp),
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
+
+                        if (syncStatusText != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "Войти",
-                                color = Color(0xFF0A2012),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
+                                text = syncStatusText!!,
+                                fontSize = 12.sp,
+                                color = MeloPrimary,
+                                fontWeight = FontWeight.SemiBold,
                             )
                         }
                     }
@@ -471,7 +460,380 @@ fun ProfileScreen(
             }
         }
 
-        // ── 5. Недавние любимые треки (Горизонтальная полка) ─────────────────────
+        // ── 3. Bento Grid: 2-колоночная компоновка с винилом и сервисами ──────
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+                // ЛЕВАЯ КОЛОНКА BENTO: Большой интерактивный виниловый тайл
+                Box(
+                    modifier = Modifier
+                        .weight(1.15f)
+                        .clip(BentoLargeShape)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0xFF19251E), Color(0xFF101713))
+                            )
+                        )
+                        .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.09f)), BentoLargeShape)
+                        .padding(26.dp)
+                ) {
+                    if (topFavorite != null) {
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MeloPrimary.copy(alpha = 0.15f),
+                                        modifier = Modifier.size(32.dp),
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Radio,
+                                                contentDescription = null,
+                                                tint = MeloPrimary,
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = "ГЛАВНЫЙ ВАЙБ",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        letterSpacing = 1.sp,
+                                        color = MeloPrimary,
+                                    )
+                                }
+
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color.White.copy(alpha = 0.08f),
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .clickable(onClick = onOpenFavorites),
+                                ) {
+                                    Text(
+                                        text = "Моя медиатека →",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.White.copy(alpha = 0.8f),
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            // Виниловый проигрыватель: конверт + выезжающий винил
+                            ExpressiveVinylSleeve(
+                                track = topFavorite,
+                                onPlay = { onPlayTrack(topFavorite) }
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Text(
+                                text = topFavorite.title,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text(
+                                text = topFavorite.uploader ?: "Неизвестный исполнитель",
+                                fontSize = 14.sp,
+                                color = Color.White.copy(alpha = 0.65f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    } else {
+                        // Если нет треков — экспрессивный призыв
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MeloPrimary.copy(alpha = 0.15f),
+                                modifier = Modifier.size(64.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.LibraryMusic,
+                                        contentDescription = null,
+                                        tint = MeloPrimary,
+                                        modifier = Modifier.size(32.dp),
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Медиатека ждёт музыки",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Войдите в YouTube Music или добавьте треки в любимые, чтобы оживить профиль",
+                                fontSize = 13.sp,
+                                color = Color.White.copy(alpha = 0.6f),
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                }
+
+                // ПРАВАЯ КОЛОНКА BENTO: Тайлы быстрой статистики и сервисный хаб
+                Column(
+                    modifier = Modifier.weight(0.95f),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                ) {
+                    // Тайл 1: Коллекция треков с мини-стеком обложек
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(BentoCardShapeA)
+                            .background(Color.White.copy(alpha = 0.04f))
+                            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), BentoCardShapeA)
+                            .clickable(onClick = onOpenFavorites)
+                            .padding(22.dp)
+                    ) {
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(
+                                    text = "Любимые треки",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White.copy(alpha = 0.8f),
+                                )
+                                Icon(
+                                    imageVector = Icons.Rounded.Favorite,
+                                    contentDescription = null,
+                                    tint = MeloPrimary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(
+                                    text = "${favorites.size}",
+                                    fontSize = 36.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = (-1).sp,
+                                    color = Color.White,
+                                )
+
+                                // Стек из 3-х обложек с наложением
+                                if (favorites.isNotEmpty()) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        favorites.take(3).forEachIndexed { index, track ->
+                                            Box(
+                                                modifier = Modifier
+                                                    .offset(x = (-10 * index).dp)
+                                                    .size(32.dp)
+                                                    .clip(CircleShape)
+                                                    .border(1.5.dp, Color(0xFF16221A), CircleShape)
+                                            ) {
+                                                AsyncCoverImage(
+                                                    url = track.thumbnailUrl,
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    shape = CircleShape,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Тайл 2: Сплит плейлистов и истории
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        // Плейлисты
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(22.dp))
+                                .background(Color.White.copy(alpha = 0.04f))
+                                .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), RoundedCornerShape(22.dp))
+                                .clickable(onClick = onOpenPlaylists)
+                                .padding(18.dp)
+                        ) {
+                            Column {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                                    contentDescription = null,
+                                    tint = Color(0xFF60A5FA),
+                                    modifier = Modifier.size(22.dp),
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "${playlists.size}",
+                                    fontSize = 26.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color.White,
+                                )
+                                Text(
+                                    text = "Плейлисты",
+                                    fontSize = 12.sp,
+                                    color = Color.White.copy(alpha = 0.65f),
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
+                        }
+
+                        // История
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(22.dp))
+                                .background(Color.White.copy(alpha = 0.04f))
+                                .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), RoundedCornerShape(22.dp))
+                                .clickable(onClick = onOpenHistory)
+                                .padding(18.dp)
+                        ) {
+                            Column {
+                                Icon(
+                                    imageVector = Icons.Rounded.History,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFBBF24),
+                                    modifier = Modifier.size(22.dp),
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "${history.size}",
+                                    fontSize = 26.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color.White,
+                                )
+                                Text(
+                                    text = "История",
+                                    fontSize = 12.sp,
+                                    color = Color.White.copy(alpha = 0.65f),
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
+                        }
+                    }
+
+                    // Тайл 3: Сервисный хаб (YouTube Music интеграция)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(BentoCardShapeB)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        Color(0xFF221616).copy(alpha = 0.5f),
+                                        Color(0xFF141916).copy(alpha = 0.6f)
+                                    )
+                                )
+                            )
+                            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), BentoCardShapeB)
+                            .padding(18.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = Color(0xFFEF4444).copy(alpha = 0.16f),
+                                    modifier = Modifier.size(40.dp),
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.LibraryMusic,
+                                            contentDescription = null,
+                                            tint = Color(0xFFEF4444),
+                                            modifier = Modifier.size(22.dp),
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "YouTube Music",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                    )
+                                    Text(
+                                        text = if (isYtLoggedIn) "Подключен и активен" else "Не авторизован",
+                                        fontSize = 12.sp,
+                                        color = if (isYtLoggedIn) MeloPrimary else Color.White.copy(alpha = 0.55f),
+                                    )
+                                }
+                            }
+
+                            if (isYtLoggedIn) {
+                                IconButton(
+                                    onClick = {
+                                        DesktopYouTubeAuthManager.logout()
+                                        syncStatusText = null
+                                    },
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(Color.White.copy(alpha = 0.06f)),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.Logout,
+                                        contentDescription = "Выйти",
+                                        tint = Color.White.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            } else {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MeloPrimary,
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .clickable(onClick = onOpenAuth),
+                                ) {
+                                    Text(
+                                        text = "Войти",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0A2012),
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── 4. Полка любимых треков с виниловыми скруглениями ──────────────────
         if (favorites.isNotEmpty()) {
             item {
                 Row(
@@ -479,13 +841,28 @@ fun ProfileScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(
-                        text = "Любимые треки",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-0.3).sp,
-                        color = Color.White,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Коллекция",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = (-0.5).sp,
+                            color = Color.White,
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = MeloPrimary.copy(alpha = 0.15f),
+                        ) {
+                            Text(
+                                text = "${favorites.size}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MeloPrimary,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                            )
+                        }
+                    }
 
                     Surface(
                         shape = CircleShape,
@@ -495,8 +872,8 @@ fun ProfileScreen(
                             .clickable(onClick = onOpenFavorites),
                     ) {
                         Text(
-                            text = "Все ${favorites.size}",
-                            fontSize = 13.sp,
+                            text = "Смотреть все",
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MeloPrimary,
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
@@ -504,22 +881,22 @@ fun ProfileScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    items(favorites.take(15)) { track ->
-                        ProfileTrackCard(
+                    items(favorites.take(16)) { track ->
+                        ExpressiveTrackCard(
                             track = track,
-                            onClick = { onPlayTrack(track) },
+                            onClick = { onPlayTrack(track) }
                         )
                     }
                 }
             }
         }
 
-        // ── 6. Плейлисты (Горизонтальная полка) ──────────────────────────────────
+        // ── 5. Полка плейлистов с асимметричными карточками-кассетами ─────────
         if (playlists.isNotEmpty()) {
             item {
                 Row(
@@ -529,9 +906,9 @@ fun ProfileScreen(
                 ) {
                     Text(
                         text = "Плейлисты",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-0.3).sp,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = (-0.5).sp,
                         color = Color.White,
                     )
 
@@ -544,15 +921,15 @@ fun ProfileScreen(
                     ) {
                         Text(
                             text = "Все ${playlists.size}",
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = MeloPrimary,
+                            color = Color(0xFF60A5FA),
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -561,102 +938,15 @@ fun ProfileScreen(
                         val pTracks = playlists[name] ?: emptyList()
                         val coverUrl = pTracks.firstOrNull()?.thumbnailUrl
 
-                        Surface(
-                            shape = RoundedCornerShape(22.dp),
-                            color = Color.White.copy(alpha = 0.04f),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-                            modifier = Modifier
-                                .width(150.dp)
-                                .clip(RoundedCornerShape(22.dp))
-                                .clickable {
-                                    pTracks.firstOrNull()?.let { onPlayTrack(it) }
-                                },
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(126.dp)
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(MeloSurfaceVariant),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    if (!coverUrl.isNullOrBlank()) {
-                                        AsyncCoverImage(
-                                            url = coverUrl,
-                                            modifier = Modifier.fillMaxSize(),
-                                            shape = RoundedCornerShape(16.dp),
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
-                                            contentDescription = null,
-                                            tint = MeloPrimary,
-                                            modifier = Modifier.size(36.dp),
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(10.dp))
-                                Text(
-                                    text = name,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "${pTracks.size} треков",
-                                    fontSize = 12.sp,
-                                    color = Color.White.copy(alpha = 0.6f),
-                                )
+                        ExpressivePlaylistTile(
+                            name = name,
+                            trackCount = pTracks.size,
+                            coverUrl = coverUrl,
+                            onClick = {
+                                pTracks.firstOrNull()?.let { onPlayTrack(it) }
                             }
-                        }
+                        )
                     }
-                }
-            }
-        }
-
-        // ── 7. Пустое состояние, если вообще нет музыки ─────────────────────────
-        if (favorites.isEmpty() && playlists.isEmpty()) {
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(28.dp))
-                        .background(Color.White.copy(alpha = 0.03f))
-                        .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.07f)), RoundedCornerShape(28.dp))
-                        .padding(40.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MeloPrimary.copy(alpha = 0.15f),
-                        modifier = Modifier.size(64.dp),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.LibraryMusic,
-                                contentDescription = null,
-                                tint = MeloPrimary,
-                                modifier = Modifier.size(32.dp),
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(18.dp))
-                    Text(
-                        text = "Тут пока пусто",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Синхронизируйте аккаунт YouTube Music или добавляйте треки в любимые через Поиск",
-                        fontSize = 13.sp,
-                        color = Color.White.copy(alpha = 0.6f),
-                        textAlign = TextAlign.Center,
-                    )
                 }
             }
         }
@@ -667,132 +957,176 @@ fun ProfileScreen(
     }
 }
 
-/** Карточка быстрой статистики (Любимые, Плейлисты, История) */
+// ── Вспомогательные выразительные компоненты ─────────────────────────────────
+
+/** Виниловый конверт с выезжающей пластинкой */
 @Composable
-private fun ProfileStatCard(
-    title: String,
-    count: String,
-    icon: ImageVector,
-    iconTint: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
+private fun ExpressiveVinylSleeve(
+    track: TrackItem,
+    onPlay: () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
-    val scale by animateFloatAsState(if (isHovered) 1.02f else 1f, label = "statCardScale")
-    val bgColor by animateColorAsState(
-        if (isHovered) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.04f),
-        label = "statCardBg"
+
+    val discOffset by animateDpAsState(
+        targetValue = if (isHovered) 56.dp else 24.dp,
+        animationSpec = tween(350, easing = FastOutSlowInEasing),
+        label = "discOffset"
     )
 
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = bgColor,
-        border = BorderStroke(1.dp, if (isHovered) iconTint.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.08f)),
-        modifier = modifier
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .clip(RoundedCornerShape(24.dp))
+    val infiniteTransition = rememberInfiniteTransition(label = "vinylSpin")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(6000, easing = LinearEasing)
+        ),
+        label = "rotation"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(160.dp)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = onClick,
+                onClick = onPlay
             ),
+        contentAlignment = Alignment.CenterStart
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
+        // Выезжающий виниловый диск
+        Box(
+            modifier = Modifier
+                .offset(x = 120.dp + discOffset)
+                .size(140.dp)
+                .graphicsLayer {
+                    rotationZ = if (isHovered) rotation else 0f
+                }
+                .clip(CircleShape)
+                .background(Color(0xFF0F0F11))
+                .border(1.5.dp, Color(0xFF26262B), CircleShape),
+            contentAlignment = Alignment.Center
         ) {
+            // Концентрические звуковые дорожки винила
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                drawCircle(color = Color.White.copy(alpha = 0.08f), radius = size.width * 0.42f, center = center, style = Stroke(width = 1f))
+                drawCircle(color = Color.White.copy(alpha = 0.08f), radius = size.width * 0.35f, center = center, style = Stroke(width = 1f))
+                drawCircle(color = Color.White.copy(alpha = 0.08f), radius = size.width * 0.28f, center = center, style = Stroke(width = 1f))
+            }
+
+            // Центральное отверстие яблока винила
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(CircleShape)
+                    .background(MeloPrimary),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(14.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF0C110E))
+                )
+            }
+        }
+
+        // Конверт пластинки (Sleeve)
+        Box(
+            modifier = Modifier
+                .size(150.dp)
+                .clip(RoundedCornerShape(topStart = 26.dp, topEnd = 14.dp, bottomEnd = 26.dp, bottomStart = 14.dp))
+                .background(Color(0xFF1F2E25))
+                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(topStart = 26.dp, topEnd = 14.dp, bottomEnd = 26.dp, bottomStart = 14.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncCoverImage(
+                url = track.thumbnailUrl,
+                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(topStart = 26.dp, topEnd = 14.dp, bottomEnd = 26.dp, bottomStart = 14.dp)
+            )
+
+            // Кнопка плей поверх конверта
             Surface(
                 shape = CircleShape,
-                color = iconTint.copy(alpha = 0.16f),
-                modifier = Modifier.size(40.dp),
+                color = MeloPrimary,
+                modifier = Modifier
+                    .size(48.dp)
+                    .graphicsLayer { scaleX = if (isHovered) 1.08f else 1f; scaleY = if (isHovered) 1.08f else 1f }
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = iconTint,
-                        modifier = Modifier.size(20.dp),
+                        imageVector = Icons.Rounded.PlayArrow,
+                        contentDescription = "Play",
+                        tint = Color(0xFF0A2012),
+                        modifier = Modifier.size(28.dp),
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(14.dp))
-            Text(
-                text = count,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Black,
-                color = Color.White,
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = title,
-                fontSize = 13.sp,
-                color = Color.White.copy(alpha = 0.65f),
-                fontWeight = FontWeight.Medium,
-            )
         }
     }
 }
 
-/** Карточка трека в горизонтальной ленте профиля */
+/** Карточка трека в коллекции с асимметричными углами */
 @Composable
-private fun ProfileTrackCard(
+private fun ExpressiveTrackCard(
     track: TrackItem,
     onClick: () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
-    val scale by animateFloatAsState(if (isHovered) 1.03f else 1f, label = "profileTrackScale")
+    val scale by animateFloatAsState(if (isHovered) 1.04f else 1f, label = "trackScale")
 
     Column(
         modifier = Modifier
-            .width(144.dp)
+            .width(148.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(RoundedCornerShape(20.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
-            ),
+            )
     ) {
         Box(
             modifier = Modifier
-                .size(144.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(MeloSurfaceVariant)
-                .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), RoundedCornerShape(20.dp)),
-            contentAlignment = Alignment.Center,
+                .size(148.dp)
+                .clip(TrackExpressiveShape)
+                .background(Color(0xFF1B2820))
+                .border(
+                    BorderStroke(1.dp, if (isHovered) MeloPrimary.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.08f)),
+                    TrackExpressiveShape
+                ),
+            contentAlignment = Alignment.Center
         ) {
             AsyncCoverImage(
                 url = track.thumbnailUrl,
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(20.dp),
+                shape = TrackExpressiveShape,
             )
 
-            // Кнопка воспроизведения на hover
             if (isHovered) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.35f)),
-                    contentAlignment = Alignment.Center,
+                        .background(Color.Black.copy(alpha = 0.38f)),
+                    contentAlignment = Alignment.Center
                 ) {
                     Surface(
                         shape = CircleShape,
                         color = MeloPrimary,
-                        modifier = Modifier.size(46.dp),
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Rounded.PlayArrow,
-                                contentDescription = "Play",
+                                contentDescription = null,
                                 tint = Color(0xFF0A2012),
-                                modifier = Modifier.size(26.dp),
+                                modifier = Modifier.size(24.dp),
                             )
                         }
                     }
@@ -804,8 +1138,8 @@ private fun ProfileTrackCard(
 
         Text(
             text = track.title,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
             color = Color.White,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -815,10 +1149,136 @@ private fun ProfileTrackCard(
             Text(
                 text = it,
                 fontSize = 12.sp,
-                color = Color.White.copy(alpha = 0.65f),
+                color = Color.White.copy(alpha = 0.6f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
+    }
+}
+
+/** Плейлист-кассета с ярким акцентным заголовком */
+@Composable
+private fun ExpressivePlaylistTile(
+    name: String,
+    trackCount: Int,
+    coverUrl: String?,
+    onClick: () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    val scale by animateFloatAsState(if (isHovered) 1.03f else 1f, label = "plScale")
+
+    Surface(
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 14.dp, bottomEnd = 28.dp, bottomStart = 14.dp),
+        color = Color.White.copy(alpha = 0.04f),
+        border = BorderStroke(1.dp, if (isHovered) Color(0xFF60A5FA).copy(alpha = 0.5f) else Color.White.copy(alpha = 0.08f)),
+        modifier = Modifier
+            .width(160.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 14.dp, bottomEnd = 28.dp, bottomStart = 14.dp))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(136.dp)
+                    .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 10.dp, bottomEnd = 22.dp, bottomStart = 10.dp))
+                    .background(Color(0xFF1E2822)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!coverUrl.isNullOrBlank()) {
+                    AsyncCoverImage(
+                        url = coverUrl,
+                        modifier = Modifier.fillMaxSize(),
+                        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 10.dp, bottomEnd = 22.dp, bottomStart = 10.dp)
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                        contentDescription = null,
+                        tint = Color(0xFF60A5FA),
+                        modifier = Modifier.size(36.dp),
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = name,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "$trackCount треков",
+                fontSize = 12.sp,
+                color = Color(0xFF60A5FA),
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+/** Pill-бейдж в шапке профиля */
+@Composable
+private fun ProfilePillBadge(
+    icon: ImageVector,
+    text: String,
+    color: Color,
+) {
+    Surface(
+        shape = CircleShape,
+        color = color.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.25f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(13.dp),
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = text,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = color,
+            )
+        }
+    }
+}
+
+/** Анимированный индикатор звуковой волны для Expressive шапки */
+@Composable
+private fun ExpressiveWaveformIndicator(color: Color) {
+    val transition = rememberInfiniteTransition(label = "wave")
+    val h1 by transition.animateFloat(initialValue = 4f, targetValue = 14f, animationSpec = infiniteRepeatable(tween(400, easing = FastOutSlowInEasing), androidx.compose.animation.core.RepeatMode.Reverse), label = "h1")
+    val h2 by transition.animateFloat(initialValue = 12f, targetValue = 5f, animationSpec = infiniteRepeatable(tween(550, easing = FastOutSlowInEasing), androidx.compose.animation.core.RepeatMode.Reverse), label = "h2")
+    val h3 by transition.animateFloat(initialValue = 6f, targetValue = 16f, animationSpec = infiniteRepeatable(tween(350, easing = FastOutSlowInEasing), androidx.compose.animation.core.RepeatMode.Reverse), label = "h3")
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = Modifier.height(16.dp)
+    ) {
+        Box(modifier = Modifier.width(2.5.dp).height(h1.dp).clip(CircleShape).background(color))
+        Box(modifier = Modifier.width(2.5.dp).height(h2.dp).clip(CircleShape).background(color))
+        Box(modifier = Modifier.width(2.5.dp).height(h3.dp).clip(CircleShape).background(color))
     }
 }
