@@ -45,7 +45,7 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
     var eqEnabled: Boolean = false
     private val eqBands = Array(5) { BiquadPeakFilter() }
 
-    // ── Crystal Audio™ (Super-Resolution Harmonic Exciter) ──
+    // ── Crystal Audio™ (Super-Resolution Harmonic Exciter + Deep Bass + Anti-Clipping) ──
     @Volatile
     var crystalEnabled: Boolean = false
     @Volatile
@@ -56,6 +56,16 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
     private val crystalBandR = BiquadBandPassFilter()
     private val crystalHighPassL = BiquadHighPassFilter()
     private val crystalHighPassR = BiquadHighPassFilter()
+
+    // Фильтры глубокого саб-баса (30 - 85 Гц)
+    private val crystalSubBassLpL = BiquadLowPassFilter()
+    private val crystalSubBassLpR = BiquadLowPassFilter()
+
+    // Динамический огибающий лимитер и деклиппер (Mastering-Grade Anti-Clip Limiter)
+    private var limiterGain = 1.0f
+    private var limiterReleaseCoeff = 0.0005f
+    private var prevRawL = 0f
+    private var prevRawR = 0f
 
     // DSP буферы для реверберации и стерео-расширителя
     private var sampleRate: Int = 44100
@@ -98,10 +108,17 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
     private fun initCrystalFilters(sr: Int) {
         val centerFreq = (6000f).coerceAtMost(sr * 0.38f)
         val hpFreq = (8000f).coerceAtMost(sr * 0.42f)
+        val subFreq = (85f).coerceAtMost(sr * 0.15f)
+
         crystalBandL.set(centerFreq, 0.8f, sr.toFloat())
         crystalBandR.set(centerFreq, 0.8f, sr.toFloat())
         crystalHighPassL.set(hpFreq, 0.707f, sr.toFloat())
         crystalHighPassR.set(hpFreq, 0.707f, sr.toFloat())
+        crystalSubBassLpL.set(subFreq, 0.707f, sr.toFloat())
+        crystalSubBassLpR.set(subFreq, 0.707f, sr.toFloat())
+
+        // Время восстановления лимитера ~40 мс для чистого аналогового звучания без пердежа и клиппинга
+        limiterReleaseCoeff = (1.0f / (sr * 0.040f)).coerceIn(0.0001f, 0.01f)
     }
 
     override fun isActive(): Boolean {
@@ -166,6 +183,23 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
 
             var left = rawL.toFloat()
             var right = rawR.toFloat()
+
+            // 0. Детекция и реконструкция срезанных пиков (Intelligent De-Clipper / Anti-Farting)
+            // Детектируем плоские вершины (hard-clipping с YouTube / перегруженных записей)
+            if (crystalEnabled) {
+                val absL = abs(left)
+                val absR = abs(right)
+                // Если сэмпл на границе среза и производная почти 0 (плоская вершина)
+                if (absL >= 31200f && abs(left - prevRawL) < 120f) {
+                    // Восстанавливаем естественную форму пика вместо резкого плоского среза
+                    left = prevRawL * 0.985f + sign(left) * 150f
+                }
+                if (absR >= 31200f && abs(right - prevRawR) < 120f) {
+                    right = prevRawR * 0.985f + sign(right) * 150f
+                }
+                prevRawL = left
+                prevRawR = right
+            }
 
             // 1. 5-полосный параметрический эквалайзер
             if (isEq) {
@@ -236,27 +270,40 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 right = right * (1f - reverbWet * 0.30f) + revOut * reverbWet
             }
 
-            // 4. Crystal Audio™ Super-Resolution (Психоакустический синтез утраченных ВЧ + High Presence)
+            // 4. Crystal Audio™ (Super-Resolution ВЧ + Глубокий саб-бас + Устранение грязи)
             if (crystalEnabled) {
+                // 4a. ВЧ Кристальный воздух (Шелковистые гармоники без резкости)
                 val srcL = crystalBandL.process(left)
                 val srcR = crystalBandR.process(right)
 
-                // Нормализация диапазона для эффективного возбуждения гармоник
-                val normSrcL = (srcL / 12000f).coerceIn(-2.0f, 2.0f)
-                val normSrcR = (srcR / 12000f).coerceIn(-2.0f, 2.0f)
+                val normSrcL = (srcL / 14000f).coerceIn(-1.8f, 1.8f)
+                val normSrcR = (srcR / 14000f).coerceIn(-1.8f, 1.8f)
 
-                // Обертоны: x^2 (чётные) + x^3 (нечётные)
-                val harmL = (0.85f * normSrcL * normSrcL - 0.50f * normSrcL * normSrcL * normSrcL) * 16000f
-                val harmR = (0.85f * normSrcR * normSrcR - 0.50f * normSrcR * normSrcR * normSrcR) * 16000f
+                // Мягкие обертоны x^2 (чётные = шелковистость и воздух)
+                val harmL = (0.90f * normSrcL * normSrcL - 0.20f * normSrcL * normSrcL * normSrcL) * 14000f
+                val harmR = (0.90f * normSrcR * normSrcR - 0.20f * normSrcR * normSrcR * normSrcR) * 14000f
 
-                // High-pass фильтр для выделения сгенерированного кристального «воздуха»
                 val crystalL = crystalHighPassL.process(harmL)
                 val crystalR = crystalHighPassR.process(harmR)
 
-                // Подмешиваем и сгенерированные гармоники (air shimmer), и прямую полосу presence
-                val mixGain = crystalIntensity * 1.8f
-                left += (crystalL + srcL * 0.45f) * mixGain
-                right += (crystalR + srcR * 0.45f) * mixGain
+                val airGain = crystalIntensity * 1.25f
+                left += (crystalL + srcL * 0.30f) * airGain
+                right += (crystalR + srcR * 0.30f) * airGain
+
+                // 4b. Глубокий бархатный саб-бас (30-85 Гц)
+                val subL = crystalSubBassLpL.process(left)
+                val subR = crystalSubBassLpR.process(right)
+
+                // Центрируем саб-бас в моно для максимальной плотности и ударности без фазовой грязи
+                val subMono = (subL + subR) * 0.5f
+                val normSub = (subMono / 15000f).coerceIn(-1.8f, 1.8f)
+
+                // Психоакустический синтез саб-гармоник (создаёт глубокий физически ощутимый низ)
+                val subHarmonic = (normSub + 0.22f * normSub * abs(normSub) - 0.12f * normSub * normSub * normSub) * 15000f
+
+                val deepBassGain = crystalIntensity * 0.55f
+                left += (subHarmonic - subL) * deepBassGain
+                right += (subHarmonic - subR) * deepBassGain
             }
 
             // 5. Усиление громкости (Gain Booster)
@@ -265,14 +312,36 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 right *= gain
             }
 
-            // 6. Мягкий лимитер (Soft-Clipping / Tanh), предотвращающий перегруз и хрипы на пиках
+            // 6. Мастеринговый адаптивный лимитер с огибающей (Envelope-Follower Anti-Clipping Limiter)
+            // Предотвращает пердёж динамиков, сглаживая перегрузы во времени, а не срезая волну
+            val peak = max(abs(left), abs(right))
+            val threshold = 31000f // Защитный headroom против искажений ЦАП и динамиков
+
+            val targetGain = if (peak > threshold) (threshold / peak) else 1.0f
+
+            // Атака мгновенная (0 сэмплов) — ни один пик физически не сможет превысить порог
+            if (targetGain < limiterGain) {
+                limiterGain = targetGain
+            } else {
+                // Плавный музыкальный релиз (~40 мс) — волна баса сохраняет чистую форму без сплющивания
+                limiterGain += (targetGain - limiterGain) * limiterReleaseCoeff
+            }
+
+            left *= limiterGain
+            right *= limiterGain
+
+            // Мягкое аналоговое насыщение для предотвращения цифрового клиппинга
             val normL = left / 32768f
             val normR = right / 32768f
-            val limitedL = if (abs(normL) > 0.95f) sign(normL) * (0.95f + 0.05f * tanh((abs(normL) - 0.95f) / 0.5f)) else normL
-            val limitedR = if (abs(normR) > 0.95f) sign(normR) * (0.95f + 0.05f * tanh((abs(normR) - 0.95f) / 0.5f)) else normR
+            val finalL = if (abs(normL) > 0.95f) {
+                sign(normL) * (0.95f + 0.05f * tanh((abs(normL) - 0.95f) / 0.18f))
+            } else normL
+            val finalR = if (abs(normR) > 0.95f) {
+                sign(normR) * (0.95f + 0.05f * tanh((abs(normR) - 0.95f) / 0.18f))
+            } else normR
 
-            val outL = (limitedL * 32767f).toInt().coerceIn(-32768, 32767).toShort()
-            val outR = (limitedR * 32767f).toInt().coerceIn(-32768, 32767).toShort()
+            val outL = (finalL * 32767f).toInt().coerceIn(-32768, 32767).toShort()
+            val outR = (finalR * 32767f).toInt().coerceIn(-32768, 32767).toShort()
 
             output.putShort(outL)
             output.putShort(outR)
@@ -295,6 +364,10 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         allpass1.reset(); allpass2.reset()
         crystalBandL.reset(); crystalBandR.reset()
         crystalHighPassL.reset(); crystalHighPassR.reset()
+        crystalSubBassLpL.reset(); crystalSubBassLpR.reset()
+        limiterGain = 1.0f
+        prevRawL = 0f
+        prevRawR = 0f
         bassLpStore = 0f
         bassEnergyAccum = 0f
         bassSampleCount = 0
@@ -425,6 +498,38 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
             b0 = ((1.0f + cosW) / 2.0f) / a0
             b1 = (-(1.0f + cosW)) / a0
             b2 = ((1.0f + cosW) / 2.0f) / a0
+            a1 = (-2.0f * cosW) / a0
+            a2 = (1.0f - alpha) / a0
+        }
+
+        fun process(x: Float): Float {
+            val y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+            x2 = x1; x1 = x
+            y2 = y1; y1 = y
+            return if (y.isNaN()) 0f else y
+        }
+
+        fun reset() {
+            x1 = 0f; x2 = 0f; y1 = 0f; y2 = 0f
+        }
+    }
+
+    /**
+     * Фильтр низких частот 2-го порядка (Butterworth 12 dB/oct LPF) для глубокого саб-баса
+     */
+    private class BiquadLowPassFilter {
+        var b0 = 1f; var b1 = 0f; var b2 = 0f; var a1 = 0f; var a2 = 0f
+        var x1 = 0f; var x2 = 0f; var y1 = 0f; var y2 = 0f
+
+        fun set(freq: Float, q: Float, sr: Float) {
+            val w0 = (2.0 * Math.PI * freq / sr).toFloat()
+            val alpha = (sin(w0.toDouble()) / (2.0 * q)).toFloat()
+            val cosW = cos(w0.toDouble()).toFloat()
+
+            val a0 = 1.0f + alpha
+            b0 = ((1.0f - cosW) / 2.0f) / a0
+            b1 = (1.0f - cosW) / a0
+            b2 = ((1.0f - cosW) / 2.0f) / a0
             a1 = (-2.0f * cosW) / a0
             a2 = (1.0f - alpha) / a0
         }

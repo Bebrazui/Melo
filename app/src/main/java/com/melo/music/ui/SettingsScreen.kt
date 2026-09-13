@@ -1003,7 +1003,7 @@ private fun CrystalAudioSection() {
                     }
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        if (enabled) "Синтез утраченных частот активен" else "Дорисовка частот выключена",
+                        if (enabled) "Синтез ВЧ, глубокий саб-бас и деклиппинг" else "Улучшение звука выключено",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (enabled) cs.primary else Color.White.copy(alpha = 0.5f),
                         fontWeight = FontWeight.Medium,
