@@ -1,9 +1,7 @@
 package com.melo.desktop.ui.screens
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -81,9 +79,6 @@ import com.melo.desktop.storage.DesktopStorage
 import com.melo.desktop.sync.DesktopYouTubeSyncManager
 import com.melo.desktop.ui.components.AsyncCoverImage
 import com.melo.desktop.ui.components.WavySlider
-import com.melo.desktop.ui.theme.MeloCardSurface
-import com.melo.desktop.ui.theme.MeloDarkBackground
-import com.melo.desktop.ui.theme.MeloDarkSurface
 import com.melo.desktop.ui.theme.MeloOnPrimary
 import com.melo.desktop.ui.theme.MeloPrimary
 import com.melo.desktop.ui.theme.MeloTextSub
@@ -92,10 +87,13 @@ import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
-/** 12-лепестковая фигура M3 Expressive для бейджей и декоративных элементов */
+/**
+ * Каноничный 12-лепестковый цветок / облако (Material 3 Expressive Scallop Shape).
+ * Фирменная органическая форма из Android 15 для виджетов, бейджей и обложек.
+ */
 class ScallopedFlowerShape(
-    private val lobes: Int = 12,
-    private val depth: Float = 0.12f,
+    val lobes: Int = 12,
+    val depth: Float = 0.10f,
 ) : Shape {
     override fun createOutline(
         size: Size,
@@ -139,23 +137,21 @@ class ScallopedFlowerShape(
 
 /** Асимметричная каплевидная форма погодного/статусного виджета M3 */
 private val TeardropWidgetShape = RoundedCornerShape(
-    topStart = 38.dp,
-    topEnd = 38.dp,
+    topStart = 42.dp,
+    topEnd = 42.dp,
     bottomStart = 12.dp,
-    bottomEnd = 38.dp
+    bottomEnd = 42.dp
 )
 
-private val ExpressiveHeroShape = RoundedCornerShape(32.dp)
-private val ExpressiveTileShape = RoundedCornerShape(24.dp)
-private val ExpressiveCoverShape = RoundedCornerShape(24.dp)
+private val ExpressiveHeroShape = RoundedCornerShape(36.dp)
+private val ExpressiveTileShape = RoundedCornerShape(26.dp)
 
 // ── Гармоничная хвойно-мятная палитра Melo (Material 3 Expressive) ───────────
-private val SurfaceCanvas = Color(0xFF0F1411)        // Глубокий тёмно-хвойный фон
-private val CardSurface = Color(0xFF161F1A)          // Основной контейнер виджетов
+// Без тонких обводок — чистые тональные монолитные поверхности!
+private val SurfaceCanvas = Color(0xFF0F1411)        // Глубокий тёмно-хвойный холст
+private val CardSurface = Color(0xFF161F1A)          // Основной тональный контейнер
 private val ElevatedSurface = Color(0xFF1D2821)      // Приподнятый контейнер
 private val HighestSurface = Color(0xFF24332A)       // Верхний контейнер для кнопок
-private val BorderSubtle = Color.White.copy(alpha = 0.08f)
-private val BorderActive = MeloPrimary.copy(alpha = 0.35f)
 
 @Composable
 fun ProfileScreen(
@@ -216,9 +212,9 @@ fun ProfileScreen(
             .fillMaxSize()
             .background(SurfaceCanvas),
         contentPadding = PaddingValues(horizontal = 32.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+        verticalArrangement = Arrangement.spacedBy(26.dp),
     ) {
-        // ── 1. Верхняя панель: Навигация ─────────────────────────────────────
+        // ── 1. Верхняя панель: Навигация (чистый безрамочный дизайн) ─────────
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -228,13 +224,12 @@ fun ProfileScreen(
                 Surface(
                     shape = CircleShape,
                     color = CardSurface,
-                    border = BorderStroke(1.dp, BorderSubtle),
                     modifier = Modifier
                         .clip(CircleShape)
                         .clickable(onClick = onBack),
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
@@ -255,14 +250,10 @@ fun ProfileScreen(
 
                 Surface(
                     shape = CircleShape,
-                    color = if (isAnyLoggedIn) MeloPrimary.copy(alpha = 0.12f) else CardSurface,
-                    border = BorderStroke(
-                        1.dp,
-                        if (isAnyLoggedIn) MeloPrimary.copy(alpha = 0.35f) else BorderSubtle
-                    ),
+                    color = if (isAnyLoggedIn) MeloPrimary.copy(alpha = 0.15f) else CardSurface,
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(
@@ -285,15 +276,14 @@ fun ProfileScreen(
             }
         }
 
-        // ── 2. Карточка профиля ──────────────────────────────────────────────
+        // ── 2. Карточка профиля: Необычный лепестковый аватар и бейджи ───────
         item {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(ExpressiveHeroShape)
                     .background(CardSurface)
-                    .border(BorderStroke(1.dp, BorderSubtle), ExpressiveHeroShape)
-                    .padding(26.dp)
+                    .padding(28.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -301,48 +291,47 @@ fun ProfileScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Аватар пользователя (аккуратный контур с тонкой мятной каймой)
+                        // Аватар в каноничном 12-лепестковом облаке M3 Expressive
                         Box(
                             modifier = Modifier
-                                .size(96.dp)
-                                .clip(RoundedCornerShape(30.dp))
-                                .background(ElevatedSurface)
-                                .border(BorderStroke(2.dp, MeloPrimary.copy(alpha = 0.4f)), RoundedCornerShape(30.dp)),
+                                .size(104.dp)
+                                .clip(ScallopedFlowerShape(lobes = 12, depth = 0.10f))
+                                .background(ElevatedSurface),
                             contentAlignment = Alignment.Center,
                         ) {
                             if (!userAvatar.isNullOrBlank()) {
                                 AsyncCoverImage(
                                     url = userAvatar,
                                     modifier = Modifier.fillMaxSize(),
-                                    shape = RoundedCornerShape(30.dp),
+                                    shape = ScallopedFlowerShape(lobes = 12, depth = 0.10f),
                                 )
                             } else {
                                 Text(
                                     text = userName.take(1).uppercase(),
-                                    fontSize = 38.sp,
+                                    fontSize = 40.sp,
                                     fontWeight = FontWeight.Black,
                                     color = MeloPrimary,
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.width(22.dp))
+                        Spacer(modifier = Modifier.width(24.dp))
 
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = userName,
-                                    fontSize = 30.sp,
+                                    fontSize = 32.sp,
                                     fontWeight = FontWeight.Black,
                                     letterSpacing = (-0.5).sp,
                                     color = MeloTextWhite,
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
-                                // Бейдж подтверждения
+                                // Фирменный 12-лепестковый бейдж подтверждения M3
                                 Box(
                                     modifier = Modifier
-                                        .size(22.dp)
-                                        .clip(ScallopedFlowerShape(lobes = 12, depth = 0.12f))
+                                        .size(24.dp)
+                                        .clip(ScallopedFlowerShape(lobes = 12, depth = 0.14f))
                                         .background(MeloPrimary),
                                     contentAlignment = Alignment.Center,
                                 ) {
@@ -350,12 +339,12 @@ fun ProfileScreen(
                                         imageVector = Icons.Rounded.Check,
                                         contentDescription = "Verified",
                                         tint = MeloOnPrimary,
-                                        modifier = Modifier.size(13.dp),
+                                        modifier = Modifier.size(14.dp),
                                     )
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
 
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -363,15 +352,15 @@ fun ProfileScreen(
                             ) {
                                 if (userHandle != null) {
                                     Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = MeloPrimary.copy(alpha = 0.12f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MeloPrimary.copy(alpha = 0.15f),
                                     ) {
                                         Text(
                                             text = userHandle,
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MeloPrimary,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                                         )
                                     }
                                 }
@@ -392,7 +381,7 @@ fun ProfileScreen(
                         }
                     }
 
-                    // Кнопка синхронизации или входа
+                    // Кнопка синхронизации или входа (Pill без обводки)
                     if (isYtLoggedIn) {
                         Button(
                             onClick = {
@@ -415,7 +404,7 @@ fun ProfileScreen(
                             enabled = !isSyncing,
                             shape = CircleShape,
                             colors = ButtonDefaults.buttonColors(containerColor = MeloPrimary),
-                            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 13.dp),
+                            contentPadding = PaddingValues(horizontal = 26.dp, vertical = 14.dp),
                         ) {
                             if (isSyncing) {
                                 CircularProgressIndicator(
@@ -444,7 +433,7 @@ fun ProfileScreen(
                             onClick = onOpenAuth,
                             shape = CircleShape,
                             colors = ButtonDefaults.buttonColors(containerColor = MeloPrimary),
-                            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 13.dp),
+                            contentPadding = PaddingValues(horizontal = 26.dp, vertical = 14.dp),
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Rounded.Login,
@@ -465,11 +454,11 @@ fun ProfileScreen(
             }
         }
 
-        // ── 3. Bento Matrix: Плеер + Виджеты библиотеки ──────────────────────
+        // ── 3. Bento Matrix: Плеер + Необычные виджеты M3 Expressive ─────────
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                horizontalArrangement = Arrangement.spacedBy(22.dp),
             ) {
                 // ── ЛЕВАЯ КОЛОНКА: Сцена плеера ──────────────────────────────
                 Box(
@@ -478,30 +467,29 @@ fun ProfileScreen(
                         .clip(ExpressiveHeroShape)
                         .background(
                             Brush.verticalGradient(
-                                listOf(Color(0xFF1B2720), Color(0xFF141C16))
+                                listOf(Color(0xFF1C2720), Color(0xFF131B15))
                             )
                         )
-                        .border(BorderStroke(1.dp, BorderSubtle), ExpressiveHeroShape)
-                        .padding(24.dp)
+                        .padding(26.dp)
                 ) {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        // 1. КРУПНАЯ, ЧЁТКАЯ ОБЛОЖКА ТРЕКА (220dp, выразительное скругление 24dp)
+                        // 1. КРУПНАЯ ОБЛОЖКА В НЕОБЫЧНОЙ 12-ЛЕПЕСТКОВОЙ ФОРМЕ M3
+                        // Большая (210dp), с органическим волнистым краем и четкой видимостью арта!
                         Box(
                             modifier = Modifier
-                                .size(220.dp)
-                                .clip(ExpressiveCoverShape)
-                                .background(ElevatedSurface)
-                                .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)), ExpressiveCoverShape),
+                                .size(210.dp)
+                                .clip(ScallopedFlowerShape(lobes = 12, depth = 0.10f))
+                                .background(ElevatedSurface),
                             contentAlignment = Alignment.Center,
                         ) {
                             if (displayTrack?.thumbnailUrl != null) {
                                 AsyncCoverImage(
                                     url = displayTrack.thumbnailUrl,
                                     modifier = Modifier.fillMaxSize(),
-                                    shape = ExpressiveCoverShape,
+                                    shape = ScallopedFlowerShape(lobes = 12, depth = 0.10f),
                                 )
                             } else {
                                 Icon(
@@ -513,7 +501,7 @@ fun ProfileScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(18.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
 
                         // 2. Название трека и артист
                         Text(
@@ -527,7 +515,7 @@ fun ProfileScreen(
                             modifier = Modifier.padding(horizontal = 8.dp)
                         )
 
-                        Spacer(modifier = Modifier.height(3.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
                             text = displayTrack?.uploader ?: "Melo Music Player",
@@ -541,7 +529,7 @@ fun ProfileScreen(
 
                         Spacer(modifier = Modifier.height(18.dp))
 
-                        // 3. Wavy Slider (синусоидальный волнистый скраббер)
+                        // 3. Wavy Slider (аутентичный синусоидальный скраббер)
                         val dur = DesktopAudioPlayer.durationMs.toFloat().coerceAtLeast(1f)
                         val pos = DesktopAudioPlayer.currentPositionMs.toFloat()
                         val prog = (pos / dur).coerceIn(0f, 1f)
@@ -583,7 +571,7 @@ fun ProfileScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(18.dp))
 
                         // 4. Элементы управления: Skip buttons + Главная Pill-кнопка PLAY
                         Row(
@@ -595,9 +583,8 @@ fun ProfileScreen(
                             Surface(
                                 shape = CircleShape,
                                 color = HighestSurface,
-                                border = BorderStroke(1.dp, BorderSubtle),
                                 modifier = Modifier
-                                    .size(46.dp)
+                                    .size(48.dp)
                                     .clip(CircleShape)
                                     .clickable { MeloAppController.playPrev() },
                             ) {
@@ -613,12 +600,12 @@ fun ProfileScreen(
 
                             Spacer(modifier = Modifier.width(16.dp))
 
-                            // Главная кнопка PLAY / PAUSE (фирменная мятная пилюля)
+                            // Главная гигантская кнопка PLAY / PAUSE (мятная капсула)
                             Surface(
                                 shape = CircleShape,
                                 color = MeloPrimary,
                                 modifier = Modifier
-                                    .height(52.dp)
+                                    .height(54.dp)
                                     .clip(CircleShape)
                                     .clickable {
                                         if (displayTrack != null) {
@@ -631,7 +618,7 @@ fun ProfileScreen(
                                     },
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 32.dp),
+                                    modifier = Modifier.padding(horizontal = 34.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Icon(
@@ -657,9 +644,8 @@ fun ProfileScreen(
                             Surface(
                                 shape = CircleShape,
                                 color = HighestSurface,
-                                border = BorderStroke(1.dp, BorderSubtle),
                                 modifier = Modifier
-                                    .size(46.dp)
+                                    .size(48.dp)
                                     .clip(CircleShape)
                                     .clickable { MeloAppController.playNext() },
                             ) {
@@ -676,18 +662,17 @@ fun ProfileScreen(
                     }
                 }
 
-                // ── ПРАВАЯ КОЛОНКА: Сетка виджетов M3 Expressive ─────────────
+                // ── ПРАВАЯ КОЛОНКА: Сетка необычных виджетов M3 Expressive ────
                 Column(
                     modifier = Modifier.weight(0.95f),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    // Виджет 1: Connected Split-Pill статистики
+                    // Виджет 1: Connected Split-Pill статистики (без обводок)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(ExpressiveTileShape)
                             .background(CardSurface)
-                            .border(BorderStroke(1.dp, BorderSubtle), ExpressiveTileShape)
                             .padding(14.dp)
                     ) {
                         Row(
@@ -720,19 +705,18 @@ fun ProfileScreen(
                         }
                     }
 
-                    // Виджет 2: Teardrop статус виджет + Быстрые действия
+                    // Виджет 2: Асимметричный Teardrop виджет + Быстрые действия
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        // Каплевидный виджет статуса
+                        // Асимметричный каплевидный виджет статуса (Teardrop shape)
                         Box(
                             modifier = Modifier
                                 .weight(1.1f)
                                 .clip(TeardropWidgetShape)
                                 .background(CardSurface)
-                                .border(BorderStroke(1.dp, BorderSubtle), TeardropWidgetShape)
-                                .padding(18.dp)
+                                .padding(20.dp)
                         ) {
                             Column {
                                 Row(
@@ -740,9 +724,10 @@ fun ProfileScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
+                                    // 12-лепестковое облако виджета
                                     Box(
                                         modifier = Modifier
-                                            .size(40.dp)
+                                            .size(42.dp)
                                             .clip(ScallopedFlowerShape(lobes = 12, depth = 0.12f))
                                             .background(MeloPrimary.copy(alpha = 0.18f)),
                                         contentAlignment = Alignment.Center,
@@ -763,16 +748,16 @@ fun ProfileScreen(
                                     )
                                 }
 
-                                Spacer(modifier = Modifier.height(14.dp))
+                                Spacer(modifier = Modifier.height(16.dp))
 
                                 Text(
                                     text = "YouTube Sync",
-                                    fontSize = 14.sp,
+                                    fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MeloTextWhite,
                                 )
 
-                                Spacer(modifier = Modifier.height(2.dp))
+                                Spacer(modifier = Modifier.height(3.dp))
 
                                 Text(
                                     text = syncStatusText ?: if (isYtLoggedIn) "Библиотека активна" else "Ожидание входа",
@@ -790,7 +775,6 @@ fun ProfileScreen(
                                 .weight(0.9f)
                                 .clip(ExpressiveTileShape)
                                 .background(CardSurface)
-                                .border(BorderStroke(1.dp, BorderSubtle), ExpressiveTileShape)
                                 .padding(14.dp)
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -849,7 +833,7 @@ fun ProfileScreen(
             }
         }
 
-        // ── 4. Горизонтальная лента фильтров-капсул ─────────────────────────
+        // ── 4. Горизонтальная лента фильтров-капсул (чистые безрамочные капсулы)
         item {
             val filters = listOf("Все треки", "Любимые", "Плейлисты", "История")
             Row(
@@ -861,11 +845,7 @@ fun ProfileScreen(
                     val isSelected = selectedFilterIndex == idx
                     Surface(
                         shape = CircleShape,
-                        color = if (isSelected) MeloPrimary else Color.Transparent,
-                        border = BorderStroke(
-                            1.dp,
-                            if (isSelected) MeloPrimary else BorderSubtle
-                        ),
+                        color = if (isSelected) MeloPrimary else ElevatedSurface,
                         modifier = Modifier
                             .clip(CircleShape)
                             .clickable {
@@ -882,14 +862,14 @@ fun ProfileScreen(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (isSelected) MeloOnPrimary else MeloTextWhite,
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp),
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                         )
                     }
                 }
             }
         }
 
-        // ── 5. Полка избранных треков ─────────────────────────────────────────
+        // ── 5. Полка избранных треков в лепестковых формах M3 ─────────────────
         if (favorites.isNotEmpty()) {
             item {
                 Row(
@@ -925,7 +905,7 @@ fun ProfileScreen(
 
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     items(favorites.take(16)) { track ->
-                        ExpressiveTrackCard(
+                        ExpressiveFlowerTrackCard(
                             track = track,
                             onClick = { onPlayTrack(track) }
                         )
@@ -988,7 +968,7 @@ fun ProfileScreen(
     }
 }
 
-// ── Вспомогательные гармоничные M3 Expressive виджеты ────────────────────────
+// ── Вспомогательные безрамочные M3 Expressive виджеты ────────────────────────
 
 @Composable
 private fun ExpressiveSplitPill(
@@ -1002,11 +982,10 @@ private fun ExpressiveSplitPill(
     val isHovered by interactionSource.collectIsHoveredAsState()
 
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(22.dp),
         color = if (isHovered) HighestSurface else ElevatedSurface,
-        border = BorderStroke(1.dp, if (isHovered) BorderActive else BorderSubtle),
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(22.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -1014,7 +993,7 @@ private fun ExpressiveSplitPill(
             ),
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 14.dp, horizontal = 8.dp),
+            modifier = Modifier.padding(vertical = 16.dp, horizontal = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Icon(
@@ -1026,7 +1005,7 @@ private fun ExpressiveSplitPill(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = count,
-                fontSize = 22.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Black,
                 color = MeloTextWhite,
             )
@@ -1052,19 +1031,15 @@ private fun ExpressiveMiniIconBtn(
     val isHovered by interactionSource.collectIsHoveredAsState()
 
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         color = when {
-            active -> MeloPrimary.copy(alpha = 0.22f)
+            active -> MeloPrimary.copy(alpha = 0.25f)
             isHovered -> HighestSurface
             else -> ElevatedSurface
         },
-        border = BorderStroke(
-            1.dp,
-            if (active) MeloPrimary.copy(alpha = 0.45f) else BorderSubtle
-        ),
         modifier = Modifier
-            .size(44.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .size(46.dp)
+            .clip(RoundedCornerShape(16.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -1076,24 +1051,25 @@ private fun ExpressiveMiniIconBtn(
                 imageVector = icon,
                 contentDescription = null,
                 tint = if (active) MeloPrimary else MeloTextWhite,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(19.dp),
             )
         }
     }
 }
 
+/** Карточка трека в лепестковой форме Scallop Flower M3 Expressive */
 @Composable
-private fun ExpressiveTrackCard(
+private fun ExpressiveFlowerTrackCard(
     track: TrackItem,
     onClick: () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
-    val scale by animateFloatAsState(if (isHovered) 1.04f else 1f, label = "cardScale")
+    val scale by animateFloatAsState(if (isHovered) 1.05f else 1f, label = "cardScale")
 
     Column(
         modifier = Modifier
-            .width(140.dp)
+            .width(146.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -1106,16 +1082,15 @@ private fun ExpressiveTrackCard(
     ) {
         Box(
             modifier = Modifier
-                .size(140.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(ElevatedSurface)
-                .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(18.dp)),
+                .size(146.dp)
+                .clip(ScallopedFlowerShape(lobes = 12, depth = 0.10f))
+                .background(ElevatedSurface),
             contentAlignment = Alignment.Center,
         ) {
             AsyncCoverImage(
                 url = track.thumbnailUrl,
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(18.dp),
+                shape = ScallopedFlowerShape(lobes = 12, depth = 0.10f),
             )
 
             if (isHovered) {
@@ -1128,14 +1103,14 @@ private fun ExpressiveTrackCard(
                     Surface(
                         shape = CircleShape,
                         color = MeloPrimary,
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier.size(42.dp),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Rounded.PlayArrow,
                                 contentDescription = null,
                                 tint = MeloOnPrimary,
-                                modifier = Modifier.size(22.dp),
+                                modifier = Modifier.size(24.dp),
                             )
                         }
                     }
@@ -1143,7 +1118,7 @@ private fun ExpressiveTrackCard(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         Text(
             text = track.title,
@@ -1157,7 +1132,7 @@ private fun ExpressiveTrackCard(
         track.uploader?.let {
             Text(
                 text = it,
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 color = MeloTextSub,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1178,28 +1153,27 @@ private fun ExpressivePlaylistCard(
     val scale by animateFloatAsState(if (isHovered) 1.04f else 1f, label = "plScale")
 
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(22.dp),
         color = CardSurface,
-        border = BorderStroke(1.dp, BorderSubtle),
         modifier = Modifier
             .width(160.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(22.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
             ),
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(110.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                    .height(112.dp)
+                    .clip(RoundedCornerShape(16.dp))
                     .background(ElevatedSurface),
                 contentAlignment = Alignment.Center,
             ) {
@@ -1207,14 +1181,14 @@ private fun ExpressivePlaylistCard(
                     AsyncCoverImage(
                         url = coverUrl,
                         modifier = Modifier.fillMaxSize(),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
                     )
                 } else {
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
                         contentDescription = null,
                         tint = MeloPrimary.copy(alpha = 0.6f),
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(38.dp),
                     )
                 }
             }
