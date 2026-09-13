@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import com.melo.desktop.net.DesktopMeloNet
@@ -74,7 +75,7 @@ fun AsyncCoverImage(
     url: String?,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
-    shape: RoundedCornerShape = RoundedCornerShape(8.dp),
+    shape: Shape = RoundedCornerShape(8.dp),
 ) {
     val bitmap = rememberCoverBitmap(url)
 
