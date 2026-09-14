@@ -138,6 +138,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.melo.music.extractor.NewPipeResolver
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -5399,17 +5400,15 @@ private fun NowPlayingBar(
 }
 
 /**
- * Material 3 Expressive Connected Button Group для переключения скорости/тона (slowed / original / speed up).
- * Выполнено в стиле Material 3 Expressive: объединённые контуры, круглые иконки-бейджи, динамический цвет обложки.
- * Одиночный клик: мгновенное изменение скорости и высоты тона.
- * Долгое нажатие: сохранение замедленной/ускоренной версии трека в избранное или плейлист.
+ * Официальный Material 3 Expressive ButtonGroup из Jetpack Compose (Google I/O 2025):
+ * Использует ButtonGroup со встроенными toggleableItem и автоматической анимацией ширины (animatedWidth).
+ * Компактно располагается под обложкой прямо над названием трека в цвет текущей обложки.
  */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun ExpressiveSpeedSelector(
+private fun ExpressiveSpeedButtonGroup(
     speed: Float,
     onSetSpeed: (Float) -> Unit,
-    onAddVariant: (Float) -> Unit,
     accent: Color,
     modifier: Modifier = Modifier,
 ) {
@@ -5422,105 +5421,44 @@ private fun ExpressiveSpeedSelector(
     }
 
     val isDarkAccent = accent.luminance() < 0.40f
-    val selectedContainer = if (isDarkAccent) lerp(accent, Color.White, 0.32f) else accent
-    val selectedContent = if (selectedContainer.luminance() > 0.55f) Color(0xFF141210) else Color.White
+    val activeColor = if (isDarkAccent) lerp(accent, Color.White, 0.32f) else accent
+    val activeOnColor = if (activeColor.luminance() > 0.55f) Color(0xFF141210) else Color.White
 
-    val unselectedContainer = lerp(Color(0xFF231F1C), accent, 0.26f).copy(alpha = 0.88f)
-    val unselectedContent = Color.White.copy(alpha = 0.92f)
+    val speedColorScheme = MaterialTheme.colorScheme.copy(
+        primary = activeColor,
+        onPrimary = activeOnColor,
+        primaryContainer = activeColor,
+        onPrimaryContainer = activeOnColor,
+        secondaryContainer = lerp(Color(0xFF282420), accent, 0.30f),
+        onSecondaryContainer = Color.White.copy(alpha = 0.92f),
+        surfaceContainer = lerp(Color(0xFF221E1C), accent, 0.25f).copy(alpha = 0.85f),
+        onSurface = Color.White.copy(alpha = 0.90f),
+        outline = lerp(Color.White.copy(alpha = 0.15f), accent, 0.35f),
+    )
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(46.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        options.forEachIndexed { index, (label, value, icon) ->
-            val isSelected = kotlin.math.abs(speed - value) < 0.015f
-
-            // Material 3 Expressive Connected Shapes: левая пилюля, центр 6dp, правая пилюля
-            val shape = when (index) {
-                0 -> RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp, topEnd = 6.dp, bottomEnd = 6.dp)
-                options.lastIndex -> RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 24.dp, bottomEnd = 24.dp)
-                else -> RoundedCornerShape(6.dp)
-            }
-
-            val containerColor by animateColorAsState(
-                targetValue = if (isSelected) selectedContainer else unselectedContainer,
-                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                label = "speedBg_$index",
-            )
-            val contentColor by animateColorAsState(
-                targetValue = if (isSelected) selectedContent else unselectedContent,
-                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                label = "speedFg_$index",
-            )
-
-            Surface(
-                shape = shape,
-                color = containerColor,
-                border = BorderStroke(
-                    width = if (isSelected) 1.5.dp else 1.dp,
-                    color = if (isSelected) Color.White.copy(alpha = 0.35f) else lerp(Color.White.copy(alpha = 0.12f), accent, 0.35f),
-                ),
-                shadowElevation = if (isSelected) 6.dp else 0.dp,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .clip(shape)
-                    .combinedClickable(
-                        onClick = {
-                            ClickFeedback.play()
-                            onSetSpeed(value)
-                        },
-                        onLongClick = {
-                            if (value != 1f) {
-                                ClickFeedback.play()
-                                onAddVariant(value)
-                            }
-                        },
-                    ),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Круглый бэйджик с иконкой
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (isSelected) contentColor.copy(alpha = 0.20f)
-                                else accent.copy(alpha = 0.30f)
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
+    MaterialTheme(colorScheme = speedColorScheme) {
+        ButtonGroup(
+            modifier = modifier.fillMaxWidth(0.82f),
+            overflowIndicator = {},
+        ) {
+            options.forEach { (label, value, icon) ->
+                val isSelected = kotlin.math.abs(speed - value) < 0.015f
+                toggleableItem(
+                    weight = 1f,
+                    checked = isSelected,
+                    onCheckedChange = {
+                        ClickFeedback.play()
+                        onSetSpeed(value)
+                    },
+                    label = label,
+                    icon = {
                         Icon(
                             imageVector = if (isSelected && value == 1f) Icons.Rounded.Check else icon,
                             contentDescription = label,
-                            tint = contentColor,
-                            modifier = Modifier.size(15.dp),
+                            modifier = Modifier.size(16.dp),
                         )
-                    }
-
-                    Spacer(Modifier.width(6.dp))
-
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 12.5.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                            letterSpacing = 0.2.sp,
-                        ),
-                        color = contentColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                    },
+                )
             }
         }
     }
@@ -7078,22 +7016,6 @@ private fun FullPlayer(
                         .padding(horizontal = 20.dp, vertical = 6.dp),
                 ) {
                     RenderTopBar(isLandscape = true)
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = showSpeed,
-                        enter = expandVertically(animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)) + fadeIn(tween(200)),
-                        exit = shrinkVertically(animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)) + fadeOut(tween(160)),
-                        modifier = Modifier
-                            .fillMaxWidth(0.65f)
-                            .align(Alignment.CenterHorizontally)
-                            .padding(vertical = 4.dp),
-                    ) {
-                        ExpressiveSpeedSelector(
-                            speed = speed,
-                            onSetSpeed = onSetSpeed,
-                            onAddVariant = onAddSpeedVariant,
-                            accent = artColor,
-                        )
-                    }
                     Spacer(Modifier.height(4.dp))
                     Row(
                         modifier = Modifier
@@ -7125,6 +7047,21 @@ private fun FullPlayer(
                             verticalArrangement = Arrangement.SpaceEvenly,
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = showSpeed,
+                                enter = expandVertically(animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)) + fadeIn(tween(200)),
+                                exit = shrinkVertically(animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)) + fadeOut(tween(160)),
+                                modifier = Modifier
+                                    .fillMaxWidth(0.85f)
+                                    .padding(bottom = 6.dp),
+                            ) {
+                                ExpressiveSpeedButtonGroup(
+                                    speed = speed,
+                                    onSetSpeed = onSetSpeed,
+                                    accent = artColor,
+                                )
+                            }
+
                             RenderControls(isLandscape = true)
                         }
                     }
@@ -7137,29 +7074,6 @@ private fun FullPlayer(
                 ) {
                     Spacer(Modifier.height(40.dp))
                     RenderTopBar(isLandscape = false)
-
-                    // ── M3 Expressive кнопки выбора скорости/тона (по свайпу вверх или тапу на шапку) ──
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = showSpeed,
-                        enter = expandVertically(
-                            animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f),
-                            expandFrom = Alignment.Top,
-                        ) + fadeIn(tween(220)),
-                        exit = shrinkVertically(
-                            animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f),
-                            shrinkTowards = Alignment.Top,
-                        ) + fadeOut(tween(160)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 10.dp, bottom = 4.dp),
-                    ) {
-                        ExpressiveSpeedSelector(
-                            speed = speed,
-                            onSetSpeed = onSetSpeed,
-                            onAddVariant = onAddSpeedVariant,
-                            accent = artColor,
-                        )
-                    }
 
                     if (showLyrics) {
                         // Режим текста: отдаём тексту максимум свободного пространства
@@ -7185,6 +7099,22 @@ private fun FullPlayer(
                             RenderArtwork(Modifier.fillMaxSize())
                         }
                         Spacer(Modifier.weight(1f))
+                    }
+
+                    // ── M3 Expressive ButtonGroup: ПОД ОБЛОЖКОЙ, НАД НАДПИСЬЮ ──
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = showSpeed,
+                        enter = expandVertically(animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)) + fadeIn(tween(200)),
+                        exit = shrinkVertically(animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)) + fadeOut(tween(160)),
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .padding(bottom = 10.dp),
+                    ) {
+                        ExpressiveSpeedButtonGroup(
+                            speed = speed,
+                            onSetSpeed = onSetSpeed,
+                            accent = artColor,
+                        )
                     }
 
                     RenderControls(isLandscape = false)
