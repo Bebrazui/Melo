@@ -123,6 +123,9 @@ import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SlowMotionVideo
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Public
@@ -5396,52 +5399,126 @@ private fun NowPlayingBar(
 }
 
 /**
- * Сегментированный выбор скорости/тона: slowed down (0.93) / original (1.0) / speed up (1.15).
- * Долгое нажатие на slowed/speed up → предложить сохранить эту версию.
+ * Material 3 Expressive Connected Button Group для переключения скорости/тона (slowed / original / speed up).
+ * Выполнено в стиле Material 3 Expressive: объединённые контуры, круглые иконки-бейджи, динамический цвет обложки.
+ * Одиночный клик: мгновенное изменение скорости и высоты тона.
+ * Долгое нажатие: сохранение замедленной/ускоренной версии трека в избранное или плейлист.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun SpeedSelector(
+private fun ExpressiveSpeedSelector(
     speed: Float,
     onSetSpeed: (Float) -> Unit,
     onAddVariant: (Float) -> Unit,
     accent: Color,
-    white: Color,
     modifier: Modifier = Modifier,
 ) {
-    val options = listOf(
-        "slowed down" to 0.93f,
-        "original" to 1.0f,
-        "speed up" to 1.15f,
-    )
+    val options = remember {
+        listOf(
+            Triple("Slowed", 0.93f, Icons.Rounded.SlowMotionVideo),
+            Triple("Original", 1.0f, Icons.Rounded.PlayArrow),
+            Triple("Speed up", 1.15f, Icons.Rounded.Bolt),
+        )
+    }
+
+    val isDarkAccent = accent.luminance() < 0.40f
+    val selectedContainer = if (isDarkAccent) lerp(accent, Color.White, 0.32f) else accent
+    val selectedContent = if (selectedContainer.luminance() > 0.55f) Color(0xFF141210) else Color.White
+
+    val unselectedContainer = lerp(Color(0xFF231F1C), accent, 0.26f).copy(alpha = 0.88f)
+    val unselectedContent = Color.White.copy(alpha = 0.92f)
+
     Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(46.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        options.forEach { (label, value) ->
-            val selected = kotlin.math.abs(speed - value) < 0.01f
+        options.forEachIndexed { index, (label, value, icon) ->
+            val isSelected = kotlin.math.abs(speed - value) < 0.015f
+
+            // Material 3 Expressive Connected Shapes: левая пилюля, центр 6dp, правая пилюля
+            val shape = when (index) {
+                0 -> RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp, topEnd = 6.dp, bottomEnd = 6.dp)
+                options.lastIndex -> RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 24.dp, bottomEnd = 24.dp)
+                else -> RoundedCornerShape(6.dp)
+            }
+
+            val containerColor by animateColorAsState(
+                targetValue = if (isSelected) selectedContainer else unselectedContainer,
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                label = "speedBg_$index",
+            )
+            val contentColor by animateColorAsState(
+                targetValue = if (isSelected) selectedContent else unselectedContent,
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                label = "speedFg_$index",
+            )
+
             Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = if (selected) accent.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.06f),
+                shape = shape,
+                color = containerColor,
                 border = BorderStroke(
-                    width = if (selected) 1.5.dp else 1.dp,
-                    color = if (selected) accent else Color.White.copy(alpha = 0.15f),
+                    width = if (isSelected) 1.5.dp else 1.dp,
+                    color = if (isSelected) Color.White.copy(alpha = 0.35f) else lerp(Color.White.copy(alpha = 0.12f), accent, 0.35f),
                 ),
+                shadowElevation = if (isSelected) 6.dp else 0.dp,
                 modifier = Modifier
                     .weight(1f)
-                    .height(42.dp)
-                    .clip(RoundedCornerShape(20.dp))
+                    .fillMaxHeight()
+                    .clip(shape)
                     .combinedClickable(
-                        onClick = { onSetSpeed(value) },
-                        onLongClick = { if (value != 1f) onAddVariant(value) },
+                        onClick = {
+                            ClickFeedback.play()
+                            onSetSpeed(value)
+                        },
+                        onLongClick = {
+                            if (value != 1f) {
+                                ClickFeedback.play()
+                                onAddVariant(value)
+                            }
+                        },
                     ),
             ) {
-                Box(contentAlignment = Alignment.Center) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Круглый бэйджик с иконкой
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isSelected) contentColor.copy(alpha = 0.20f)
+                                else accent.copy(alpha = 0.30f)
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = if (isSelected && value == 1f) Icons.Rounded.Check else icon,
+                            contentDescription = label,
+                            tint = contentColor,
+                            modifier = Modifier.size(15.dp),
+                        )
+                    }
+
+                    Spacer(Modifier.width(6.dp))
+
                     Text(
                         text = label,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (selected) accent else white,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 12.5.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                            letterSpacing = 0.2.sp,
+                        ),
+                        color = contentColor,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -5869,6 +5946,7 @@ private fun FullPlayer(
     val gestureScope = rememberCoroutineScope()
     val collapseProgress = remember { Animatable(1f) }
     var isCollapsing by remember { mutableStateOf(false) }
+    var showSpeed by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         collapseProgress.animateTo(
@@ -5899,6 +5977,8 @@ private fun FullPlayer(
     BackHandler(onBack = {
         if (isFullscreenVideo) {
             isFullscreenVideo = false
+        } else if (showSpeed) {
+            showSpeed = false
         } else {
             requestCollapse()
         }
@@ -6131,14 +6211,24 @@ private fun FullPlayer(
                         detectDragGestures(
                             onDragStart = { swipeAccum = 0f; axis = 0 },
                             onDragCancel = {
-                                val dragDistance = (targetY - 0f).coerceAtLeast(100f)
-                                val progress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
-                                if (progress > 0.08f || swipeAccum > 60f || collapseProgress.value > 0.12f) {
-                                    requestCollapse()
-                                } else {
-                                    gestureScope.launch {
-                                        collapseProgress.animateTo(0f, spring(0.86f, 420f))
-                                        swipeX.animateTo(0f, tween(180))
+                                if (axis == 1) {
+                                    if (swipeAccum <= -45f) {
+                                        showSpeed = true
+                                        ClickFeedback.play()
+                                    } else if (showSpeed && swipeAccum >= 45f) {
+                                        showSpeed = false
+                                        ClickFeedback.play()
+                                    } else if (!showSpeed) {
+                                        val dragDistance = (targetY - 0f).coerceAtLeast(100f)
+                                        val progress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
+                                        if (progress > 0.08f || swipeAccum > 60f || collapseProgress.value > 0.12f) {
+                                            requestCollapse()
+                                        } else {
+                                            gestureScope.launch {
+                                                collapseProgress.animateTo(0f, spring(0.86f, 420f))
+                                                swipeX.animateTo(0f, tween(180))
+                                            }
+                                        }
                                     }
                                 }
                                 swipeAccum = 0f
@@ -6156,13 +6246,23 @@ private fun FullPlayer(
                                         }
                                     }
                                 } else {
-                                    val dragDistance = (targetY - 0f).coerceAtLeast(100f)
-                                    val progress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
-                                    if (progress > 0.08f || swipeAccum > 60f || collapseProgress.value > 0.12f) {
-                                        requestCollapse()
-                                    } else {
-                                        gestureScope.launch {
-                                            collapseProgress.animateTo(0f, spring(0.86f, 420f))
+                                    if (swipeAccum <= -45f) {
+                                        showSpeed = true
+                                        ClickFeedback.play()
+                                        gestureScope.launch { collapseProgress.animateTo(0f, spring(0.86f, 420f)) }
+                                    } else if (showSpeed && swipeAccum >= 45f) {
+                                        showSpeed = false
+                                        ClickFeedback.play()
+                                        gestureScope.launch { collapseProgress.animateTo(0f, spring(0.86f, 420f)) }
+                                    } else if (!showSpeed) {
+                                        val dragDistance = (targetY - 0f).coerceAtLeast(100f)
+                                        val progress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
+                                        if (progress > 0.08f || swipeAccum > 60f || collapseProgress.value > 0.12f) {
+                                            requestCollapse()
+                                        } else {
+                                            gestureScope.launch {
+                                                collapseProgress.animateTo(0f, spring(0.86f, 420f))
+                                            }
                                         }
                                     }
                                 }
@@ -6179,9 +6279,19 @@ private fun FullPlayer(
                                 } else {
                                     val delta = drag.y
                                     swipeAccum += delta
-                                    val dragDistance = (targetY - 0f).coerceAtLeast(100f)
-                                    val newProgress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
-                                    gestureScope.launch { collapseProgress.snapTo(newProgress) }
+                                    if (swipeAccum <= -45f && !showSpeed) {
+                                        showSpeed = true
+                                        swipeAccum = 0f
+                                        ClickFeedback.play()
+                                    } else if (showSpeed && swipeAccum >= 45f) {
+                                        showSpeed = false
+                                        swipeAccum = 0f
+                                        ClickFeedback.play()
+                                    } else if (!showSpeed) {
+                                        val dragDistance = (targetY - 0f).coerceAtLeast(100f)
+                                        val newProgress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
+                                        gestureScope.launch { collapseProgress.snapTo(newProgress) }
+                                    }
                                 }
                             },
                         )
@@ -6829,19 +6939,47 @@ private fun FullPlayer(
                         }
                     }
 
-                    Text(
-                        text = if (showLyrics) "Текст песни" else "Сейчас играет",
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontSize = if (isLandscape) 13.5.sp else 14.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 0.1.sp,
-                        ),
-                        color = white,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
-                    )
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 6.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .clickable {
+                                ClickFeedback.play()
+                                showSpeed = !showSpeed
+                            },
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (showLyrics) "Текст песни" else "Сейчас играет",
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontSize = if (isLandscape) 13.5.sp else 14.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.1.sp,
+                            ),
+                            color = white,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+
+                        if (speed != 1.0f) {
+                            Spacer(Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = artColor.copy(alpha = 0.35f),
+                                border = BorderStroke(1.dp, artColor),
+                            ) {
+                                Text(
+                                    text = if (speed < 1f) "slowed" else "speed up",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
+                    }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         val vocalCut = com.melo.music.audio.VocalCutManager.isEnabled
@@ -6940,6 +7078,22 @@ private fun FullPlayer(
                         .padding(horizontal = 20.dp, vertical = 6.dp),
                 ) {
                     RenderTopBar(isLandscape = true)
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = showSpeed,
+                        enter = expandVertically(animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)) + fadeIn(tween(200)),
+                        exit = shrinkVertically(animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)) + fadeOut(tween(160)),
+                        modifier = Modifier
+                            .fillMaxWidth(0.65f)
+                            .align(Alignment.CenterHorizontally)
+                            .padding(vertical = 4.dp),
+                    ) {
+                        ExpressiveSpeedSelector(
+                            speed = speed,
+                            onSetSpeed = onSetSpeed,
+                            onAddVariant = onAddSpeedVariant,
+                            accent = artColor,
+                        )
+                    }
                     Spacer(Modifier.height(4.dp))
                     Row(
                         modifier = Modifier
@@ -6983,6 +7137,29 @@ private fun FullPlayer(
                 ) {
                     Spacer(Modifier.height(40.dp))
                     RenderTopBar(isLandscape = false)
+
+                    // ── M3 Expressive кнопки выбора скорости/тона (по свайпу вверх или тапу на шапку) ──
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = showSpeed,
+                        enter = expandVertically(
+                            animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f),
+                            expandFrom = Alignment.Top,
+                        ) + fadeIn(tween(220)),
+                        exit = shrinkVertically(
+                            animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f),
+                            shrinkTowards = Alignment.Top,
+                        ) + fadeOut(tween(160)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp, bottom = 4.dp),
+                    ) {
+                        ExpressiveSpeedSelector(
+                            speed = speed,
+                            onSetSpeed = onSetSpeed,
+                            onAddVariant = onAddSpeedVariant,
+                            accent = artColor,
+                        )
+                    }
 
                     if (showLyrics) {
                         // Режим текста: отдаём тексту максимум свободного пространства
