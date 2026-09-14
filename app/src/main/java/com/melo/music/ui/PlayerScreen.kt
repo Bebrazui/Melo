@@ -6107,11 +6107,9 @@ private fun FullPlayer(
         val fullAlpha = (1f - p * 1.35f).coerceIn(0f, 1f)
         val miniAlpha = (p * 1.4f - 0.15f).coerceIn(0f, 1f)
 
-        // Мягкое затемнение фона под карточкой, плавно уходящее при сворачивании
+        // Без затемнения фона под карточкой: чистая трансформация без мерцаний и резких перепадов яркости
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = ((1f - p) * 0.72f).coerceIn(0f, 0.72f)))
+            modifier = Modifier.fillMaxSize()
         ) {
             Surface(
                 shape = RoundedCornerShape(currentCorner),
