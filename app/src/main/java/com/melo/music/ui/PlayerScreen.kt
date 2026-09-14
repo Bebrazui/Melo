@@ -6104,8 +6104,8 @@ private fun FullPlayer(
         // Мягкий эффект глубины (3D lift): карточка слегка отдаляется в перспективе во время движения
         val depthScale = 1f - (kotlin.math.sin(p * Math.PI.toFloat()) * 0.035f)
 
-        val fullAlpha = (1f - p * 1.35f).coerceIn(0f, 1f)
-        val miniAlpha = (p * 1.4f - 0.15f).coerceIn(0f, 1f)
+        val fullAlpha = (1f - p * 1.45f).coerceIn(0f, 1f)
+        val miniAlpha = ((p - 0.20f) / 0.70f).coerceIn(0f, 1f)
 
         // Без затемнения фона под карточкой: чистая трансформация без мерцаний и резких перепадов яркости
         Box(
@@ -7030,18 +7030,15 @@ private fun FullPlayer(
                 }
             }
         }
+    }
 
         // 2. Мини-плеер (проявляется при сворачивании и идеально встает на свое место)
         Box(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(72.dp)
+                .fillMaxSize()
                 .graphicsLayer { alpha = miniAlpha }
                 .drawBehind {
-                    val w = size.width
                     val h = size.height
-                    drawRect(color = Color(0xEB13110E))
                     drawRect(
                         brush = Brush.verticalGradient(
                             colors = listOf(
@@ -7069,7 +7066,6 @@ private fun FullPlayer(
             )
         }
     }
-}
 }
 }
 
