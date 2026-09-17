@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import com.melo.music.ui.theme.bouncyOverscroll
 import com.melo.music.ui.theme.bouncyHorizontalOverscroll
 import com.melo.music.ui.theme.carouselCenterItemEffect
+import com.melo.music.ui.theme.verticalScrollEdgeItemEffect
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Build
@@ -609,6 +610,7 @@ private fun TrackLane(tracks: List<TrackItem>, onPlay: (List<TrackItem>, Int) ->
             Column(
                 modifier = Modifier
                     .carouselCenterItemEffect(laneState, index)
+                    .verticalScrollEdgeItemEffect()
                     .width(148.dp)
                     .clip(RoundedCornerShape(22.dp))
                     .clickable { onPlay(tracks, index) },
@@ -705,6 +707,7 @@ private fun FullTrackList(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
+                            .verticalScrollEdgeItemEffect()
                             .clip(RoundedCornerShape(18.dp))
                             .clickable { onPlay(tracks, tracks.indexOf(t)) },
                     ) {

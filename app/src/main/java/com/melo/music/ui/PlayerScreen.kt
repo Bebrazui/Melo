@@ -246,6 +246,8 @@ import com.melo.music.ui.theme.Motion
 import com.melo.music.ui.theme.ShapeCache
 import com.melo.music.ui.theme.pressScale
 import com.melo.music.ui.theme.carouselCenterItemEffect
+import com.melo.music.ui.theme.carouselCenterGridItemEffect
+import com.melo.music.ui.theme.verticalScrollEdgeItemEffect
 import com.melo.music.ui.theme.bouncyOverscroll
 import com.melo.music.ui.theme.bouncyHorizontalOverscroll
 import kotlinx.coroutines.flow.Flow
@@ -3180,20 +3182,28 @@ private fun QuickPickGrid(
     }
     if (tracks.isEmpty()) return
     val grid = tracks.distinctBy { it.url }.take(12)
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     LazyHorizontalGrid(
         rows = GridCells.Fixed(2),
-        modifier = Modifier.fillMaxWidth().height(156.dp),
+        state = gridState,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(156.dp)
+            .bouncyHorizontalOverscroll(),
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        gridItems(grid, key = { "qp_" + it.url }) { t ->
+        items(grid.size, key = { "qp_" + grid[it].url }) { index ->
+            val t = grid[index]
             Row(
                 modifier = Modifier
+                    .carouselCenterGridItemEffect(gridState, index)
+                    .verticalScrollEdgeItemEffect()
                     .width(268.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .combinedClickable(
-                        onClick = { onPlay(grid, grid.indexOf(t)) },
+                        onClick = { onPlay(grid, index) },
                         onLongClick = { onLongClick(t) },
                     )
                     .background(Color.White.copy(alpha = 0.06f))
@@ -3298,6 +3308,7 @@ private fun ShelfCard(
     val pressSource = remember { MutableInteractionSource() }
     Column(
         modifier = modifier
+            .verticalScrollEdgeItemEffect()
             .width(150.dp)
             .pressScale(pressedScale = 0.95f, interactionSource = pressSource)
             .combinedClickable(
@@ -3386,6 +3397,7 @@ private fun TrackCard(
         },
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScrollEdgeItemEffect()
             .pressScale(interactionSource = pressSource)
             .combinedClickable(
                 interactionSource = pressSource,
@@ -3484,6 +3496,7 @@ private fun ArtistCard(item: TrackItem, onClick: () -> Unit) {
         tonalElevation = 2.dp,
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScrollEdgeItemEffect()
             .pressScale(interactionSource = pressSource)
             .clickable(
                 interactionSource = pressSource,
@@ -3694,6 +3707,7 @@ private fun TopResultCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
+            .verticalScrollEdgeItemEffect()
             .pressScale(pressedScale = 0.97f, interactionSource = pressSource)
             .combinedClickable(
                 interactionSource = pressSource,

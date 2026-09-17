@@ -17,6 +17,16 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
+import android.content.res.Configuration
+import android.os.Build
+import kotlin.math.min
 import kotlinx.coroutines.launch
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 
@@ -106,10 +116,15 @@ fun Modifier.pressScale(
 
 /**
  * Карусельный фокус-эффект для элементов горизонтального списка (LazyRow):
- * Элементы в центре экрана имеют полный масштаб 1.0x и прозрачность 1.0,
- * а по мере смещения к краям плавно и мягко уменьшаются до [minScale] (по умолчанию 0.88f)
- * с лёгким затуханием до [minAlpha] (0.82f).
- * Вычисляется на фазе отрисовки (graphicsLayer) без вызова лишних рекомпозиций.
+ * Элементы в центре экрана имеют полный масштаб 1.0x и прозрачность 1.0.
+ *
+ * При включенном тумблере «Больше эффектов» карточки по бокам:
+ * 1. Уменьшаются (до 0.83f)
+ * 2. Наклоняются в 3D (rotationY с глубиной перспективы cameraDistance)
+ * 3. Размываются (RenderEffect blur)
+ * 4. Слегка затемняются
+ *
+ * Вычисляется на фазе отрисовки (graphicsLayer) без лишних рекомпозиций.
  */
 fun Modifier.carouselCenterItemEffect(
     lazyListState: androidx.compose.foundation.lazy.LazyListState,
@@ -131,12 +146,169 @@ fun Modifier.carouselCenterItemEffect(
             val factor = (1f - (distanceFromCenter / maxDistance)).coerceIn(0f, 1f)
             // Косинусоидная плавная кривая интерполяции
             val smooth = (1f - kotlin.math.cos(factor * Math.PI).toFloat()) / 2f
-            val scale = minScale + (maxScale - minScale) * smooth
-            scaleX = scale
-            scaleY = scale
-            alpha = minAlpha + (maxAlpha - minAlpha) * smooth
+
+            val moreEffects = com.melo.music.settings.AppSettings.moreEffects
+
+            if (moreEffects) {
+                // 1. Уменьшение масштаба
+                val scale = 0.83f + 0.17f * smooth
+                scaleX = scale
+                scaleY = scale
+
+                // 2. Затемнение карточек по краям
+                alpha = 0.65f + 0.35f * smooth
+
+                // 3. 3D-наклон карточек к центру
+                val offsetRatio = ((itemCenter - viewportCenter) / maxDistance).coerceIn(-1f, 1f)
+                rotationY = offsetRatio * 18f
+                cameraDistance = 16f * density
+
+                // 4. Мягкое размытие боковых карточек (на Android 12+)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val blurPx = ((1f - smooth) * 9f).coerceAtLeast(0f)
+                    renderEffect = if (blurPx > 0.5f) {
+                        android.graphics.RenderEffect.createBlurEffect(
+                            blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP
+                        ).asComposeRenderEffect()
+                    } else null
+                }
+            } else {
+                val scale = minScale + (maxScale - minScale) * smooth
+                scaleX = scale
+                scaleY = scale
+                alpha = minAlpha + (maxAlpha - minAlpha) * smooth
+                rotationY = 0f
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    renderEffect = null
+                }
+            }
         }
     }
+}
+
+/**
+ * Карусельный 3D-эффект для элементов сетки «Быстрый выбор» (LazyHorizontalGrid).
+ */
+fun Modifier.carouselCenterGridItemEffect(
+    lazyGridState: androidx.compose.foundation.lazy.grid.LazyGridState,
+    index: Int,
+): Modifier = graphicsLayer {
+    val layoutInfo = lazyGridState.layoutInfo
+    val visibleItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+    if (visibleItem != null) {
+        val viewportWidth = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
+        if (viewportWidth > 0f) {
+            val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2f
+            val itemCenter = visibleItem.offset.x + visibleItem.size.width / 2f
+            val distanceFromCenter = kotlin.math.abs(viewportCenter - itemCenter)
+            val maxDistance = viewportWidth / 2f
+            val factor = (1f - (distanceFromCenter / maxDistance)).coerceIn(0f, 1f)
+            val smooth = (1f - kotlin.math.cos(factor * Math.PI).toFloat()) / 2f
+
+            val moreEffects = com.melo.music.settings.AppSettings.moreEffects
+
+            if (moreEffects) {
+                val scale = 0.88f + 0.12f * smooth
+                scaleX = scale
+                scaleY = scale
+                alpha = 0.70f + 0.30f * smooth
+
+                val offsetRatio = ((itemCenter - viewportCenter) / maxDistance).coerceIn(-1f, 1f)
+                rotationY = offsetRatio * 14f
+                cameraDistance = 16f * density
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val blurPx = ((1f - smooth) * 8f).coerceAtLeast(0f)
+                    renderEffect = if (blurPx > 0.5f) {
+                        android.graphics.RenderEffect.createBlurEffect(
+                            blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP
+                        ).asComposeRenderEffect()
+                    } else null
+                }
+            } else {
+                val scale = 0.92f + 0.08f * smooth
+                scaleX = scale
+                scaleY = scale
+                alpha = 0.88f + 0.12f * smooth
+                rotationY = 0f
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    renderEffect = null
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Кинематографичный вертикальный эффект затухания, сжатия и размытия у верхней и нижней границ:
+ * При скролле карточки (треки, настройки, профиль) при приближении к границам:
+ * 1. Буквально немного уменьшаются (scale 0.955 .. 1.0)
+ * 2. Слегка затемняются (alpha 0.68 .. 1.0)
+ * 3. Плавно размываются сверху и снизу (blur 0 .. 8.5px)
+ * При этом строка поиска и нижний навигационный бар не затрагиваются.
+ */
+fun Modifier.verticalScrollEdgeItemEffect(): Modifier = composed {
+    if (!com.melo.music.settings.AppSettings.moreEffects) return@composed this
+
+    val density = LocalDensity.current
+    val config = LocalConfiguration.current
+    val isLandscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val screenHeightPx = with(density) { config.screenHeightDp.dp.toPx() }
+
+    val topBoundary = with(density) { (if (isLandscape) 56.dp else 92.dp).toPx() }
+    val bottomBoundary = screenHeightPx - with(density) { (if (isLandscape) 40.dp else 96.dp).toPx() }
+    val edgeZone = with(density) { 110.dp.toPx() }
+
+    var yInRoot by remember { mutableFloatStateOf(-1f) }
+    var itemHeight by remember { mutableFloatStateOf(0f) }
+
+    this
+        .onGloballyPositioned { coords ->
+            if (coords.isAttached) {
+                val pos = coords.positionInRoot()
+                yInRoot = pos.y
+                itemHeight = coords.size.height.toFloat()
+            }
+        }
+        .graphicsLayer {
+            if (yInRoot >= 0f && itemHeight > 0f) {
+                val itemTop = yInRoot
+                val itemBottom = yInRoot + itemHeight
+
+                val topFactor = if (itemTop < topBoundary + edgeZone) {
+                    ((itemTop - topBoundary) / edgeZone).coerceIn(0f, 1f)
+                } else 1f
+
+                val bottomFactor = if (itemBottom > bottomBoundary - edgeZone) {
+                    ((bottomBoundary - itemBottom) / edgeZone).coerceIn(0f, 1f)
+                } else 1f
+
+                val edgeFactor = min(topFactor, bottomFactor)
+                if (edgeFactor < 1f) {
+                    val smooth = edgeFactor * edgeFactor * (3f - 2f * edgeFactor)
+                    val s = 0.955f + 0.045f * smooth
+                    scaleX = s
+                    scaleY = s
+                    alpha = 0.68f + 0.32f * smooth
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        val blurPx = (1f - smooth) * 8.5f
+                        renderEffect = if (blurPx > 0.5f) {
+                            android.graphics.RenderEffect.createBlurEffect(
+                                blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP
+                            ).asComposeRenderEffect()
+                        } else null
+                    }
+                } else {
+                    scaleX = 1f
+                    scaleY = 1f
+                    alpha = 1f
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        renderEffect = null
+                    }
+                }
+            }
+        }
 }
 
 /**

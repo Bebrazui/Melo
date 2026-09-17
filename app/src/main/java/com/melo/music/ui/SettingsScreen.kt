@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import com.melo.music.ui.theme.bouncyOverscroll
+import com.melo.music.ui.theme.verticalScrollEdgeItemEffect
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -149,7 +150,9 @@ fun SettingsScreen(
             shape = RoundedCornerShape(28.dp),
             color = Color.White.copy(alpha = 0.05f),
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScrollEdgeItemEffect(),
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(
@@ -303,7 +306,9 @@ fun SettingsScreen(
             shape = RoundedCornerShape(26.dp),
             color = Color.White.copy(alpha = 0.05f),
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScrollEdgeItemEffect(),
         ) {
             Row(
                 modifier = Modifier
@@ -361,7 +366,9 @@ fun SettingsScreen(
             shape = RoundedCornerShape(26.dp),
             color = Color.White.copy(alpha = 0.05f),
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScrollEdgeItemEffect(),
         ) {
             Row(
                 modifier = Modifier
@@ -419,7 +426,9 @@ fun SettingsScreen(
             shape = RoundedCornerShape(26.dp),
             color = Color.White.copy(alpha = 0.05f),
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScrollEdgeItemEffect(),
         ) {
             Row(
                 modifier = Modifier
@@ -477,7 +486,9 @@ fun SettingsScreen(
             shape = RoundedCornerShape(28.dp),
             color = Color.White.copy(alpha = 0.05f),
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScrollEdgeItemEffect(),
         ) {
             Row(
                 modifier = Modifier
@@ -539,7 +550,9 @@ fun SettingsScreen(
             shape = RoundedCornerShape(28.dp),
             color = Color.White.copy(alpha = 0.05f),
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScrollEdgeItemEffect(),
         ) {
             Row(
                 modifier = Modifier
@@ -610,6 +623,69 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(16.dp))
 
+        // ── 🌀 Больше эффектов (3D наклон, размытие и затухание) (Bento Card) ──
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = Color.White.copy(alpha = 0.05f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScrollEdgeItemEffect(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = cs.primaryContainer,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.Waves,
+                            contentDescription = null,
+                            tint = cs.onPrimaryContainer,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Больше эффектов",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        if (com.melo.music.settings.AppSettings.moreEffects)
+                            "3D-перспектива и размытие карточек в каруселях, кинематографичное затухание и сжатие у границ"
+                        else
+                            "Классический плоский стиль отображения карточек без дополнительной 3D-нагрузки",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.65f),
+                    )
+                }
+                Switch(
+                    checked = com.melo.music.settings.AppSettings.moreEffects,
+                    onCheckedChange = {
+                        ClickFeedback.play()
+                        com.melo.music.settings.AppSettings.updateMoreEffects(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = cs.onPrimary,
+                        checkedTrackColor = cs.primary,
+                    ),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
         // ── 🚀 Обновления и патчи (Bento Card) ──────────────────────
         val context = LocalContext.current
         val coroutineScope = rememberCoroutineScope()
@@ -621,7 +697,9 @@ fun SettingsScreen(
             shape = RoundedCornerShape(28.dp),
             color = Color.White.copy(alpha = 0.05f),
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScrollEdgeItemEffect(),
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(
@@ -731,7 +809,9 @@ fun SettingsScreen(
                 shape = RoundedCornerShape(28.dp),
                 color = Color.White.copy(alpha = 0.05f),
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScrollEdgeItemEffect(),
             ) {
                 Row(
                     modifier = Modifier
@@ -763,7 +843,10 @@ fun SettingsScreen(
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            "Оптимизация сетевого подключения при нестабильной связи",
+                            if (byedpiActive)
+                                "Локальный прокси активен: YouTube/SoundCloud работают без замедлений"
+                            else
+                                "Включите, если треки не загружаются или бесконечно буферизуются",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.65f),
                         )
@@ -797,7 +880,9 @@ fun SettingsScreen(
             shape = RoundedCornerShape(28.dp),
             color = Color.White.copy(alpha = 0.05f),
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScrollEdgeItemEffect(),
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(
@@ -921,7 +1006,9 @@ private fun SpatialAudioSection() {
         shape = RoundedCornerShape(28.dp),
         color = Color.White.copy(alpha = 0.05f),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScrollEdgeItemEffect(),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -1036,7 +1123,9 @@ private fun CrystalAudioSection() {
         shape = RoundedCornerShape(28.dp),
         color = Color.White.copy(alpha = 0.05f),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScrollEdgeItemEffect(),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -1175,7 +1264,9 @@ private fun GainReverbSection() {
         shape = RoundedCornerShape(28.dp),
         color = Color.White.copy(alpha = 0.05f),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScrollEdgeItemEffect(),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             // ── Усиление (Gain) ──
@@ -1314,7 +1405,9 @@ private fun EqualizerSection() {
         shape = RoundedCornerShape(28.dp),
         color = Color.White.copy(alpha = 0.05f),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScrollEdgeItemEffect(),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -1488,7 +1581,9 @@ private fun IconPickerSection() {
         shape = RoundedCornerShape(28.dp),
         color = Color.White.copy(alpha = 0.05f),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScrollEdgeItemEffect(),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(

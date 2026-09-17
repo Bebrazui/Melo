@@ -22,6 +22,7 @@ object AppSettings {
     private const val KEY_LAUNCHER_ICON = "launcher_icon"
     private const val KEY_AUTO_UPDATE = "auto_update"
     private const val KEY_HIGH_REFRESH_RATE = "high_refresh_rate"
+    private const val KEY_MORE_EFFECTS = "more_effects"
 
     private var prefs: SharedPreferences? = null
 
@@ -61,6 +62,10 @@ object AppSettings {
     var highRefreshRate by mutableStateOf(true)
         private set
 
+    /** Режим «Больше эффектов»: 3D-наклон, размытие и затухание карточек при скролле. */
+    var moreEffects by mutableStateOf(false)
+        private set
+
     fun init(context: Context) {
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         karaoke = prefs?.getBoolean(KEY_KARAOKE, false) ?: false
@@ -72,6 +77,7 @@ object AppSettings {
         launcherIcon = prefs?.getString(KEY_LAUNCHER_ICON, IconPreset.DEFAULT.id) ?: IconPreset.DEFAULT.id
         autoUpdate = prefs?.getBoolean(KEY_AUTO_UPDATE, true) ?: true
         highRefreshRate = prefs?.getBoolean(KEY_HIGH_REFRESH_RATE, true) ?: true
+        moreEffects = prefs?.getBoolean(KEY_MORE_EFFECTS, false) ?: false
     }
 
     fun setSeenWelcome() {
@@ -113,6 +119,11 @@ object AppSettings {
     fun updateHighRefreshRate(value: Boolean) {
         highRefreshRate = value
         prefs?.edit()?.putBoolean(KEY_HIGH_REFRESH_RATE, value)?.apply()
+    }
+
+    fun updateMoreEffects(value: Boolean) {
+        moreEffects = value
+        prefs?.edit()?.putBoolean(KEY_MORE_EFFECTS, value)?.apply()
     }
 
     /**
