@@ -602,9 +602,7 @@ private fun TrackLane(tracks: List<TrackItem>, onPlay: (List<TrackItem>, Int) ->
     val laneState = rememberLazyListState()
     LazyRow(
         state = laneState,
-        modifier = Modifier
-            .verticalScrollEdgeItemEffect()
-            .bouncyHorizontalOverscroll(),
+        modifier = Modifier.bouncyHorizontalOverscroll(),
         contentPadding = PaddingValues(horizontal = 18.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {

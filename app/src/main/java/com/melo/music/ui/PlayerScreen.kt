@@ -2979,9 +2979,7 @@ private fun HomeFeed(
                 val histRowState = rememberLazyListState()
                 LazyRow(
                     state = histRowState,
-                    modifier = Modifier
-                        .verticalScrollEdgeItemEffect()
-                        .bouncyHorizontalOverscroll(),
+                    modifier = Modifier.bouncyHorizontalOverscroll(),
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -3026,9 +3024,7 @@ private fun HomeFeed(
                         val persRowState = rememberLazyListState()
                         LazyRow(
                             state = persRowState,
-                            modifier = Modifier
-                                .verticalScrollEdgeItemEffect()
-                                .bouncyHorizontalOverscroll(),
+                            modifier = Modifier.bouncyHorizontalOverscroll(),
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
@@ -3193,7 +3189,6 @@ private fun QuickPickGrid(
         modifier = Modifier
             .fillMaxWidth()
             .height(156.dp)
-            .verticalScrollEdgeItemEffect()
             .bouncyHorizontalOverscroll(),
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -3283,9 +3278,7 @@ private fun HorizontalShelf(
     val shelfRowState = rememberLazyListState()
     LazyRow(
         state = shelfRowState,
-        modifier = Modifier
-            .verticalScrollEdgeItemEffect()
-            .bouncyHorizontalOverscroll(),
+        modifier = Modifier.bouncyHorizontalOverscroll(),
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -5043,6 +5036,7 @@ fun Artwork(url: String?, modifier: Modifier = Modifier) {
         val request = remember(url) {
             coil.request.ImageRequest.Builder(context)
                 .data(url)
+                .transformations(SquareCropTransformation())
                 .memoryCacheKey(url)
                 .diskCacheKey(url)
                 .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
@@ -5055,7 +5049,7 @@ fun Artwork(url: String?, modifier: Modifier = Modifier) {
             contentDescription = null,
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             filterQuality = androidx.compose.ui.graphics.FilterQuality.Medium,
-            modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+            modifier = modifier.background(Color(0xFF141414)),
         )
     } else {
         Box(
