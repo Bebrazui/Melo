@@ -62,10 +62,12 @@ object NewPipeResolver {
         val client = OkHttpClient.Builder()
             .cache(Cache(cacheDir, 64L * 1024 * 1024))
             .dispatcher(dispatcher)
+            .dns(com.melo.music.net.MeloNet.dns)
             // База под YouTube (base.js крупный). SoundCloud-зависания лечит
             // ScRetryInterceptor в OkHttpDownloader (короткий таймаут + повтор).
-            .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
+            .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .callTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
         // Локаль и страна устройства → региональные результаты (RU → русские песни).
@@ -128,10 +130,10 @@ object NewPipeResolver {
             isBandcamp(url) -> Source.BANDCAMP
             else -> Source.YOUTUBE_MUSIC
         }
-        // android.util.Log.e(
-        //     "MeloPerf",
-        //     "resolve init=${t1 - t0}ms getInfo=${t2 - t1}ms pick=${t3 - t2}ms TOTAL=${t3 - t0}ms",
-        // )
+        android.util.Log.d(
+            "MeloPerf",
+            "resolve init=${t1 - t0}ms getInfo=${t2 - t1}ms pick=${t3 - t2}ms TOTAL=${t3 - t0}ms url=$url audio=${audio.content.take(60)}",
+        )
 
         val video = if (isYouTube(url)) {
             info.videoStreams.filter { it.content.isNotBlank() && !it.isVideoOnly }
@@ -218,10 +220,10 @@ object NewPipeResolver {
 
         suspend fun emitAll(tag: String, source: Source, block: suspend () -> List<TrackItem>) {
             val part = runCatching { block() }
-                .onFailure { /* android.util.Log.e("MeloSearch", "$tag failed: $it", it) */ }
+                .onFailure { android.util.Log.e("MeloSearch", "$tag failed: $it", it) }
                 .getOrDefault(emptyList())
                 .take(15)
-            // android.util.Log.e("MeloSearch", "$tag → ${part.size} items")
+            android.util.Log.i("MeloSearch", "$tag -> ${part.size} items")
             if (part.isEmpty()) return
             mutex.withLock {
                 allItems.addAll(part)
@@ -236,7 +238,14 @@ object NewPipeResolver {
         launch(Dispatchers.IO) {
             emitAll("SoundCloud", Source.SOUNDCLOUD) {
                 SoundCloudFix.ensure(context)
-                searchService(ServiceList.SoundCloud, query, Source.SOUNDCLOUD, listOf("tracks"))
+                try {
+                    searchService(ServiceList.SoundCloud, query, Source.SOUNDCLOUD, listOf("tracks"))
+                } catch (e: Exception) {
+                    android.util.Log.w("MeloSearch", "SoundCloud search error: ${e.message}, сбрасываем client_id и пробуем снова")
+                    SoundCloudFix.invalidate(context)
+                    SoundCloudFix.ensure(context)
+                    searchService(ServiceList.SoundCloud, query, Source.SOUNDCLOUD, listOf("tracks"))
+                }
             }
         }
         launch(Dispatchers.IO) {

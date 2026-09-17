@@ -103,8 +103,8 @@ object TrackDownloader {
             val prefix = if (batchIndex != null && batchTotal != null) "[$batchIndex/$batchTotal] " else ""
             notifyProgress(context, notifId, "$prefix$label", "Получение ссылки...", 0, indeterminate = true)
 
-            // 1. Резолв аудио-ссылки (через NewPipe/yt-dlp)
-            val resolved: ResolvedTrack = Extractor.resolveAudioUrl(context, item.url)
+            val fallbackQuery = listOfNotNull(item.title, item.uploader).joinToString(" ").takeIf { it.isNotBlank() }
+            val resolved: ResolvedTrack = Extractor.resolveAudioUrl(context, item.url, fallbackQuery)
 
             // 2. Скачивание обложки
             val artworkBytes: ByteArray? = item.thumbnailUrl?.takeIf { it.isNotBlank() }?.let { url ->

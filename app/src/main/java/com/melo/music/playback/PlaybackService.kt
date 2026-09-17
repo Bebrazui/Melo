@@ -180,15 +180,21 @@ class PlaybackService : MediaSessionService() {
         // Длинные таймауты + переиспользование соединений: десинк капризен на НОВЫХ
         // коннектах, поэтому держим установленные дольше и гоняем по ним все сегменты.
         val okClient = OkHttpClient.Builder()
+            .dns(com.melo.music.net.MeloNet.dns)
             .proxySelector(com.melo.music.net.MeloNet.byedpiSelector)
             .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
-            .connectTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .connectTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .connectionPool(okhttp3.ConnectionPool(12, 5, java.util.concurrent.TimeUnit.MINUTES))
             .addInterceptor { chain ->
                 var req = chain.request()
                 val host = req.url.host
+                if (host.contains("sndcdn") || host.contains("soundcloud")) {
+                    // Переиспользованные соединения через ByeDPI к SoundCloud немеют;
+                    // свежий коннект гарантирует немедленную доставку сегмента.
+                    req = req.newBuilder().header("Connection", "close").build()
+                }
                 if (com.melo.music.auth.YouTubeAccountManager.isLoggedIn) {
                     if (host.contains("googlevideo.com") || host.contains("youtube.com")) {
                         com.melo.music.auth.YouTubeAccountManager.getCookies()?.let { cookies ->
@@ -201,10 +207,10 @@ class PlaybackService : MediaSessionService() {
                 try {
                     val resp = chain.proceed(req)
                     val tag = if (resp.code !in 200..299) req.url.toString().take(180) else host
-                    // android.util.Log.e("MeloPlay", "${resp.code} <- $tag")
+                    android.util.Log.d("MeloPlay", "${resp.code} <- $tag")
                     resp
                 } catch (e: Exception) {
-                    // android.util.Log.e("MeloPlay", "$host FAILED: ${e.javaClass.simpleName}: ${e.message}")
+                    android.util.Log.e("MeloPlay", "$host FAILED: ${e.javaClass.simpleName}: ${e.message}")
                     throw e
                 }
             }
@@ -400,6 +406,9 @@ class PlaybackService : MediaSessionService() {
     private val endListener = object : Player.Listener {
         override fun onIsPlayingChanged(playing: Boolean) {
             com.melo.music.widget.WidgetUpdater.setPlaying(applicationContext, playing)
+        }
+        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            android.util.Log.e("MeloPlay", "ExoPlayer error: ${error.errorCodeName} (${error.errorCode}): ${error.message}", error)
         }
         override fun onAudioSessionIdChanged(newSessionId: Int) {
             if (newSessionId != androidx.media3.common.C.AUDIO_SESSION_ID_UNSET && newSessionId != 0) {

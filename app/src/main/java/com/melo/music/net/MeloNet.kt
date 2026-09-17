@@ -36,12 +36,11 @@ object MeloNet {
         override fun connectFailed(uri: URI, sa: java.net.SocketAddress, ioe: java.io.IOException) {}
     }
 
-    // Бутстрап для DoH: ходит через ByeDPI, DNS не нужен (даём IP Cloudflare).
+    // Бутстрап для DoH: прямой коннект без проксирования и без задержек.
     private val bootstrap: OkHttpClient by lazy {
         OkHttpClient.Builder()
-            .callTimeout(15, TimeUnit.SECONDS)
-            .proxySelector(byedpiSelector)
-            .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
+            .callTimeout(3, TimeUnit.SECONDS)
+            .connectTimeout(2, TimeUnit.SECONDS)
             .build()
     }
 
@@ -50,7 +49,43 @@ object MeloNet {
         DnsOverHttps.Builder()
             .client(bootstrap)
             .url("https://1.1.1.1/dns-query".toHttpUrl())
-            .bootstrapDnsHosts(InetAddress.getByName("1.1.1.1"), InetAddress.getByName("1.0.0.1"))
+            .bootstrapDnsHosts(
+                InetAddress.getByName("1.1.1.1"),
+                InetAddress.getByName("1.0.0.1"),
+                InetAddress.getByName("8.8.8.8")
+            )
             .build()
+    }
+
+    /**
+     * Безопасный резолвер: системный DNS отвечает мгновенно (<5мс).
+     * Если системный DNS дал сбой или не разрешил имя, пробуем DoH.
+     * Для заблокированного по IP soundcloud.com подставляем живой Anycast CloudFront IP (a-v2.sndcdn.com).
+     */
+    val dns: Dns = object : Dns {
+        override fun lookup(hostname: String): List<InetAddress> {
+            val lower = hostname.lowercase()
+            if (lower == "soundcloud.com" || lower == "www.soundcloud.com") {
+                return try {
+                    val sndcdnIps = resolveInternal("a-v2.sndcdn.com")
+                    if (sndcdnIps.isNotEmpty()) sndcdnIps else resolveInternal(hostname)
+                } catch (_: Exception) {
+                    resolveInternal(hostname)
+                }
+            }
+            return resolveInternal(hostname)
+        }
+
+        private fun resolveInternal(hostname: String): List<InetAddress> {
+            return try {
+                Dns.SYSTEM.lookup(hostname)
+            } catch (e: Exception) {
+                try {
+                    doh.lookup(hostname)
+                } catch (e2: Exception) {
+                    throw e
+                }
+            }
+        }
     }
 }

@@ -530,6 +530,86 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(16.dp))
 
+        // ── ⚡ Высокая частота обновления (120+ Гц) (Bento Card) ────
+        val hzContext = androidx.compose.ui.platform.LocalContext.current
+        val currentHz = androidx.compose.runtime.remember(com.melo.music.settings.AppSettings.highRefreshRate) {
+            com.melo.music.util.DisplayRefreshRateHelper.getCurrentRefreshRate(hzContext)
+        }
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = Color.White.copy(alpha = 0.05f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = cs.primaryContainer,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.AutoAwesome,
+                            contentDescription = null,
+                            tint = cs.onPrimaryContainer,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Плавность (120 Гц)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = cs.primary.copy(alpha = 0.18f),
+                            border = BorderStroke(0.8.dp, cs.primary.copy(alpha = 0.35f)),
+                        ) {
+                            Text(
+                                text = "${currentHz} Гц",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = cs.primary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        if (com.melo.music.settings.AppSettings.highRefreshRate)
+                            "Принудительная высокая герцовка для идеальной плавности анимаций, плеера и скролла"
+                        else
+                            "Ограничение 60 Гц активно для максимальной экономии заряда аккумулятора",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.65f),
+                    )
+                }
+                Switch(
+                    checked = com.melo.music.settings.AppSettings.highRefreshRate,
+                    onCheckedChange = {
+                        ClickFeedback.play()
+                        com.melo.music.settings.AppSettings.updateHighRefreshRate(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = cs.onPrimary,
+                        checkedTrackColor = cs.primary,
+                    ),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
         // ── 🚀 Обновления и патчи (Bento Card) ──────────────────────
         val context = LocalContext.current
         val coroutineScope = rememberCoroutineScope()

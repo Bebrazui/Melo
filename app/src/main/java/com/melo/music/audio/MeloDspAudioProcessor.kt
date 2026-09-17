@@ -61,6 +61,10 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
     private val crystalSubBassLpL = BiquadLowPassFilter()
     private val crystalSubBassLpR = BiquadLowPassFilter()
 
+    // ── Спектральные детекторы для защиты от песка и пердежа (Smart Spectral Balance) ──
+    private var crystalHighEnergyEnv = 0f
+    private var crystalSubEnergyEnv = 0f
+
     // Динамический огибающий лимитер и деклиппер (Mastering-Grade Anti-Clip Limiter)
     private var limiterGain = 1.0f
     private var limiterReleaseCoeff = 0.0005f
@@ -106,12 +110,12 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
     }
 
     private fun initCrystalFilters(sr: Int) {
-        val centerFreq = (6000f).coerceAtMost(sr * 0.38f)
-        val hpFreq = (8000f).coerceAtMost(sr * 0.42f)
-        val subFreq = (85f).coerceAtMost(sr * 0.15f)
+        val centerFreq = (4800f).coerceAtMost(sr * 0.38f)
+        val hpFreq = (6500f).coerceAtMost(sr * 0.42f)
+        val subFreq = (62f).coerceAtMost(sr * 0.15f)
 
-        crystalBandL.set(centerFreq, 0.8f, sr.toFloat())
-        crystalBandR.set(centerFreq, 0.8f, sr.toFloat())
+        crystalBandL.set(centerFreq, 0.75f, sr.toFloat())
+        crystalBandR.set(centerFreq, 0.75f, sr.toFloat())
         crystalHighPassL.set(hpFreq, 0.707f, sr.toFloat())
         crystalHighPassR.set(hpFreq, 0.707f, sr.toFloat())
         crystalSubBassLpL.set(subFreq, 0.707f, sr.toFloat())
@@ -270,40 +274,87 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 right = right * (1f - reverbWet * 0.30f) + revOut * reverbWet
             }
 
-            // 4. Crystal Audio™ (Super-Resolution ВЧ + Глубокий саб-бас + Устранение грязи)
+            // 4. Crystal Audio™ (Smart Adaptive: шелковистые ВЧ + плотный саб-бас + защита от песка и пердежа)
             if (crystalEnabled) {
-                // 4a. ВЧ Кристальный воздух (Шелковистые гармоники без резкости)
+                // 4a. ВЧ Кристальный воздух
                 val srcL = crystalBandL.process(left)
                 val srcR = crystalBandR.process(right)
 
-                val normSrcL = (srcL / 14000f).coerceIn(-1.8f, 1.8f)
-                val normSrcR = (srcR / 14000f).coerceIn(-1.8f, 1.8f)
+                // Детектор энергии ВЧ: если в треке УЖЕ звенят тарелки или сибилянты, плавно демпфируем
+                val highPeak = max(abs(srcL), abs(srcR))
+                if (highPeak > crystalHighEnergyEnv) {
+                    crystalHighEnergyEnv += (highPeak - crystalHighEnergyEnv) * 0.008f
+                } else {
+                    crystalHighEnergyEnv += (highPeak - crystalHighEnergyEnv) * 0.0006f
+                }
+                // При нормальных ВЧ highTamer = 1.0; если трек "песочный" и пережатый (выше 7500), приглушаем до 0.18
+                val highTamer = if (crystalHighEnergyEnv > 7500f) {
+                    (7500f / crystalHighEnergyEnv).coerceIn(0.18f, 1.0f)
+                } else {
+                    1.0f
+                }
 
-                // Мягкие обертоны x^2 (чётные = шелковистость и воздух)
-                val harmL = (0.90f * normSrcL * normSrcL - 0.20f * normSrcL * normSrcL * normSrcL) * 14000f
-                val harmR = (0.90f * normSrcR * normSrcR - 0.20f * normSrcR * normSrcR * normSrcR) * 14000f
+                // Мягкая аналоговая сатурация (Tape / Tube Soft-Knee) вместо полиномов:
+                // x / (1 + |x|) никогда не улетает в жесткий клиппинг и не рождает цифровой скрежет
+                val normL = srcL / 9000f
+                val normR = srcR / 9000f
+                val satL = (normL / (1.0f + abs(normL))) * 9000f
+                val satR = (normR / (1.0f + abs(normR))) * 9000f
+
+                // Чётные шелковистые обертоны (асимметрия = ламповый тёплый воздух)
+                val posL = max(0f, normL)
+                val posR = max(0f, normR)
+                val warmEvenL = (posL / (1.0f + posL * 1.5f)) * 9000f
+                val warmEvenR = (posR / (1.0f + posR * 1.5f)) * 9000f
+
+                val harmL = satL * 0.65f + warmEvenL * 0.85f
+                val harmR = satR * 0.65f + warmEvenR * 0.85f
 
                 val crystalL = crystalHighPassL.process(harmL)
                 val crystalR = crystalHighPassR.process(harmR)
 
-                val airGain = crystalIntensity * 1.25f
-                left += (crystalL + srcL * 0.30f) * airGain
-                right += (crystalR + srcR * 0.30f) * airGain
+                val effectiveAirGain = crystalIntensity * 1.55f * highTamer
+                left += (crystalL * 1.15f + srcL * 0.28f) * effectiveAirGain
+                right += (crystalR * 1.15f + srcR * 0.28f) * effectiveAirGain
 
-                // 4b. Глубокий бархатный саб-бас (30-85 Гц)
+                // 4b. Стерео-воздух (расширение сцены без фазовых искажений)
+                val sideAir = (srcL - srcR) * 0.24f * effectiveAirGain
+                left += sideAir
+                right -= sideAir
+
+                // 4c. Глубокий бархатный саб-бас (30-62 Гц) с защитой динамиков от пердежа
                 val subL = crystalSubBassLpL.process(left)
                 val subR = crystalSubBassLpR.process(right)
 
-                // Центрируем саб-бас в моно для максимальной плотности и ударности без фазовой грязи
                 val subMono = (subL + subR) * 0.5f
-                val normSub = (subMono / 15000f).coerceIn(-1.8f, 1.8f)
+                val subPeak = abs(subMono)
 
-                // Психоакустический синтез саб-гармоник (создаёт глубокий физически ощутимый низ)
-                val subHarmonic = (normSub + 0.22f * normSub * abs(normSub) - 0.12f * normSub * normSub * normSub) * 15000f
+                // Детектор энергии НЧ: если в треке УЖЕ мощный 808-бас, не наваливаем сверху перегруз!
+                if (subPeak > crystalSubEnergyEnv) {
+                    crystalSubEnergyEnv += (subPeak - crystalSubEnergyEnv) * 0.008f
+                } else {
+                    crystalSubEnergyEnv += (subPeak - crystalSubEnergyEnv) * 0.0005f
+                }
 
-                val deepBassGain = crystalIntensity * 0.55f
-                left += (subHarmonic - subL) * deepBassGain
-                right += (subHarmonic - subR) * deepBassGain
+                // Защита от перегруза: если бас уже долбит выше 8500, плавно снижаем гейн саб-баса
+                val bassTamer = if (crystalSubEnergyEnv > 8500f) {
+                    (8500f / crystalSubEnergyEnv).coerceIn(0.18f, 1.0f)
+                } else {
+                    1.0f
+                }
+
+                // Психоакустическое обогащение глубины фундаментального баса:
+                // Мягкое гармоническое уплотнение нижнего суб-регистра (30-62 Гц) без гула в мид-басе
+                val normSub = subMono / 8500f
+                val deepDensity = tanh(normSub) * 8500f
+                val effectiveBassGain = crystalIntensity * 0.82f * bassTamer
+
+                val rawBassPunch = (subMono * 0.50f + deepDensity * 0.50f) * effectiveBassGain
+
+                // Мягкий лимитер добавки баса: физически не может превысить 4500 пиков -> ноль пердежа
+                val bassPunch = rawBassPunch / (1.0f + abs(rawBassPunch) / 4500f)
+                left += bassPunch
+                right += bassPunch
             }
 
             // 5. Усиление громкости (Gain Booster)
@@ -365,6 +416,8 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         crystalBandL.reset(); crystalBandR.reset()
         crystalHighPassL.reset(); crystalHighPassR.reset()
         crystalSubBassLpL.reset(); crystalSubBassLpR.reset()
+        crystalHighEnergyEnv = 0f
+        crystalSubEnergyEnv = 0f
         limiterGain = 1.0f
         prevRawL = 0f
         prevRawR = 0f

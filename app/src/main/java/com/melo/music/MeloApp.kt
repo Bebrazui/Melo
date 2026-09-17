@@ -38,7 +38,7 @@ import java.util.concurrent.TimeUnit
 class MeloApp : Application(), ImageLoaderFactory {
 
     /** Лимит одновременных запросов обложек SoundCloud (i1-i4): при шторме ByeDPI рвёт коннекты. */
-    private val scImgSemaphore = java.util.concurrent.Semaphore(4)
+    private val scImgSemaphore = java.util.concurrent.Semaphore(8)
 
     override fun onCreate() {
         super.onCreate()
@@ -93,9 +93,10 @@ class MeloApp : Application(), ImageLoaderFactory {
         }
         val clientBuilder = OkHttpClient.Builder()
             .dispatcher(dispatcher)
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            // ByeDPI + системный DNS (DoH давал недостижимые IP для sndcdn).
+            .dns(com.melo.music.net.MeloNet.dns)
+            .connectTimeout(6, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            // ByeDPI + честный DNS.
             // HTTP/1.1: десинк ByeDPI ломает HTTP/2 (обложки виснут).
             .proxySelector(com.melo.music.net.MeloNet.byedpiSelector)
             .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
@@ -110,10 +111,14 @@ class MeloApp : Application(), ImageLoaderFactory {
                 } else {
                     origUrl
                 }
-                val request = chain.request().newBuilder().url(url).header(
+                var reqBuilder = chain.request().newBuilder().url(url).header(
                     "User-Agent",
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
-                ).build()
+                )
+                if (sc) {
+                    reqBuilder = reqBuilder.header("Connection", "close")
+                }
+                val request = reqBuilder.build()
                 if (!sc) return@addInterceptor chain.proceed(request)
                 // SoundCloud-обложки: ограничиваем параллельность + повторяем при reset
                 // (Socket closed падает за ~100мс на свежем коннекте, повтор дёшев).
@@ -124,8 +129,8 @@ class MeloApp : Application(), ImageLoaderFactory {
                     repeat(4) {
                         try {
                             val resp = chain
-                                .withConnectTimeout(5, TimeUnit.SECONDS)
-                                .withReadTimeout(4, TimeUnit.SECONDS)
+                                .withConnectTimeout(8, TimeUnit.SECONDS)
+                                .withReadTimeout(12, TimeUnit.SECONDS)
                                 .proceed(request)
                             if (resp.code in 400..499) return@addInterceptor resp
                             if (!resp.isSuccessful) { resp.close(); last = java.io.IOException("HTTP ${resp.code}"); return@repeat }
@@ -140,7 +145,7 @@ class MeloApp : Application(), ImageLoaderFactory {
                             last = e
                         }
                     }
-                    // android.util.Log.e("MeloImg", "FAILx4 ${last?.javaClass?.simpleName} ${request.url}")
+                    android.util.Log.e("MeloImg", "FAILx4 ${last?.javaClass?.simpleName} ${request.url}")
                     throw last ?: java.io.IOException("img fail")
                 } finally {
                     scImgSemaphore.release()

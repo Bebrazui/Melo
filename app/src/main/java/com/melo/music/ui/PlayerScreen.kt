@@ -134,11 +134,16 @@ import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material.icons.rounded.Fullscreen
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.viewinterop.AndroidView
 import com.melo.music.extractor.NewPipeResolver
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroup
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -288,7 +293,7 @@ fun PlayerScreen(
     scGetId: () -> String?,
     onScSetManual: suspend (String) -> Boolean,
     onScRefresh: suspend () -> String?,
-    onResolveAudioUrl: suspend (String) -> ResolvedTrack,
+    onResolveAudioUrl: suspend (String, String?) -> ResolvedTrack,
     isCached: (String) -> Boolean,
     onPrefetch: (String) -> Unit,
     onInvalidateCache: (String) -> Unit = {},
@@ -382,6 +387,7 @@ fun PlayerScreen(
     var lastItemCount by remember { mutableIntStateOf(0) }
 
     var nowPlaying by rememberSaveable(stateSaver = TrackSaver.singleSaver()) { mutableStateOf<TrackItem?>(null) }
+    var copyrightBlockedTrack by remember { mutableStateOf<TrackItem?>(null) }
     var resolvingUrl by rememberSaveable { mutableStateOf<String?>(null) }
     var trackStartTime by remember { mutableLongStateOf(0L) }
 
@@ -488,7 +494,8 @@ fun PlayerScreen(
         val resumePos = ctrl.currentPosition.coerceAtLeast(0L)
         // android.util.Log.e("MeloPerf", "PLAYER ERROR → re-resolve ${item.url}")
         onInvalidateCache(item.url)
-        val resolved = runCatching { onResolveAudioUrl(item.url) }.getOrNull() ?: return@LaunchedEffect
+        val query = listOfNotNull(item.title, item.uploader).joinToString(" ").takeIf { it.isNotBlank() }
+        val resolved = runCatching { onResolveAudioUrl(item.url, query) }.getOrNull() ?: return@LaunchedEffect
         if (nowPlaying?.url == item.url) {
             onPlayResolved(resolved)
             playerProvider()?.let { p ->
@@ -609,7 +616,8 @@ fun PlayerScreen(
         }
         scope.launch {
             val nextItem = list.getOrNull(nextIdx) ?: return@launch
-            val resolved = runCatching { onResolveAudioUrl(nextItem.url) }.getOrNull()
+            val nextQuery = listOfNotNull(nextItem.title, nextItem.uploader).joinToString(" ").takeIf { it.isNotBlank() }
+            val resolved = runCatching { onResolveAudioUrl(nextItem.url, nextQuery) }.getOrNull()
             // Проверяем, что очередь/индекс не сменились, пока резолвили.
             if (resolved != null && playingIndex == fromIndex) {
                 com.melo.music.playback.PlaybackService.setNext(
@@ -656,8 +664,11 @@ fun PlayerScreen(
         scope.launch {
             val tStart = android.os.SystemClock.elapsedRealtime()
             resolvingUrl = item.url
-            runCatching { onResolveAudioUrl(item.url) }
+            val query = listOfNotNull(item.title, item.uploader).joinToString(" ").takeIf { it.isNotBlank() }
+            runCatching { onResolveAudioUrl(item.url, query) }
                 .onSuccess {
+                    copyrightBlockedTrack = null
+                    android.util.Log.d("MeloTrack", "RESOLVE OK [index=$index] url=${item.url} streamUrl=${it.audioUrl.take(60)}")
                     // Если пользователь уже переключился — не играть старый трек.
                     if (resolvingUrl == item.url) {
                         val resolvedWithArtist = if (it.artist.isNullOrBlank()) it.copy(artist = item.uploader) else it
@@ -668,8 +679,16 @@ fun PlayerScreen(
                     }
                 }
                 .onFailure {
+                    android.util.Log.e("MeloTrack", "RESOLVE FAILED [index=$index] url=${item.url}: ${it.message}", it)
+                    val isCopyright = it is com.melo.music.extractor.TrackCopyrightException ||
+                        it.message?.contains("правообладател", ignoreCase = true) == true ||
+                        it.message?.contains("copyright", ignoreCase = true) == true ||
+                        it.message?.contains("interscope", ignoreCase = true) == true
+                    if (isCopyright) {
+                        copyrightBlockedTrack = item
+                    }
                     if (resolvingUrl == item.url) {
-                        listError = "Не удалось воспроизвести: ${it.message}"
+                        listError = if (isCopyright) "Трек удалён правообладателем" else "Не удалось воспроизвести: ${it.message}"
                     }
                 }
             if (resolvingUrl == item.url) {
@@ -1117,6 +1136,36 @@ fun PlayerScreen(
               onPositioned = { miniPlayerBounds = it },
           )
 
+          // ── Плашка: Трек удалён правообладателем (на главном экране) ──
+          androidx.compose.animation.AnimatedVisibility(
+              visible = copyrightBlockedTrack != null && !playerExpanded,
+              enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
+              exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut(),
+              modifier = Modifier
+                  .align(Alignment.BottomCenter)
+                  .then(if (isLandscape) Modifier.widthIn(max = 560.dp) else Modifier.fillMaxWidth())
+                  .padding(bottom = if (nowPlaying != null) 86.dp else 18.dp)
+                  .padding(horizontal = 14.dp)
+                  .zIndex(15f),
+          ) {
+              copyrightBlockedTrack?.let { track ->
+                  CopyrightBlockedBanner(
+                      track = track,
+                      onFindSimilar = {
+                          copyrightBlockedTrack = null
+                          val q = listOfNotNull(track.title, track.uploader).joinToString(" ").trim()
+                          if (q.isNotBlank()) {
+                              query = q
+                              runSearch()
+                          }
+                      },
+                      onDismiss = {
+                          copyrightBlockedTrack = null
+                      },
+                  )
+              }
+          }
+
           // ── Плашка доступного обновления (когда выключено автообновление) ──
           val updateAvailable = com.melo.music.update.UpdateManager.availableUpdate
           var updateBannerDismissed by remember { mutableStateOf(false) }
@@ -1223,6 +1272,19 @@ fun PlayerScreen(
                     },
                     onCollapse = { playerExpanded = false },
                     miniPlayerBounds = miniPlayerBounds,
+                    copyrightBlocked = copyrightBlockedTrack?.url == item.url,
+                    onFindSimilar = {
+                        copyrightBlockedTrack = null
+                        playerExpanded = false
+                        val q = listOfNotNull(item.title, item.uploader).joinToString(" ").trim()
+                        if (q.isNotBlank()) {
+                            query = q
+                            runSearch()
+                        }
+                    },
+                    onDismissCopyright = {
+                        copyrightBlockedTrack = null
+                    },
                 )
             }
         }
@@ -5412,13 +5474,15 @@ private fun ExpressiveSpeedButtonGroup(
     accent: Color,
     modifier: Modifier = Modifier,
 ) {
-    val options = remember {
+    val buttonTexts = remember { listOf("Slowed", "Original", "Speed") }
+    val buttonIcons = remember {
         listOf(
-            Triple("Slowed", 0.93f, Icons.Rounded.SlowMotionVideo),
-            Triple("Original", 1.0f, Icons.Rounded.PlayArrow),
-            Triple("Speed up", 1.15f, Icons.Rounded.Bolt),
+            Icons.Rounded.SlowMotionVideo,
+            Icons.Rounded.PlayArrow,
+            Icons.Rounded.Bolt,
         )
     }
+    val speeds = remember { listOf(0.93f, 1.0f, 1.15f) }
 
     val isDarkAccent = accent.luminance() < 0.40f
     val activeColor = if (isDarkAccent) lerp(accent, Color.White, 0.32f) else accent
@@ -5436,29 +5500,52 @@ private fun ExpressiveSpeedButtonGroup(
         outline = lerp(Color.White.copy(alpha = 0.15f), accent, 0.35f),
     )
 
-    MaterialTheme(colorScheme = speedColorScheme) {
-        ButtonGroup(
-            modifier = modifier.fillMaxWidth(0.82f),
-            overflowIndicator = {},
+    val compactStyle = MaterialTheme.typography.labelMedium.copy(
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = (-0.2).sp,
+    )
+    val compactTypography = MaterialTheme.typography.copy(
+        labelLarge = compactStyle,
+        labelMedium = compactStyle,
+        labelSmall = compactStyle,
+        bodyMedium = compactStyle,
+    )
+
+    MaterialTheme(
+        colorScheme = speedColorScheme,
+        typography = compactTypography,
+    ) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.material3.LocalTextStyle provides compactStyle,
         ) {
-            options.forEach { (label, value, icon) ->
-                val isSelected = kotlin.math.abs(speed - value) < 0.015f
-                toggleableItem(
-                    weight = 1f,
-                    checked = isSelected,
-                    onCheckedChange = {
-                        ClickFeedback.play()
-                        onSetSpeed(value)
-                    },
-                    label = label,
-                    icon = {
-                        Icon(
-                            imageVector = if (isSelected && value == 1f) Icons.Rounded.Check else icon,
-                            contentDescription = label,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    },
-                )
+            ButtonGroup(
+                modifier = modifier
+                    .padding(horizontal = 2.dp)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                overflowIndicator = {},
+            ) {
+                buttonTexts.forEachIndexed { index, label ->
+                    val targetSpeed = speeds[index]
+                    val isChecked = kotlin.math.abs(speed - targetSpeed) < 0.015f
+                    toggleableItem(
+                        weight = 1f,
+                        checked = isChecked,
+                        onCheckedChange = {
+                            ClickFeedback.play()
+                            onSetSpeed(targetSpeed)
+                        },
+                        label = label,
+                        icon = {
+                            Icon(
+                                imageVector = if (isChecked && targetSpeed == 1.0f) Icons.Rounded.Check else buttonIcons[index],
+                                contentDescription = label,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        },
+                    )
+                }
             }
         }
     }
@@ -5855,6 +5942,9 @@ private fun FullPlayer(
     onOpenArtist: (TrackItem) -> Unit = {},
     onCollapse: () -> Unit,
     miniPlayerBounds: Rect? = null,
+    copyrightBlocked: Boolean = false,
+    onFindSimilar: () -> Unit = {},
+    onDismissCopyright: () -> Unit = {},
 ) {
     val playerContext = androidx.compose.ui.platform.LocalContext.current
     var showVideo by remember(item.url) { mutableStateOf(false) }
@@ -6099,6 +6189,8 @@ private fun FullPlayer(
     // 0 = ось ещё не выбрана, 1 = вертикаль, 2 = горизонталь.
     var axis by remember { mutableIntStateOf(0) }
 
+    var speedWasOpenAtDragStart by remember { mutableStateOf(false) }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val screenWidthPx = with(localDensity) { maxWidth.toPx() }
         val screenHeightPx = with(localDensity) { maxHeight.toPx() }
@@ -6122,8 +6214,10 @@ private fun FullPlayer(
         // Мягкий эффект глубины (3D lift): карточка слегка отдаляется в перспективе во время движения
         val depthScale = 1f - (kotlin.math.sin(p * Math.PI.toFloat()) * 0.035f)
 
-        val fullAlpha = (1f - p * 1.45f).coerceIn(0f, 1f)
-        val miniAlpha = ((p - 0.20f) / 0.70f).coerceIn(0f, 1f)
+        // Полноэкранный плеер плавно растворяется до середины свайпа вниз (~48% хода)
+        val fullAlpha = (1f - (p / 0.48f)).coerceIn(0f, 1f)
+        // Мини-плеер начинает проявляться ТОЛЬКО после полного исчезновения полноэкранного (с 54% до 100%)
+        val miniAlpha = ((p - 0.54f) / 0.46f).coerceIn(0f, 1f)
 
         // Без затемнения фона под карточкой: чистая трансформация без мерцаний и резких перепадов яркости
         Box(
@@ -6147,16 +6241,26 @@ private fun FullPlayer(
                     .clip(RoundedCornerShape(currentCorner))
                     .pointerInput(Unit) {
                         detectDragGestures(
-                            onDragStart = { swipeAccum = 0f; axis = 0 },
+                            onDragStart = {
+                                swipeAccum = 0f
+                                axis = 0
+                                speedWasOpenAtDragStart = showSpeed
+                            },
                             onDragCancel = {
-                                if (axis == 1) {
+                                if (speedWasOpenAtDragStart) {
+                                    if (showSpeed && swipeAccum >= 35f) {
+                                        showSpeed = false
+                                        ClickFeedback.play()
+                                    }
+                                    gestureScope.launch {
+                                        collapseProgress.snapTo(0f)
+                                        swipeX.animateTo(0f, tween(180))
+                                    }
+                                } else if (axis == 1) {
                                     if (swipeAccum <= -45f) {
                                         showSpeed = true
                                         ClickFeedback.play()
-                                    } else if (showSpeed && swipeAccum >= 45f) {
-                                        showSpeed = false
-                                        ClickFeedback.play()
-                                    } else if (!showSpeed) {
+                                    } else {
                                         val dragDistance = (targetY - 0f).coerceAtLeast(100f)
                                         val progress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
                                         if (progress > 0.08f || swipeAccum > 60f || collapseProgress.value > 0.12f) {
@@ -6171,6 +6275,7 @@ private fun FullPlayer(
                                 }
                                 swipeAccum = 0f
                                 axis = 0
+                                speedWasOpenAtDragStart = false
                             },
                             onDragEnd = {
                                 if (axis == 2) {
@@ -6183,16 +6288,21 @@ private fun FullPlayer(
                                             else -> swipeX.animateTo(0f, tween(200))
                                         }
                                     }
+                                } else if (speedWasOpenAtDragStart) {
+                                    // Жест начался при открытом меню скоростей: закрывает ТОЛЬКО скорости, плеер остаётся на месте
+                                    if (showSpeed && swipeAccum >= 30f) {
+                                        showSpeed = false
+                                        ClickFeedback.play()
+                                    }
+                                    gestureScope.launch {
+                                        collapseProgress.animateTo(0f, spring(0.86f, 420f))
+                                    }
                                 } else {
                                     if (swipeAccum <= -45f) {
                                         showSpeed = true
                                         ClickFeedback.play()
                                         gestureScope.launch { collapseProgress.animateTo(0f, spring(0.86f, 420f)) }
-                                    } else if (showSpeed && swipeAccum >= 45f) {
-                                        showSpeed = false
-                                        ClickFeedback.play()
-                                        gestureScope.launch { collapseProgress.animateTo(0f, spring(0.86f, 420f)) }
-                                    } else if (!showSpeed) {
+                                    } else {
                                         val dragDistance = (targetY - 0f).coerceAtLeast(100f)
                                         val progress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
                                         if (progress > 0.08f || swipeAccum > 60f || collapseProgress.value > 0.12f) {
@@ -6206,6 +6316,7 @@ private fun FullPlayer(
                                 }
                                 swipeAccum = 0f
                                 axis = 0
+                                speedWasOpenAtDragStart = false
                             },
                             onDrag = { change, drag ->
                                 change.consume()
@@ -6217,18 +6328,24 @@ private fun FullPlayer(
                                 } else {
                                     val delta = drag.y
                                     swipeAccum += delta
-                                    if (swipeAccum <= -45f && !showSpeed) {
-                                        showSpeed = true
-                                        swipeAccum = 0f
-                                        ClickFeedback.play()
-                                    } else if (showSpeed && swipeAccum >= 45f) {
-                                        showSpeed = false
-                                        swipeAccum = 0f
-                                        ClickFeedback.play()
-                                    } else if (!showSpeed) {
-                                        val dragDistance = (targetY - 0f).coerceAtLeast(100f)
-                                        val newProgress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
-                                        gestureScope.launch { collapseProgress.snapTo(newProgress) }
+                                    if (speedWasOpenAtDragStart) {
+                                        if (showSpeed && swipeAccum >= 40f) {
+                                            showSpeed = false
+                                            ClickFeedback.play()
+                                        }
+                                        if (collapseProgress.value != 0f) {
+                                            gestureScope.launch { collapseProgress.snapTo(0f) }
+                                        }
+                                    } else {
+                                        if (swipeAccum <= -45f && !showSpeed) {
+                                            showSpeed = true
+                                            swipeAccum = 0f
+                                            ClickFeedback.play()
+                                        } else {
+                                            val dragDistance = (targetY - 0f).coerceAtLeast(100f)
+                                            val newProgress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
+                                            gestureScope.launch { collapseProgress.snapTo(newProgress) }
+                                        }
                                     }
                                 }
                             },
@@ -6267,7 +6384,7 @@ private fun FullPlayer(
         )
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val isWide = (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) || (maxWidth > maxHeight)
+            val isWide = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
             val isVinylMode = com.melo.music.settings.AppSettings.vinylRecord
             val art3dModifier = Modifier
@@ -6528,6 +6645,20 @@ private fun FullPlayer(
                             )
                         }
                     }
+                }
+
+                // Плашка: Трек удалён правообладателем (в полном плеере)
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = copyrightBlocked,
+                    enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
+                    exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut(),
+                    modifier = Modifier.padding(top = 10.dp),
+                ) {
+                    CopyrightBlockedBanner(
+                        track = item,
+                        onFindSimilar = onFindSimilar,
+                        onDismiss = onDismissCopyright,
+                    )
                 }
 
                 if (!isLandscape) {
@@ -7051,15 +7182,19 @@ private fun FullPlayer(
                                 visible = showSpeed,
                                 enter = expandVertically(animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)) + fadeIn(tween(200)),
                                 exit = shrinkVertically(animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)) + fadeOut(tween(160)),
-                                modifier = Modifier
-                                    .fillMaxWidth(0.85f)
-                                    .padding(bottom = 6.dp),
+                                modifier = Modifier.fillMaxWidth(),
                             ) {
-                                ExpressiveSpeedButtonGroup(
-                                    speed = speed,
-                                    onSetSpeed = onSetSpeed,
-                                    accent = artColor,
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 6.dp, bottom = 10.dp),
+                                ) {
+                                    ExpressiveSpeedButtonGroup(
+                                        speed = speed,
+                                        onSetSpeed = onSetSpeed,
+                                        accent = artColor,
+                                    )
+                                }
                             }
 
                             RenderControls(isLandscape = true)
@@ -7068,6 +7203,12 @@ private fun FullPlayer(
                 }
             } else {
                 // ── РАСКЛАДКА: Вертикальный режим (Portrait) ──
+                val speedSpacerWeight by animateFloatAsState(
+                    targetValue = if (showSpeed) 0.35f else 1f,
+                    animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f),
+                    label = "speedSpacerWeight",
+                )
+
                 Column(
                     modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -7098,7 +7239,7 @@ private fun FullPlayer(
                         ) {
                             RenderArtwork(Modifier.fillMaxSize())
                         }
-                        Spacer(Modifier.weight(1f))
+                        Spacer(Modifier.weight(speedSpacerWeight))
                     }
 
                     // ── M3 Expressive ButtonGroup: ПОД ОБЛОЖКОЙ, НАД НАДПИСЬЮ ──
@@ -7106,15 +7247,19 @@ private fun FullPlayer(
                         visible = showSpeed,
                         enter = expandVertically(animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)) + fadeIn(tween(200)),
                         exit = shrinkVertically(animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)) + fadeOut(tween(160)),
-                        modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .padding(bottom = 10.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        ExpressiveSpeedButtonGroup(
-                            speed = speed,
-                            onSetSpeed = onSetSpeed,
-                            accent = artColor,
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp, bottom = 12.dp),
+                        ) {
+                            ExpressiveSpeedButtonGroup(
+                                speed = speed,
+                                onSetSpeed = onSetSpeed,
+                                accent = artColor,
+                            )
+                        }
                     }
 
                     RenderControls(isLandscape = false)
@@ -7140,37 +7285,39 @@ private fun FullPlayer(
     }
 
         // 2. Мини-плеер (проявляется при сворачивании и идеально встает на свое место)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = miniAlpha }
-                .drawBehind {
-                    val h = size.height
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                artColor.copy(alpha = 0.25f),
-                                artColor.copy(alpha = 0.70f),
+        if (miniAlpha > 0.01f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = miniAlpha }
+                    .drawBehind {
+                        val h = size.height
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    artColor.copy(alpha = 0.25f),
+                                    artColor.copy(alpha = 0.70f),
+                                ),
+                                startY = h * 0.15f,
+                                endY = h,
                             ),
-                            startY = h * 0.15f,
-                            endY = h,
-                        ),
-                    )
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            NowPlayingBarInner(
-                item = item,
-                isPlaying = isPlaying,
-                resolving = resolving,
-                animatedTrackColor = artColor,
-                scallopedArt = scallopedArt,
-                scallopedBtn = scallopedBtn,
-                onTogglePlayPause = onTogglePlayPause,
-                onPrev = onPrev,
-                onNext = onNext,
-            )
+                        )
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                NowPlayingBarInner(
+                    item = item,
+                    isPlaying = isPlaying,
+                    resolving = resolving,
+                    animatedTrackColor = artColor,
+                    scallopedArt = scallopedArt,
+                    scallopedBtn = scallopedBtn,
+                    onTogglePlayPause = onTogglePlayPause,
+                    onPrev = onPrev,
+                    onNext = onNext,
+                )
+            }
         }
     }
 }
@@ -7431,3 +7578,93 @@ private fun formatDuration(seconds: Long): String {
     val s = seconds % 60
     return String.format(Locale.getDefault(), "%d:%02d", m, s)
 }
+
+/**
+ * Плашка с предупреждением об удалении трека правообладателем и кнопкой быстрого поиска альтернативы.
+ */
+@Composable
+private fun CopyrightBlockedBanner(
+    track: TrackItem,
+    onFindSimilar: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xF0201212),
+        border = BorderStroke(1.dp, Color(0xFFFF5252).copy(alpha = 0.5f)),
+        shadowElevation = 8.dp,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x33FF5252)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Warning,
+                    contentDescription = null,
+                    tint = Color(0xFFFF5252),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Удалено правообладателем",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp),
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = track.title,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                    color = Color.White.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Button(
+                onClick = onFindSimilar,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFE53935),
+                    contentColor = Color.White,
+                ),
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                modifier = Modifier.height(34.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(15.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = "Похожее",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                )
+            }
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.size(28.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Close,
+                    contentDescription = "Закрыть",
+                    tint = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
+}
+

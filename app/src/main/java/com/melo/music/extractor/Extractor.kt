@@ -48,6 +48,11 @@ data class TrackItem(
     val viewCount: Long = 0,
 )
 
+class TrackCopyrightException(
+    message: String = "Трек удалён правообладателем",
+    cause: Throwable? = null,
+) : Exception(message, cause)
+
 /** Определяет источник по URL (для Deezer/Tidal, которые идут через yt-dlp). */
 fun sourceForUrl(url: String): Source = when {
     url.contains("deezer.com", ignoreCase = true) ||
@@ -131,7 +136,7 @@ object Extractor {
             YoutubeDL.getInstance().updateYoutubeDL(context.applicationContext)
         }
 
-    suspend fun resolveAudioUrl(context: Context, url: String): ResolvedTrack {
+    suspend fun resolveAudioUrl(context: Context, url: String, fallbackQuery: String? = null): ResolvedTrack {
         // 0) Офлайн: скачанный трек играем прямо с диска, без сети.
         com.melo.music.offline.OfflineManager.localUri(url)?.let { local ->
             // android.util.Log.e("MeloPerf", "OFFLINE HIT $url")
@@ -152,14 +157,36 @@ object Extractor {
             return it
         }
         val app = context.applicationContext
+        val flightKey = if (!fallbackQuery.isNullOrBlank()) "$url#$fallbackQuery" else url
         // Дедуп: если этот URL уже резолвится — ждём тот же результат.
-        val deferred = inFlight.getOrPut(url) {
+        val deferred = inFlight.getOrPut(flightKey) {
             // android.util.Log.e("MeloPerf", "CACHE MISS → resolve $url")
             scope.async {
                 try {
-                    // YouTube и SoundCloud — через NewPipe, остальное — через yt-dlp.
+                    // YouTube и SoundCloud — через NewPipe, с надёжным авто-фолбэком на yt-dlp при ошибках.
                     val resolved = if (NewPipeResolver.isSupported(url)) {
-                        NewPipeResolver.resolve(app, url)
+                        try {
+                            NewPipeResolver.resolve(app, url)
+                        } catch (e: Exception) {
+                            val msg = e.message.orEmpty().lowercase()
+                            val isCopyright = e is org.schabi.newpipe.extractor.exceptions.ContentNotAvailableException ||
+                                msg.contains("copyright") || msg.contains("removed following a copyright") ||
+                                msg.contains("interscope")
+                            if (isCopyright) {
+                                android.util.Log.e("MeloExtract", "Track blocked by copyright: $url")
+                                throw TrackCopyrightException("Трек удалён правообладателем", e)
+                            }
+                            android.util.Log.e("MeloExtract", "NewPipe resolve failed for $url: ${e.message}")
+                            try {
+                                resolveWithYtDlp(app, url)
+                            } catch (e2: Exception) {
+                                val msg2 = e2.message.orEmpty().lowercase()
+                                if (msg2.contains("copyright") || msg2.contains("removed") || msg2.contains("interscope")) {
+                                    throw TrackCopyrightException("Трек удалён правообладателем", e2)
+                                }
+                                throw e2
+                            }
+                        }
                     } else {
                         resolveWithYtDlp(app, url)
                     }
@@ -167,7 +194,7 @@ object Extractor {
                     StreamCacheStore.put(url, resolved)
                     resolved
                 } finally {
-                    inFlight.remove(url)
+                    inFlight.remove(flightKey)
                 }
             }
         }

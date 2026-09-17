@@ -28,14 +28,21 @@ object SoundCloudFix {
     // Анти-шторм: не дёргать добычу client_id чаще, чем раз в COOLDOWN_MS.
     @Volatile
     private var lastDiscover = 0L
-    private const val COOLDOWN_MS = 5 * 60 * 1000L
+    private const val COOLDOWN_MS = 30 * 1000L
 
     private const val PREFS = "melo_sc"
     private const val KEY_ID = "client_id"
 
+    private val FALLBACK_IDS = listOf(
+        "Pb72ranhoyt6gw7hM7TkzUItXlMWSNSo",
+    )
+
     // К SoundCloud — через ByeDPI + честный DNS (DoH), как и все остальные клиенты.
     private val client = OkHttpClient.Builder()
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
         .callTimeout(15, TimeUnit.SECONDS)
+        .dns(MeloNet.dns)
         .proxySelector(MeloNet.byedpiSelector)
         .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
         .build()
@@ -48,7 +55,7 @@ object SoundCloudFix {
             Thread.sleep(250)
             waited++
         }
-        // android.util.Log.e("MeloSC", "byedpi running=${ByeDpiProxy.isRunning()} (ждали ${waited * 250}мс)")
+        android.util.Log.d("MeloSC", "byedpi running=${ByeDpiProxy.isRunning()} (ждали ${waited * 250}мс)")
     }
 
     /**
@@ -114,44 +121,94 @@ object SoundCloudFix {
     /** Гарантирует валидный client_id и внедряет его в NewPipe. Идемпотентно. */
     @Synchronized
     fun ensure(context: Context): String? {
-        cachedId?.let { return it }
+        // 1) Если уже есть валидный cachedId в памяти:
+        cachedId?.let {
+            if (isValid(it)) return it
+            invalidate(context)
+        }
+
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-        // 1) Есть сохранённый id — доверяем ему без сетевой проверки (не штормим).
-        //    Если он реально протух, SC-запросы вернут 401 и мы добудем заново (с кулдауном).
+        // 2) Если в SharedPreferences есть сохранённый ключ - проверяем его валидность
         prefs.getString(KEY_ID, null)?.let { saved ->
-            cachedId = saved
-            inject(saved)
-            return saved
+            if (isValid(saved)) {
+                cachedId = saved
+                inject(saved)
+                return saved
+            } else {
+                android.util.Log.w("MeloSC", "Сохранённый client_id невалиден: $saved, удаляем")
+                prefs.edit().remove(KEY_ID).apply()
+                inject(null)
+            }
         }
 
-        // 2) Нет id — добываем, но не чаще раза в COOLDOWN_MS (анти-шторм).
-        val now = System.currentTimeMillis()
-        if (now - lastDiscover < COOLDOWN_MS) return null
-        lastDiscover = now
-        awaitProxy()
-        val id = discover()
-        if (id != null) {
-            // android.util.Log.e("MeloSC", "client_id добыт: $id")
-            cachedId = id
-            prefs.edit().putString(KEY_ID, id).apply()
-            inject(id)
-            return id
+        // 3) Проверяем, может NewPipe уже имеет рабочий id в статическом поле
+        val npId = getNewPipeClientId()
+        if (!npId.isNullOrBlank()) {
+            if (isValid(npId)) {
+                android.util.Log.i("MeloSC", "NewPipe уже имеет валидный client_id: $npId")
+                cachedId = npId
+                prefs.edit().putString(KEY_ID, npId).apply()
+                return npId
+            } else {
+                android.util.Log.w("MeloSC", "NewPipe clientId протух: $npId, сбрасываем в null")
+                inject(null)
+            }
         }
-        // android.util.Log.e("MeloSC", "не удалось добыть client_id (повтор не раньше чем через 5 мин)")
+
+        // 4) Проверяем известные живые ключи через быстрый ping к api-v2 (~300ms)
+        val validFallback = FALLBACK_IDS.firstOrNull { isValid(it) }
+        if (validFallback != null) {
+            android.util.Log.i("MeloSC", "Используем проверенный валидный client_id: $validFallback")
+            cachedId = validFallback
+            prefs.edit().putString(KEY_ID, validFallback).apply()
+            inject(validFallback)
+            return validFallback
+        }
+
+        // 5) Если все резервные ключи протухли — пробуем динамическую добычу через NewPipe
+        awaitProxy()
+        android.util.Log.i("MeloSC", "Резервные ключи не подошли, пробуем NewPipe extraction...")
+        val extracted = runCatching {
+            org.schabi.newpipe.extractor.services.soundcloud.SoundcloudParsingHelper.clientId()
+        }.onFailure {
+            android.util.Log.w("MeloSC", "NewPipe extraction failed: ${it.message}")
+        }.getOrNull()
+
+        if (!extracted.isNullOrBlank() && isValid(extracted)) {
+            android.util.Log.i("MeloSC", "NewPipe успешно добыл client_id онлайн: $extracted")
+            cachedId = extracted
+            prefs.edit().putString(KEY_ID, extracted).apply()
+            return extracted
+        }
+
+        // 6) Если NewPipe не смог — пробуем наш discover()
+        android.util.Log.i("MeloSC", "NewPipe extraction не удался, пробуем discover()...")
+        val discovered = discover()
+        if (discovered != null && isValid(discovered)) {
+            android.util.Log.i("MeloSC", "SoundCloudFix discover добыл client_id: $discovered")
+            cachedId = discovered
+            prefs.edit().putString(KEY_ID, discovered).apply()
+            inject(discovered)
+            return discovered
+        }
+
         return null
     }
 
     /** Принудительно сбросить кэшированный id (например, при 401 от SoundCloud). */
     @Synchronized
     fun invalidate(context: Context) {
+        android.util.Log.i("MeloSC", "Сброс SoundCloud client_id (invalidated)")
         cachedId = null
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().remove(KEY_ID).apply()
+        inject(null)
     }
 
     /** Проверка client_id через рабочий api-v2 (200 = валиден). */
-    private fun isValid(id: String): Boolean = runCatching {
+    fun isValid(id: String): Boolean = runCatching {
+        if (id.isBlank()) return false
         val url = "https://api-v2.soundcloud.com/search/tracks?q=test&limit=1&client_id=$id"
         client.newCall(Request.Builder().url(url).build()).execute().use { it.code == 200 }
     }.getOrDefault(false)
@@ -435,7 +492,16 @@ object SoundCloudFix {
     }.onFailure { /* android.util.Log.e("MeloSC", "GET $url → ${it.javaClass.simpleName}: ${it.message}") */ }
         .getOrNull()
 
-    private fun inject(id: String) {
+    fun getNewPipeClientId(): String? = runCatching {
+        val cls = Class.forName(
+            "org.schabi.newpipe.extractor.services.soundcloud.SoundcloudParsingHelper",
+        )
+        val field = cls.getDeclaredField("clientId")
+        field.isAccessible = true
+        field.get(null) as? String
+    }.getOrNull()
+
+    fun inject(id: String?) {
         runCatching {
             val cls = Class.forName(
                 "org.schabi.newpipe.extractor.services.soundcloud.SoundcloudParsingHelper",
@@ -443,6 +509,6 @@ object SoundCloudFix {
             val field = cls.getDeclaredField("clientId")
             field.isAccessible = true
             field.set(null, id)
-        }.onFailure { /* android.util.Log.e("MeloSC", "inject failed: $it") */ }
+        }.onFailure { android.util.Log.e("MeloSC", "inject failed: $it") }
     }
 }

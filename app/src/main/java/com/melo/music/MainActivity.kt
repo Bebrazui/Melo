@@ -36,6 +36,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        com.melo.music.util.DisplayRefreshRateHelper.applyRefreshRate(
+            this,
+            com.melo.music.settings.AppSettings.highRefreshRate,
+        )
 
         GoogleAuthHelper.init(this)
         com.melo.music.auth.YouTubeAccountManager.init(this)
@@ -58,6 +62,12 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
+            androidx.compose.runtime.LaunchedEffect(com.melo.music.settings.AppSettings.highRefreshRate) {
+                com.melo.music.util.DisplayRefreshRateHelper.applyRefreshRate(
+                    this@MainActivity,
+                    com.melo.music.settings.AppSettings.highRefreshRate,
+                )
+            }
             val baseDensity = androidx.compose.ui.platform.LocalDensity.current
             val scale = com.melo.music.settings.AppSettings.uiScale
             androidx.compose.runtime.CompositionLocalProvider(
@@ -86,7 +96,7 @@ class MainActivity : ComponentActivity() {
                         onScRefresh = {
                             withContext(Dispatchers.IO) { SoundCloudFix.refresh(this@MainActivity) }
                         },
-                        onResolveAudioUrl = { url -> Extractor.resolveAudioUrl(this, url) },
+                        onResolveAudioUrl = { url, query -> Extractor.resolveAudioUrl(this, url, query) },
                         isCached = { url -> Extractor.isCached(url) },
                         onPrefetch = { url -> Extractor.prefetch(this, url) },
                         onInvalidateCache = { url -> Extractor.invalidate(url) },
@@ -104,6 +114,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        com.melo.music.util.DisplayRefreshRateHelper.applyRefreshRate(
+            this,
+            com.melo.music.settings.AppSettings.highRefreshRate,
+        )
         if (com.melo.music.auth.YouTubeAccountManager.isLoggedIn) {
             kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                 runCatching {

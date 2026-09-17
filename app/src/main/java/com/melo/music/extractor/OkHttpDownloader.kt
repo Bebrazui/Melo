@@ -15,11 +15,15 @@ import java.net.URI
  * Динамически проверяет ByeDPI прокси на каждый запрос через ProxySelector.
  */
 class OkHttpDownloader(
-    private val client: OkHttpClient = OkHttpClient.Builder().build(),
+    private val client: OkHttpClient = OkHttpClient.Builder()
+        .callTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .build(),
 ) : Downloader() {
 
     private val dynamicProxyClient: OkHttpClient by lazy {
         client.newBuilder()
+            .callTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .dns(MeloNet.dns)
             .proxySelector(MeloNet.byedpiSelector)
             .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
             .addInterceptor(ScRetryInterceptor)
@@ -29,8 +33,8 @@ class OkHttpDownloader(
     /**
      * Через ByeDPI отдельные коннекты к SoundCloud иногда «немеют» — TLS встаёт,
      * запрос уходит, ответа нет → read timeout ~10с убивает резолв (а соседние
-     * запросы летят за <1с). Для SC-хостов: короткий таймаут (4с) + до 3 попыток;
-     * каждый повтор берёт СВЕЖИЙ коннект, который обычно отвечает мгновенно.
+     * запросы летят за <1с). Для SC-хостов: таймаут 4с + до 3 попыток;
+     * каждый повтор берёт СВЕЖИЙ коннект.
      */
     private object ScRetryInterceptor : okhttp3.Interceptor {
         override fun intercept(chain: okhttp3.Interceptor.Chain): okhttp3.Response {
@@ -44,11 +48,13 @@ class OkHttpDownloader(
             // обходит надёжно. Каждый запрос = свежий коннект.
             val fresh = req.newBuilder().header("Connection", "close").build()
             var last: java.io.IOException? = null
+            val connTimeout = 10
+            val readTimeout = 25
             repeat(3) {
                 try {
                     return chain
-                        .withConnectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
-                        .withReadTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+                        .withConnectTimeout(connTimeout, java.util.concurrent.TimeUnit.SECONDS)
+                        .withReadTimeout(readTimeout, java.util.concurrent.TimeUnit.SECONDS)
                         .proceed(fresh)
                 } catch (e: java.io.IOException) {
                     last = e
@@ -111,7 +117,7 @@ class OkHttpDownloader(
             activeClient.newCall(requestBuilder.build()).execute()
         } catch (e: Exception) {
             if (sc || LOG_ALL) {
-                // android.util.Log.e("MeloNet", "$httpMethod $host FAILED proxy=$proxied: ${e.javaClass.simpleName}: ${e.message}")
+                android.util.Log.e("MeloNet", "$httpMethod $host FAILED proxy=$proxied: ${e.javaClass.simpleName}: ${e.message}")
             }
             throw e
         }
@@ -123,7 +129,7 @@ class OkHttpDownloader(
         val body = response.body?.string()
         val ms = System.currentTimeMillis() - started
         if (sc || LOG_ALL) {
-            // android.util.Log.e("MeloNet", "$httpMethod $host -> ${response.code} ${body?.length ?: 0}b ${ms}ms proxy=$proxied")
+            android.util.Log.i("MeloNet", "$httpMethod $host -> ${response.code} ${body?.length ?: 0}b ${ms}ms proxy=$proxied")
         }
         val latestUrl = response.request.url.toString()
         return Response(
@@ -137,7 +143,7 @@ class OkHttpDownloader(
 
     private companion object {
         // Поставь true, чтобы видеть ВСЕ запросы NewPipe (не только SoundCloud).
-        const val LOG_ALL = false
+        const val LOG_ALL = true
         const val USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0"
     }
