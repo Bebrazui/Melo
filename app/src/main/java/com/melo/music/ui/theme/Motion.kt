@@ -27,37 +27,37 @@ import androidx.compose.ui.platform.LocalConfiguration
 import android.content.res.Configuration
 import android.os.Build
 import kotlin.math.min
+import kotlin.math.pow
 import kotlinx.coroutines.launch
-import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 /**
- * Анимации и скругления в стиле PixelPlayer.
+ * Спецификации скруглений и анимаций.
  *
- * Smooth corners (squircle, 60% smoothness) вместо обычных RoundedCornerShape
- * и «пружинные» спецификации M3 Expressive: press-scale на карточках,
- * emphasized-easing переходы экранов.
+ * Используем аппаратные RoundedCornerShape с полноценным сабпиксельным сглаживанием (anti-aliasing)
+ * для идеально четких и гладких углов обложек без лесенок и размытия.
  */
 object ShapeCache {
     /** 8dp — чипы, мелкие поверхности. */
-    val smooth8 = AbsoluteSmoothCornerShape(cornerRadius = 8.dp, smoothnessAsPercent = 60)
+    val smooth8 = RoundedCornerShape(8.dp)
 
     /** 12dp — элементы списков треков, маленькие карточки. */
-    val smooth12 = AbsoluteSmoothCornerShape(cornerRadius = 12.dp, smoothnessAsPercent = 60)
+    val smooth12 = RoundedCornerShape(12.dp)
 
     /** 16dp — обложки в карточках, плейлисты. */
-    val smooth16 = AbsoluteSmoothCornerShape(cornerRadius = 16.dp, smoothnessAsPercent = 60)
+    val smooth16 = RoundedCornerShape(16.dp)
 
     /** 20dp — крупные карточки (треки, альбомы). */
-    val smooth20 = AbsoluteSmoothCornerShape(cornerRadius = 20.dp, smoothnessAsPercent = 60)
+    val smooth20 = RoundedCornerShape(20.dp)
 
     /** 24dp — hero-карточки, диалоги. */
-    val smooth24 = AbsoluteSmoothCornerShape(cornerRadius = 24.dp, smoothnessAsPercent = 60)
+    val smooth24 = RoundedCornerShape(24.dp)
 
     /** 32dp — bottom sheets, плавающие панели. */
-    val smooth32 = AbsoluteSmoothCornerShape(cornerRadius = 32.dp, smoothnessAsPercent = 60)
+    val smooth32 = RoundedCornerShape(32.dp)
 
     /** Пилюля — кнопки/чипы. */
-    val smoothPill = AbsoluteSmoothCornerShape(cornerRadius = 50.dp, smoothnessAsPercent = 60)
+    val smoothPill = RoundedCornerShape(50.dp)
 }
 
 /** Спецификации движения (по мотивам PixelPlayer / M3 Expressive). */
@@ -151,21 +151,24 @@ fun Modifier.carouselCenterItemEffect(
 
             if (moreEffects) {
                 // 1. Уменьшение масштаба
-                val scale = 0.83f + 0.17f * smooth
+                val scale = 0.84f + 0.16f * smooth
                 scaleX = scale
                 scaleY = scale
 
                 // 2. Затемнение карточек по краям
-                alpha = 0.65f + 0.35f * smooth
+                alpha = 0.68f + 0.32f * smooth
 
-                // 3. 3D-наклон карточек к центру
+                // 3. Выраженный 3D-наклон карточек к центру (скручивание в объеме)
                 val offsetRatio = ((itemCenter - viewportCenter) / maxDistance).coerceIn(-1f, 1f)
-                rotationY = offsetRatio * 18f
-                cameraDistance = 16f * density
+                val sign = kotlin.math.sign(offsetRatio)
+                val absRatio = kotlin.math.abs(offsetRatio)
+                val curve = absRatio.pow(0.7f)
+                rotationY = sign * curve * 28f
+                cameraDistance = 8f
 
                 // 4. Мягкое размытие боковых карточек (на Android 12+)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val blurPx = ((1f - smooth) * 9f).coerceAtLeast(0f)
+                    val blurPx = ((1f - smooth) * 5f).coerceAtLeast(0f)
                     renderEffect = if (blurPx > 0.5f) {
                         android.graphics.RenderEffect.createBlurEffect(
                             blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP
@@ -211,14 +214,17 @@ fun Modifier.carouselCenterGridItemEffect(
                 val scale = 0.88f + 0.12f * smooth
                 scaleX = scale
                 scaleY = scale
-                alpha = 0.70f + 0.30f * smooth
+                alpha = 0.72f + 0.28f * smooth
 
                 val offsetRatio = ((itemCenter - viewportCenter) / maxDistance).coerceIn(-1f, 1f)
-                rotationY = offsetRatio * 14f
-                cameraDistance = 16f * density
+                val sign = kotlin.math.sign(offsetRatio)
+                val absRatio = kotlin.math.abs(offsetRatio)
+                val curve = absRatio.pow(0.7f)
+                rotationY = sign * curve * 22f
+                cameraDistance = 8f
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val blurPx = ((1f - smooth) * 8f).coerceAtLeast(0f)
+                    val blurPx = ((1f - smooth) * 4f).coerceAtLeast(0f)
                     renderEffect = if (blurPx > 0.5f) {
                         android.graphics.RenderEffect.createBlurEffect(
                             blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP
@@ -241,11 +247,8 @@ fun Modifier.carouselCenterGridItemEffect(
 
 /**
  * Кинематографичный вертикальный эффект затухания, сжатия и размытия у верхней и нижней границ:
- * При скролле карточки (треки, настройки, профиль) при приближении к границам:
- * 1. Буквально немного уменьшаются (scale 0.955 .. 1.0)
- * 2. Слегка затемняются (alpha 0.68 .. 1.0)
- * 3. Плавно размываются сверху и снизу (blur 0 .. 8.5px)
- * При этом строка поиска и нижний навигационный бар не затрагиваются.
+ * Срабатывает СТРОГО у самых краев экрана (у строки поиска сверху и над нижним баром снизу).
+ * Внутри экрана элементы 100% четкие без размытия.
  */
 fun Modifier.verticalScrollEdgeItemEffect(): Modifier = composed {
     if (!com.melo.music.settings.AppSettings.moreEffects) return@composed this
@@ -255,9 +258,11 @@ fun Modifier.verticalScrollEdgeItemEffect(): Modifier = composed {
     val isLandscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
     val screenHeightPx = with(density) { config.screenHeightDp.dp.toPx() }
 
-    val topBoundary = with(density) { (if (isLandscape) 56.dp else 92.dp).toPx() }
-    val bottomBoundary = screenHeightPx - with(density) { (if (isLandscape) 40.dp else 96.dp).toPx() }
-    val edgeZone = with(density) { 110.dp.toPx() }
+    val topBoundary = with(density) { (if (isLandscape) 52.dp else 84.dp).toPx() }
+    val bottomBoundary = screenHeightPx - with(density) { (if (isLandscape) 48.dp else 96.dp).toPx() }
+    val edgeZone = with(density) { 36.dp.toPx() }
+    val topThreshold = topBoundary + with(density) { 12.dp.toPx() }
+    val bottomThreshold = bottomBoundary - with(density) { 12.dp.toPx() }
 
     var yInRoot by remember { mutableFloatStateOf(-1f) }
     var itemHeight by remember { mutableFloatStateOf(0f) }
@@ -275,12 +280,14 @@ fun Modifier.verticalScrollEdgeItemEffect(): Modifier = composed {
                 val itemTop = yInRoot
                 val itemBottom = yInRoot + itemHeight
 
-                val topFactor = if (itemTop < topBoundary + edgeZone) {
-                    ((itemTop - topBoundary) / edgeZone).coerceIn(0f, 1f)
+                // Сверху: эффект срабатывает только у самой верхней границы
+                val topFactor = if (itemTop < topThreshold) {
+                    ((itemTop - (topThreshold - edgeZone)) / edgeZone).coerceIn(0f, 1f)
                 } else 1f
 
-                val bottomFactor = if (itemBottom > bottomBoundary - edgeZone) {
-                    ((bottomBoundary - itemBottom) / edgeZone).coerceIn(0f, 1f)
+                // Снизу: эффект срабатывает только у самой нижней границы
+                val bottomFactor = if (itemBottom > bottomThreshold) {
+                    (((bottomThreshold + edgeZone) - itemBottom) / edgeZone).coerceIn(0f, 1f)
                 } else 1f
 
                 val edgeFactor = min(topFactor, bottomFactor)
@@ -292,7 +299,7 @@ fun Modifier.verticalScrollEdgeItemEffect(): Modifier = composed {
                     alpha = 0.68f + 0.32f * smooth
 
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        val blurPx = (1f - smooth) * 8.5f
+                        val blurPx = (1f - smooth) * 6f
                         renderEffect = if (blurPx > 0.5f) {
                             android.graphics.RenderEffect.createBlurEffect(
                                 blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP

@@ -2979,7 +2979,9 @@ private fun HomeFeed(
                 val histRowState = rememberLazyListState()
                 LazyRow(
                     state = histRowState,
-                    modifier = Modifier.bouncyHorizontalOverscroll(),
+                    modifier = Modifier
+                        .verticalScrollEdgeItemEffect()
+                        .bouncyHorizontalOverscroll(),
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -3024,7 +3026,9 @@ private fun HomeFeed(
                         val persRowState = rememberLazyListState()
                         LazyRow(
                             state = persRowState,
-                            modifier = Modifier.bouncyHorizontalOverscroll(),
+                            modifier = Modifier
+                                .verticalScrollEdgeItemEffect()
+                                .bouncyHorizontalOverscroll(),
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
@@ -3189,6 +3193,7 @@ private fun QuickPickGrid(
         modifier = Modifier
             .fillMaxWidth()
             .height(156.dp)
+            .verticalScrollEdgeItemEffect()
             .bouncyHorizontalOverscroll(),
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -3199,7 +3204,6 @@ private fun QuickPickGrid(
             Row(
                 modifier = Modifier
                     .carouselCenterGridItemEffect(gridState, index)
-                    .verticalScrollEdgeItemEffect()
                     .width(268.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .combinedClickable(
@@ -3279,7 +3283,9 @@ private fun HorizontalShelf(
     val shelfRowState = rememberLazyListState()
     LazyRow(
         state = shelfRowState,
-        modifier = Modifier.bouncyHorizontalOverscroll(),
+        modifier = Modifier
+            .verticalScrollEdgeItemEffect()
+            .bouncyHorizontalOverscroll(),
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -3308,7 +3314,6 @@ private fun ShelfCard(
     val pressSource = remember { MutableInteractionSource() }
     Column(
         modifier = modifier
-            .verticalScrollEdgeItemEffect()
             .width(150.dp)
             .pressScale(pressedScale = 0.95f, interactionSource = pressSource)
             .combinedClickable(
@@ -5049,6 +5054,7 @@ fun Artwork(url: String?, modifier: Modifier = Modifier) {
             model = request,
             contentDescription = null,
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            filterQuality = androidx.compose.ui.graphics.FilterQuality.Medium,
             modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
         )
     } else {
