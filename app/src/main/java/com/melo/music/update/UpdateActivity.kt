@@ -18,6 +18,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -136,7 +137,7 @@ fun UpdateScreen(
         }
 
         val target = UpdateManager.availableUpdate ?: return@LaunchedEffect
-        val success = UpdateManager.applyUpdate(
+        val success = UpdateManager.downloadAndInstall(
             context = context,
             info = target,
             onProgress = { step, p ->
@@ -147,25 +148,33 @@ fun UpdateScreen(
 
         if (success) {
             isDone = true
-            statusText = "Успешно обновлено! Перезапуск..."
-            delay(1500)
-            onRestartApp()
+            statusText = "Установщик запущен!"
         } else {
             hasError = true
-            statusText = "Не удалось применить обновление"
+            statusText = UpdateManager.downloadStatusText ?: "Не удалось загрузить обновление"
         }
     }
+
+    val isDark = cs.background.luminance() < 0.5f
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(
-                        Color(0xFF0F1713),
-                        Color(0xFF0A0F0D),
-                        Color(0xFF070B09),
-                    )
+                    if (isDark) {
+                        listOf(
+                            cs.background,
+                            cs.surfaceContainerLow,
+                            cs.surfaceContainerLowest,
+                        )
+                    } else {
+                        listOf(
+                            cs.surfaceContainerLowest,
+                            cs.surfaceContainerLow,
+                            cs.surfaceContainer,
+                        )
+                    }
                 )
             )
             .padding(24.dp),
@@ -245,7 +254,7 @@ fun UpdateScreen(
 
             // ── Заголовки и статус ──────────────────────────────────────
             Text(
-                text = if (updateInfo?.isPatchOnly == true) "Горячее обновление" else "Обновление Melo",
+                text = "Обновление Melo",
                 style = MaterialTheme.typography.headlineMedium.copy(fontSize = 26.sp),
                 fontWeight = FontWeight.Black,
                 color = Color.White,

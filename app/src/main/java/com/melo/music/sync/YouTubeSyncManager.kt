@@ -34,11 +34,11 @@ object YouTubeSyncManager {
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(25, TimeUnit.SECONDS)
+        .dns(com.melo.music.net.MeloNet.dns)
         .proxySelector(com.melo.music.net.MeloNet.byedpiSelector)
         .build()
 
-    private const val INNER_TUBE_KEY = "AIzaSyAO_FJ2SlqAE4Aq4NoXzvDYqBg55UMNy2w"
-    private const val BROWSE_URL = "https://music.youtube.com/youtubei/v1/browse?key=$INNER_TUBE_KEY&prettyPrint=false"
+    private fun getBrowseUrl(): String = InnerTubeConfig.getBrowseUrl()
 
     suspend fun syncLibrary(
         context: Context,
@@ -54,6 +54,8 @@ object YouTubeSyncManager {
         MeloLog.d("YouTubeSync", "Куки найдены: длина=${cookies?.length ?: 0}")
 
         try {
+            InnerTubeConfig.refresh(force = false)
+
             onProgress("Загрузка понравившихся треков...")
             MeloLog.d("YouTubeSync", "Запрос понравившихся треков...")
             val likedTracks = fetchLikedMusic(context)
@@ -117,7 +119,7 @@ object YouTubeSyncManager {
         val bodyJson = createInnerTubeContext().apply {
             put("browseId", "VLLM")
         }
-        val responseJson = postInnerTube(BROWSE_URL, bodyJson) ?: return emptyList()
+        val responseJson = postInnerTube(getBrowseUrl(), bodyJson) ?: return emptyList()
         parseTracksFromJson(context, responseJson, tracks)
         return tracks
     }
@@ -126,7 +128,6 @@ object YouTubeSyncManager {
         val playlists = mutableListOf<Pair<String, String>>()
         val browseIdsToTry = listOf(
             "FEmusic_liked_playlists",
-            "FEmusic_library_privately_owned_playlists",
             "FEmusic_library_landing"
         )
 
@@ -134,7 +135,7 @@ object YouTubeSyncManager {
             val bodyJson = createInnerTubeContext().apply {
                 put("browseId", bId)
             }
-            val responseJson = postInnerTube(BROWSE_URL, bodyJson) ?: continue
+            val responseJson = postInnerTube(getBrowseUrl(), bodyJson) ?: continue
             val jsonStr = responseJson.toString()
             MeloLog.d("YouTubeSync", "Playlists ($bId) raw json length: ${jsonStr.length}")
 
@@ -197,7 +198,7 @@ object YouTubeSyncManager {
         val bodyJson = createInnerTubeContext().apply {
             put("browseId", browseId)
         }
-        val responseJson = postInnerTube(BROWSE_URL, bodyJson) ?: return emptyList()
+        val responseJson = postInnerTube(getBrowseUrl(), bodyJson) ?: return emptyList()
         parseTracksFromJson(context, responseJson, tracks)
         return tracks
     }
@@ -342,7 +343,7 @@ object YouTubeSyncManager {
             put("context", JSONObject().apply {
                 put("client", JSONObject().apply {
                     put("clientName", "WEB_REMIX")
-                    put("clientVersion", "1.20240101.01.00")
+                    put("clientVersion", InnerTubeConfig.getClientVersion())
                     put("hl", "ru")
                     put("gl", "RU")
                 })
@@ -353,7 +354,8 @@ object YouTubeSyncManager {
     private fun postInnerTube(url: String, json: JSONObject): JSONObject? {
         val cookies = YouTubeAccountManager.getCookies()
         val auth = YouTubeAccountManager.getSapisidHash()
-        MeloLog.d("YouTubeSync", "postInnerTube: url=$url, cookiesLen=${cookies?.length ?: 0}, hasAuth=${!auth.isNullOrBlank()}")
+        val clientVer = InnerTubeConfig.getClientVersion()
+        MeloLog.d("YouTubeSync", "postInnerTube: url=$url, clientVer=$clientVer, cookiesLen=${cookies?.length ?: 0}, hasAuth=${!auth.isNullOrBlank()}")
 
         val reqBuilder = Request.Builder()
             .url(url)
@@ -363,7 +365,7 @@ object YouTubeSyncManager {
             .addHeader("Origin", "https://music.youtube.com")
             .addHeader("X-Origin", "https://music.youtube.com")
             .addHeader("X-YouTube-Client-Name", "67")
-            .addHeader("X-YouTube-Client-Version", "1.20240101.01.00")
+            .addHeader("X-YouTube-Client-Version", clientVer)
 
         cookies?.let { reqBuilder.addHeader("Cookie", it) }
         auth?.let { reqBuilder.addHeader("Authorization", it) }
@@ -374,6 +376,10 @@ object YouTubeSyncManager {
                 val bodyStr = resp.body?.string()
                 if (!resp.isSuccessful) {
                     MeloLog.e("YouTubeSync", "postInnerTube ошибка HTTP ${resp.code}: ${resp.message} | Тело: $bodyStr")
+                    if (resp.code == 401 || resp.code == 403 || (resp.code == 400 && bodyStr?.contains("API_KEY") == true)) {
+                        // Возможна ротация ключа или версии, запускаем фоновое обновление кэша
+                        InnerTubeConfig.triggerRefreshAsync()
+                    }
                     return null
                 }
                 if (bodyStr.isNullOrEmpty()) return null

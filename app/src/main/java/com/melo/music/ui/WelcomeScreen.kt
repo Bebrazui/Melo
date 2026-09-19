@@ -133,10 +133,12 @@ fun WelcomeScreen(
         }
     }
 
+    val cs = MaterialTheme.colorScheme
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF070F0B)),
+            .background(cs.background),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -149,7 +151,7 @@ fun WelcomeScreen(
                 "Melo",
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = cs.onBackground,
             )
             Spacer(Modifier.height(6.dp))
             Text(
@@ -159,7 +161,7 @@ fun WelcomeScreen(
                     else -> "С возвращением"
                 },
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color.White.copy(alpha = 0.65f),
+                color = cs.onBackground.copy(alpha = 0.65f),
             )
             Spacer(Modifier.height(28.dp))
 
@@ -167,7 +169,7 @@ fun WelcomeScreen(
                 Text(
                     "Код отправлен на $email",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = cs.onBackground.copy(alpha = 0.6f),
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                 )
                 OutlinedTextField(
@@ -226,7 +228,7 @@ fun WelcomeScreen(
                 shape = RoundedCornerShape(16.dp),
             ) {
                 if (busy) {
-                    LoadingIndicator(modifier = Modifier.size(24.dp), color = Color.White)
+                    LoadingIndicator(modifier = Modifier.size(24.dp), color = cs.onPrimary)
                 } else {
                     Text(
                         when {
@@ -242,13 +244,13 @@ fun WelcomeScreen(
             Spacer(Modifier.height(8.dp))
             if (codeStep) {
                 TextButton(onClick = { codeStep = false; code = ""; error = null }) {
-                    Text("Изменить почту", color = Color.White.copy(alpha = 0.85f))
+                    Text("Изменить почту", color = cs.primary)
                 }
             } else {
                 TextButton(onClick = { register = !register; error = null }) {
                     Text(
                         if (register) "Уже есть аккаунт? Войти" else "Нет аккаунта? Зарегистрируйтесь",
-                        color = Color.White.copy(alpha = 0.85f),
+                        color = cs.primary,
                     )
                 }
             }
@@ -257,13 +259,13 @@ fun WelcomeScreen(
 
             if (showGoogle) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = 0.12f)))
+                    Box(Modifier.weight(1f).height(1.dp).background(cs.outlineVariant.copy(alpha = 0.4f)))
                     Text(
                         "  или  ",
-                        color = Color.White.copy(alpha = 0.4f),
+                        color = cs.onSurfaceVariant.copy(alpha = 0.7f),
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = 0.12f)))
+                    Box(Modifier.weight(1f).height(1.dp).background(cs.outlineVariant.copy(alpha = 0.4f)))
                 }
                 Spacer(Modifier.height(14.dp))
 
@@ -301,12 +303,12 @@ fun WelcomeScreen(
                 Spacer(Modifier.height(22.dp))
             }
             TextButton(onClick = onLocal, enabled = !busy) {
-                Text("Продолжить локально", color = Color.White.copy(alpha = 0.55f))
+                Text("Продолжить локально", color = cs.onBackground.copy(alpha = 0.55f))
             }
 
             Spacer(Modifier.height(14.dp))
             val consent = buildAnnotatedString {
-                withStyle(SpanStyle(color = Color.White.copy(alpha = 0.42f))) {
+                withStyle(SpanStyle(color = cs.onBackground.copy(alpha = 0.5f))) {
                     append("Продолжая, вы соглашаетесь с ")
                 }
                 withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {

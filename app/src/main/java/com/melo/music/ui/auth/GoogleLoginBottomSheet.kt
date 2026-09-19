@@ -74,7 +74,7 @@ fun GoogleLoginBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF141916),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
         dragHandle = null,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
     ) {
@@ -82,7 +82,7 @@ fun GoogleLoginBottomSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.92f)
-                .background(Color(0xFF141916))
+                .background(MaterialTheme.colorScheme.surfaceContainer)
         ) {
             // Верхняя плашка
             Row(
@@ -96,12 +96,12 @@ fun GoogleLoginBottomSheet(
                         "Вход в Google / YouTube Music",
                         style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         "Синхронизация медиатеки и плейлистов",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
@@ -268,13 +268,13 @@ fun GoogleLoginBottomSheet(
     if (showManualCookieDialog) {
         AlertDialog(
             onDismissRequest = { showManualCookieDialog = false },
-            containerColor = Color(0xFF1C221E),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             title = {
                 Text(
                     "Вставить Cookie вручную",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             },
             text = {
@@ -282,7 +282,7 @@ fun GoogleLoginBottomSheet(
                     Text(
                         "Вставьте Cookie из браузера для ручного входа:",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
@@ -294,15 +294,15 @@ fun GoogleLoginBottomSheet(
                         placeholder = {
                             Text(
                                 "SAPISID=...; SID=...",
-                                color = Color.White.copy(alpha = 0.3f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                                 fontSize = 12.sp
                             )
                         },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
                         )
                     )
                     Spacer(Modifier.height(8.dp))
@@ -329,12 +329,12 @@ fun GoogleLoginBottomSheet(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("Сохранить", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Text("Сохранить", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showManualCookieDialog = false }) {
-                    Text("Отмена", color = Color.White.copy(alpha = 0.7f))
+                    Text("Отмена", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         )

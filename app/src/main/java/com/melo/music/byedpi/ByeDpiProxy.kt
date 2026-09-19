@@ -23,7 +23,7 @@ object ByeDpiProxy {
     const val DEFAULT_HOST = "127.0.0.1"
 
     const val DEFAULT_CMD =
-        """-X -H:"youtube.com googlevideo.com ytimg.com ggpht.com youtu.be youtubei.googleapis.com yt3.googleusercontent.com googleusercontent.com accounts.youtube.com music.youtube.com bandcamp.com bcbits.com f4.bcbits.com t4.bcbits.com" -Kt,h -d1 -s1+s -s3+s -s6+s -s9+s -s12+s -s15+s -s20+s -s30+s -An -H:"soundcloud.com sndcdn.com soundcloud.cloud" -Kt -r1+s -s2 -An -H:"discord.com discord.gg discord.media discordapp.com cdn.discordapp.com media.discordapp.net images-ext-1.discordapp.net images-ext-2.discordapp.net images.discordapp.net gateway.discord.gg status.discord.com api.discord.com discord-attachments-uploads-prd.storage.googleapis.com hcaptcha.com recaptcha.net accounts.google.com accounts.youtube.com appleid.apple.com" -Kt,h -Qorig -n "www.google.com" -f-1 -t5 -o1 -s1+s -s2+s -s5+s -d3+s -s7+s -s10+s -s15+s -An -Ku"""
+        """-X -H:"youtube.com googlevideo.com ytimg.com ggpht.com youtu.be youtubei.googleapis.com yt3.googleusercontent.com googleusercontent.com accounts.youtube.com music.youtube.com bandcamp.com bcbits.com f4.bcbits.com t4.bcbits.com" -Kt,h -d1 -s1+s -s3+s -s6+s -s9+s -s12+s -s15+s -s20+s -s30+s -An -H:"soundcloud.com" -Kt -f1+s -t2 -r1+s -An -H:"sndcdn.com soundcloud.cloud" -f-200 -s2 -s5+hm -t6 -Qr -n wb.ru -An -H:"discord.com discord.gg discord.media discordapp.com cdn.discordapp.com media.discordapp.net images-ext-1.discordapp.net images-ext-2.discordapp.net images.discordapp.net gateway.discord.gg status.discord.com api.discord.com discord-attachments-uploads-prd.storage.googleapis.com hcaptcha.com recaptcha.net accounts.google.com accounts.youtube.com appleid.apple.com" -Kt,h -Qorig -n "www.google.com" -f-1 -t5 -o1 -s1+s -s2+s -s5+s -d3+s -s7+s -s10+s -s15+s -An -Ku"""
 
     private var prefs: SharedPreferences? = null
     private var appContext: Context? = null
@@ -60,8 +60,8 @@ object ByeDpiProxy {
                     lastNetwork = network
                 }
             }
+            cm.registerDefaultNetworkCallback(cb)
             networkCallback = cb
-            runCatching { cm.registerDefaultNetworkCallback(cb) }
         }
     }
 
@@ -93,11 +93,8 @@ object ByeDpiProxy {
     fun getCommandLine(): String {
         val saved = prefs?.getString(KEY_CMD, null)
         if (saved.isNullOrBlank() ||
-            saved.contains("wb.ru") ||
-            !saved.contains("sndcdn.com") ||
-            saved.contains("-a1") ||
-            saved.contains("music.youtube.com soundcloud.com") ||
-            !saved.contains("-r1+s -s2")
+            !saved.contains("-H:\"soundcloud.com\" -Kt -f1+s -t2") ||
+            !saved.contains("-f-200 -s2 -s5+hm -t6 -Qr -n wb.ru")
         ) {
             prefs?.edit()?.putString(KEY_CMD, DEFAULT_CMD)?.apply()
             return DEFAULT_CMD

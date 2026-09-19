@@ -103,7 +103,9 @@ object NewPipeResolver {
     suspend fun resolve(context: Context, url: String): ResolvedTrack = withContext(Dispatchers.IO) {
         val t0 = android.os.SystemClock.elapsedRealtime()
         ensureInit(context)
-        if (isSoundCloud(url)) SoundCloudFix.ensure(context)
+        if (isSoundCloud(url)) {
+            return@withContext SoundCloudResolver.resolve(context, url)
+        }
         val t1 = android.os.SystemClock.elapsedRealtime()
         val info = StreamInfo.getInfo(serviceFor(url), url)
         val t2 = android.os.SystemClock.elapsedRealtime()
@@ -186,21 +188,27 @@ object NewPipeResolver {
             runCatching {
                 when {
                     isYouTube(url) || isSoundCloud(url) -> {
-                        if (isSoundCloud(url)) SoundCloudFix.ensure(context)
-                        val info = StreamInfo.getInfo(serviceFor(url), url)
-                        TrackItem(
-                            title = info.name,
-                            uploader = info.uploaderName?.takeIf { it.isNotBlank() },
-                            url = info.url ?: url,
-                            durationSeconds = info.duration,
-                            thumbnailUrl = info.thumbnails.maxByOrNull { it.height }?.url
-                                ?: info.thumbnails.firstOrNull()?.url,
-                            source = if (isSoundCloud(url)) Source.SOUNDCLOUD else Source.YOUTUBE_MUSIC,
-                            kind = ItemKind.TRACK,
-                        )
+                        try {
+                            if (isSoundCloud(url)) SoundCloudFix.ensure(context)
+                            val info = StreamInfo.getInfo(serviceFor(url), url)
+                            TrackItem(
+                                title = info.name,
+                                uploader = info.uploaderName?.takeIf { it.isNotBlank() },
+                                url = info.url ?: url,
+                                durationSeconds = info.duration,
+                                thumbnailUrl = info.thumbnails.maxByOrNull { it.height }?.url
+                                    ?: info.thumbnails.firstOrNull()?.url,
+                                source = if (isSoundCloud(url)) Source.SOUNDCLOUD else Source.YOUTUBE_MUSIC,
+                                kind = ItemKind.TRACK,
+                            )
+                        } catch (e: Exception) {
+                            if (isYouTube(url)) {
+                                Extractor.fetchMeta(context, url)
+                            } else null
+                        }
                     }
                     isBandcamp(url) -> Extractor.fetchMeta(context, url)
-                    else -> null
+                    else -> Extractor.fetchMeta(context, url)
                 }
             }.getOrNull()
         }

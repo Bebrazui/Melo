@@ -143,8 +143,14 @@ class MainActivity : ComponentActivity() {
             .setAlbumArtist(artist)
             .setSubtitle(artist)
         track.thumbnailUrl?.let { meta.setArtworkUri(android.net.Uri.parse(it)) }
+        val isHls = com.melo.music.extractor.isHlsUrl(track.audioUrl)
         val item = MediaItem.Builder()
             .setUri(track.audioUrl)
+            .apply {
+                if (isHls) {
+                    setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
+                }
+            }
             .setMediaMetadata(meta.build())
             .build()
         player.setMediaItem(item)

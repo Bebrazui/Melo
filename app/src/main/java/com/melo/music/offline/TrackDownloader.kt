@@ -48,6 +48,20 @@ object TrackDownloader {
         .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
+        .addInterceptor { chain ->
+            var req = chain.request()
+            val host = req.url.host
+            if (com.melo.music.auth.YouTubeAccountManager.isLoggedIn) {
+                if (host.contains("youtube.com") && !host.contains("googlevideo.com")) {
+                    com.melo.music.auth.YouTubeAccountManager.getCookies()?.let { cookies ->
+                        val curCookie = req.header("Cookie")
+                        val newCookie = if (!curCookie.isNullOrBlank()) "$curCookie; $cookies" else cookies
+                        req = req.newBuilder().header("Cookie", newCookie).build()
+                    }
+                }
+            }
+            chain.proceed(req)
+        }
         .build()
 
     fun download(context: Context, item: TrackItem) {
@@ -121,41 +135,73 @@ object TrackDownloader {
 
             notifyProgress(context, notifId, "$prefix$label", "Скачивание аудио...", 5, indeterminate = false)
 
-            // 4. Скачивание MP3-потока
-            val mp3Request = Request.Builder()
-                .url(resolved.audioUrl)
-                .header("User-Agent", USER_AGENT)
-                .build()
+            // 4. Скачивание аудио (HLS или прогрессив MP3)
+            val isHls = com.melo.music.extractor.isHlsUrl(resolved.audioUrl)
 
-            val mp3Bytes = httpClient.newCall(mp3Request).execute().use { resp ->
-                if (!resp.isSuccessful) throw Exception("Сервер вернул ошибку: HTTP ${resp.code}")
-                val body = resp.body ?: throw Exception("Пустой ответ от сервера")
-                val total = body.contentLength()
-                val estimatedTotal = if (total > 0) total else (item.durationSeconds.coerceAtLeast(60) * 16_000L)
-                val input = body.byteStream()
+            val mp3Bytes = if (isHls) {
+                val playlistText = httpClient.newCall(
+                    Request.Builder().url(resolved.audioUrl).header("User-Agent", USER_AGENT).build()
+                ).execute().use { resp ->
+                    if (!resp.isSuccessful) throw Exception("Ошибка загрузки HLS плейлиста: HTTP ${resp.code}")
+                    resp.body?.string() ?: throw Exception("Пустой HLS плейлист")
+                }
+                val segments = playlistText.lineSequence()
+                    .map { it.trim() }
+                    .filter { it.startsWith("http://") || it.startsWith("https://") }
+                    .toList()
+                if (segments.isEmpty()) throw Exception("В HLS плейлисте нет аудио сегментов")
+
                 val out = ByteArrayOutputStream()
-                val buf = ByteArray(32 * 1024)
-                var downloaded = 0L
-                var lastPct = -1
-
-                while (true) {
-                    val r = input.read(buf)
-                    if (r < 0) break
-                    out.write(buf, 0, r)
-                    downloaded += r
-
-                    val pct = ((downloaded * 100) / estimatedTotal).toInt().coerceIn(5, 98)
-                    if (pct >= lastPct + 4) {
-                        val mbText = if (total > 0) {
-                            String.format(Locale.US, "%.1f / %.1f МБ", downloaded / 1048576f, total / 1048576f)
-                        } else {
-                            String.format(Locale.US, "%.1f МБ", downloaded / 1048576f)
-                        }
-                        notifyProgress(context, notifId, "$prefix$label", mbText, pct, indeterminate = false)
-                        lastPct = pct
+                val totalSegs = segments.size
+                segments.forEachIndexed { i, segUrl ->
+                    val segBytes = httpClient.newCall(
+                        Request.Builder().url(segUrl).header("User-Agent", USER_AGENT).build()
+                    ).execute().use { r ->
+                        if (!r.isSuccessful) throw Exception("Ошибка сегмента: HTTP ${r.code}")
+                        r.body?.bytes() ?: ByteArray(0)
                     }
+                    out.write(segBytes)
+                    val pct = ((i + 1) * 90 / totalSegs) + 5
+                    val mbText = String.format(Locale.US, "Сегмент %d / %d (%.1f МБ)", i + 1, totalSegs, out.size() / 1048576f)
+                    notifyProgress(context, notifId, "$prefix$label", mbText, pct.coerceIn(5, 98), indeterminate = false)
                 }
                 out.toByteArray()
+            } else {
+                val mp3Request = Request.Builder()
+                    .url(resolved.audioUrl)
+                    .header("User-Agent", USER_AGENT)
+                    .build()
+
+                httpClient.newCall(mp3Request).execute().use { resp ->
+                    if (!resp.isSuccessful) throw Exception("Сервер вернул ошибку: HTTP ${resp.code}")
+                    val body = resp.body ?: throw Exception("Пустой ответ от сервера")
+                    val total = body.contentLength()
+                    val estimatedTotal = if (total > 0) total else (item.durationSeconds.coerceAtLeast(60) * 16_000L)
+                    val input = body.byteStream()
+                    val out = ByteArrayOutputStream()
+                    val buf = ByteArray(32 * 1024)
+                    var downloaded = 0L
+                    var lastPct = -1
+
+                    while (true) {
+                        val r = input.read(buf)
+                        if (r < 0) break
+                        out.write(buf, 0, r)
+                        downloaded += r
+
+                        val pct = ((downloaded * 100) / estimatedTotal).toInt().coerceIn(5, 98)
+                        if (pct >= lastPct + 4) {
+                            val mbText = if (total > 0) {
+                                String.format(Locale.US, "%.1f / %.1f МБ", downloaded / 1048576f, total / 1048576f)
+                            } else {
+                                String.format(Locale.US, "%.1f МБ", downloaded / 1048576f)
+                            }
+                            notifyProgress(context, notifId, "$prefix$label", mbText, pct, indeterminate = false)
+                            lastPct = pct
+                        }
+                    }
+                    out.toByteArray()
+                }
             }
 
             // 5. Сохранение в общую папку Music/Melo

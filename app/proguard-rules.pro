@@ -40,6 +40,8 @@
 -keep class com.melo.music.extractor.ResolvedTrack { *; }
 -keep class com.melo.music.extractor.Source { *; }
 -keep class com.melo.music.extractor.ItemKind { *; }
+-keep class com.melo.music.extractor.SoundCloudResolver { *; }
+-keep class com.melo.music.extractor.SoundCloudFix { *; }
 -keep class com.melo.music.playlists.Playlist { *; }
 -keep class com.melo.music.profile.MeloProfile { *; }
 -keep class com.melo.music.sync.YouTubeSyncManager$* { *; }

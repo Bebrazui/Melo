@@ -1,4 +1,4 @@
-﻿package com.melo.music.auth
+package com.melo.music.auth
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -36,8 +36,12 @@ object YouTubeAccountManager {
     private var cachedCookieString: String? = null
 
     fun init(context: Context) {
-        prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        cachedCookieString = prefs?.getString(KEY_COOKIES, null)
+        if (prefs == null) {
+            prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        }
+        if (cachedCookieString.isNullOrBlank()) {
+            cachedCookieString = prefs?.getString(KEY_COOKIES, null)
+        }
         isLoggedIn = prefs?.getBoolean(KEY_IS_LOGGED_IN, false) ?: false
         accountName = prefs?.getString(KEY_ACCOUNT_NAME, null)
         accountEmail = prefs?.getString(KEY_ACCOUNT_EMAIL, null)
@@ -63,7 +67,78 @@ object YouTubeAccountManager {
     /**
      * Возвращает строку cookies для отправки в HTTP-запросах.
      */
-    fun getCookies(): String? = cachedCookieString
+    fun getCookies(): String? {
+        val stored = cachedCookieString
+        if (!stored.isNullOrBlank()) return stored
+        val fromPrefs = prefs?.getString(KEY_COOKIES, null)
+        if (!fromPrefs.isNullOrBlank()) {
+            cachedCookieString = fromPrefs
+            return fromPrefs
+        }
+        return runCatching {
+            val cm = CookieManager.getInstance()
+            val c1 = cm.getCookie("https://music.youtube.com")
+            val c2 = cm.getCookie("https://www.youtube.com")
+            val merged = listOfNotNull(c1, c2).flatMap { it.split(";") }
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinctBy { it.substringBefore("=") }
+                .joinToString("; ")
+            merged.takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
+    /**
+     * Экспортирует сохранённые cookies в формате Netscape cookie file
+     * для использования в yt-dlp (--cookies).
+     */
+    fun getNetscapeCookieFile(context: Context): java.io.File? {
+        init(context)
+        val raw = getCookies()?.takeIf { it.isNotBlank() } ?: return null
+        return try {
+            val file = java.io.File(context.cacheDir, "yt_cookies.txt")
+            if (raw.trimStart().startsWith("# Netscape") || raw.trimStart().startsWith("# HTTP Cookie File")) {
+                file.writeText(raw)
+                return file
+            }
+
+            val sb = java.lang.StringBuilder()
+            sb.append("# Netscape HTTP Cookie File\n")
+            sb.append("# http://curl.haxx.se/rfc/cookie_spec.html\n")
+            sb.append("# This is a generated file! Do not edit.\n\n")
+
+            // .youtube.com покрывает youtube.com, www.youtube.com, music.youtube.com, m.youtube.com
+            val pairs = raw.split(";").mapNotNull {
+                val trimmed = it.trim()
+                if (trimmed.isEmpty() || !trimmed.contains('=')) null
+                else {
+                    val name = trimmed.substringBefore('=').trim()
+                    val value = trimmed.substringAfter('=').trim()
+                    if (name.isNotEmpty()) name to value else null
+                }
+            }.distinctBy { it.first }
+
+            val expires = "2147483647"
+            for ((name, value) in pairs) {
+                sb.append(".youtube.com\tTRUE\t/\tTRUE\t$expires\t$name\t$value\n")
+            }
+            // Также добавляем для .google.com куки авторизации сессии (SID, HSID, SSID, APISID, SAPISID)
+            val googleAuthCookieNames = setOf(
+                "SID", "HSID", "SSID", "APISID", "SAPISID",
+                "__Secure-1PSID", "__Secure-3PSID", "__Secure-1PAPISID", "__Secure-3PAPISID"
+            )
+            for ((name, value) in pairs) {
+                if (googleAuthCookieNames.contains(name)) {
+                    sb.append(".google.com\tTRUE\t/\tTRUE\t$expires\t$name\t$value\n")
+                }
+            }
+            file.writeText(sb.toString())
+            file
+        } catch (e: Exception) {
+            android.util.Log.e("YouTubeAccount", "Failed to write netscape cookie file: ${e.message}")
+            null
+        }
+    }
 
     /**
      * Вычисляет заголовок SAPISIDHASH для авторизации в InnerTube API.

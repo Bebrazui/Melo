@@ -29,10 +29,6 @@ import androidx.compose.ui.unit.dp
 /** Контактная почта для вопросов конфиденциальности. */
 private const val CONTACT_EMAIL = "ttt793647@gmail.com"
 
-private val BG = Color(0xFF070F0B)
-private val TEXT = Color(0xFFE9F2EC)
-private val MUTED = Color(0xFF9FB3A8)
-
 /**
  * Политика конфиденциальности прямо в приложении (офлайн, без обращения в сеть).
  * Текст синхронизирован с сайтом privacy-melo.
@@ -40,16 +36,17 @@ private val MUTED = Color(0xFF9FB3A8)
 @Composable
 fun PrivacyPolicyScreen(onClose: () -> Unit) {
     BackHandler(onBack = onClose)
-    Surface(modifier = Modifier.fillMaxSize(), color = BG) {
+    val cs = MaterialTheme.colorScheme
+    Surface(modifier = Modifier.fillMaxSize(), color = cs.background) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 16.dp, top = 36.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onClose) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Назад", tint = TEXT)
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Назад", tint = cs.onBackground)
                 }
-                Text("Политика конфиденциальности", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TEXT, maxLines = 1)
+                Text("Политика конфиденциальности", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = cs.onBackground, maxLines = 1)
             }
 
             Column(
@@ -58,7 +55,7 @@ fun PrivacyPolicyScreen(onClose: () -> Unit) {
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 22.dp),
             ) {
-                Text("Приложение «Melo» · Обновлено 22 июня 2026 г.", style = MaterialTheme.typography.bodySmall, color = MUTED)
+                Text("Приложение «Melo» · Обновлено 22 июня 2026 г.", style = MaterialTheme.typography.bodySmall, color = cs.onBackground.copy(alpha = 0.65f))
                 Spacer(Modifier.height(16.dp))
 
                 Para(
@@ -119,13 +116,13 @@ fun PrivacyPolicyScreen(onClose: () -> Unit) {
 @Composable
 private fun Heading(text: String) {
     Spacer(Modifier.height(22.dp))
-    Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = TEXT)
+    Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
     Spacer(Modifier.height(8.dp))
 }
 
 @Composable
 private fun Para(text: String) {
-    Text(text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFCDDED4), lineHeight = MaterialTheme.typography.bodyMedium.lineHeight)
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f), lineHeight = MaterialTheme.typography.bodyMedium.lineHeight)
     Spacer(Modifier.height(10.dp))
 }
 
@@ -133,7 +130,7 @@ private fun Para(text: String) {
 private fun Bullet(text: String) {
     Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Text("•  ", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFCDDED4))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f))
     }
 }
 
@@ -141,14 +138,14 @@ private fun Bullet(text: String) {
 private fun Card(text: String) {
     Spacer(Modifier.height(12.dp))
     Surface(
-        color = Color(0x14FFFFFF),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
             text,
             style = MaterialTheme.typography.bodyMedium,
-            color = TEXT,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(16.dp),
         )
     }

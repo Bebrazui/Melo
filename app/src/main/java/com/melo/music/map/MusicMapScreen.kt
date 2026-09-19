@@ -125,9 +125,9 @@ import org.osmdroid.views.overlay.Marker
 import kotlin.math.ln
 import kotlin.math.max
 
-private val MAP_BG = Color(0xFF0B1610)
-private val GLASS = Color(0xF2141F19)
-private val SOLID = Color(0xFF18241E)
+private val MAP_BG = Color(0xFF131217)
+private val GLASS = Color(0xF21C1A22)
+private val SOLID = Color(0xFF24222C)
 
 /** Состояние карты, доступное из не-Compose колбэков (слушатель карты). */
 private class MapHolder {
@@ -376,7 +376,7 @@ fun MusicMapScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(Color(0xF20B1610), Color(0xCC0B1610), Color(0x000B1610))))
+                .background(Brush.verticalGradient(listOf(MAP_BG.copy(alpha = 0.95f), MAP_BG.copy(alpha = 0.80f), Color.Transparent)))
                 .padding(start = 14.dp, end = 14.dp, top = topInset + 12.dp, bottom = 16.dp),
         ) {
             Row(
@@ -950,9 +950,9 @@ private fun PickerTab(label: String, icon: androidx.compose.ui.graphics.vector.I
         modifier = modifier.height(44.dp).clickable(onClick = onClick),
     ) {
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = if (active) Color(0xFF0C3A26) else Color.White.copy(alpha = 0.8f))
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = if (active) MaterialTheme.colorScheme.onPrimary else Color.White.copy(alpha = 0.8f))
             Spacer(Modifier.width(6.dp))
-            Text(label, color = if (active) Color(0xFF0C3A26) else Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+            Text(label, color = if (active) MaterialTheme.colorScheme.onPrimary else Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
         }
     }
 }

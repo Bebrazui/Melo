@@ -150,27 +150,35 @@ fun Modifier.carouselCenterItemEffect(
             val moreEffects = com.melo.music.settings.AppSettings.moreEffects
 
             if (moreEffects) {
-                // 1. Плавное уменьшение масштаба боковых карточек
-                val scale = 0.91f + 0.09f * smooth
+                val offsetRatio = ((itemCenter - viewportCenter) / maxDistance).coerceIn(-1f, 1f)
+                val sign = kotlin.math.sign(offsetRatio)
+                val absRatio = kotlin.math.abs(offsetRatio)
+
+                // Начало 3D-поворота дальше от центра: в центральной зоне карточка стоит ровно
+                val centerDeadzone = 0.26f
+                val edgeProgress = if (absRatio > centerDeadzone) {
+                    ((absRatio - centerDeadzone) / (1f - centerDeadzone)).coerceIn(0f, 1f)
+                } else 0f
+                val smoothEdge = edgeProgress * edgeProgress * (3f - 2f * edgeProgress)
+
+                // 1. Плавное уменьшение масштаба ТОЛЬКО уходящих к краю карточек
+                val scale = 1.0f - smoothEdge * 0.11f
                 scaleX = scale
                 scaleY = scale
 
                 // 2. Легкое затемнение карточек по краям
-                alpha = 0.84f + 0.16f * smooth
+                alpha = 1.0f - smoothEdge * 0.18f
 
-                // 3. Аккуратный, естественный 3D-наклон карточек к центру
-                val offsetRatio = ((itemCenter - viewportCenter) / maxDistance).coerceIn(-1f, 1f)
-                val sign = kotlin.math.sign(offsetRatio)
-                val absRatio = kotlin.math.abs(offsetRatio)
-                rotationY = sign * absRatio * 10f
-                cameraDistance = 32f
+                // 3. 3D-поворот, плавно нарастающий дальше от центра
+                rotationY = sign * smoothEdge * 18f
+                cameraDistance = 24f
 
-                // 4. Мягкое боке на боковых карточках (на Android 12+)
+                // 4. Мягкое боке на периферийных карточках без артефактов (DECAL)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val blurPx = ((1f - smooth) * 2.5f).coerceAtLeast(0f)
+                    val blurPx = smoothEdge * 2.5f
                     renderEffect = if (blurPx > 0.5f) {
                         android.graphics.RenderEffect.createBlurEffect(
-                            blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP
+                            blurPx, blurPx, android.graphics.Shader.TileMode.DECAL
                         ).asComposeRenderEffect()
                     } else null
                 }
@@ -189,8 +197,8 @@ fun Modifier.carouselCenterItemEffect(
 }
 
 /**
- * Карусельный эффект для элементов сетки «Быстрый выбор» (LazyHorizontalGrid).
- * Для широких плиток используется плавное масштабирование и деликатное затемнение без 3D-скручивания.
+ * Карусельный 3D-эффект для элементов сетки «Быстрый выбор» (LazyHorizontalGrid).
+ * Начинается дальше от центра: центральные элементы стоят ровно.
  */
 fun Modifier.carouselCenterGridItemEffect(
     lazyGridState: androidx.compose.foundation.lazy.grid.LazyGridState,
@@ -211,17 +219,28 @@ fun Modifier.carouselCenterGridItemEffect(
             val moreEffects = com.melo.music.settings.AppSettings.moreEffects
 
             if (moreEffects) {
-                val scale = 0.94f + 0.06f * smooth
+                val offsetRatio = ((itemCenter - viewportCenter) / maxDistance).coerceIn(-1f, 1f)
+                val sign = kotlin.math.sign(offsetRatio)
+                val absRatio = kotlin.math.abs(offsetRatio)
+
+                val centerDeadzone = 0.28f
+                val edgeProgress = if (absRatio > centerDeadzone) {
+                    ((absRatio - centerDeadzone) / (1f - centerDeadzone)).coerceIn(0f, 1f)
+                } else 0f
+                val smoothEdge = edgeProgress * edgeProgress * (3f - 2f * edgeProgress)
+
+                val scale = 1.0f - smoothEdge * 0.08f
                 scaleX = scale
                 scaleY = scale
-                alpha = 0.88f + 0.12f * smooth
-                rotationY = 0f
+                alpha = 1.0f - smoothEdge * 0.15f
+                rotationY = sign * smoothEdge * 11f
+                cameraDistance = 24f
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val blurPx = ((1f - smooth) * 2f).coerceAtLeast(0f)
+                    val blurPx = smoothEdge * 2f
                     renderEffect = if (blurPx > 0.5f) {
                         android.graphics.RenderEffect.createBlurEffect(
-                            blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP
+                            blurPx, blurPx, android.graphics.Shader.TileMode.DECAL
                         ).asComposeRenderEffect()
                     } else null
                 }
@@ -295,7 +314,7 @@ fun Modifier.verticalScrollEdgeItemEffect(): Modifier = composed {
                         val blurPx = (1f - smooth) * 4f
                         renderEffect = if (blurPx > 0.5f) {
                             android.graphics.RenderEffect.createBlurEffect(
-                                blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP
+                                blurPx, blurPx, android.graphics.Shader.TileMode.DECAL
                             ).asComposeRenderEffect()
                         } else null
                     }

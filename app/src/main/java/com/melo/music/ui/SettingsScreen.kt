@@ -7,8 +7,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.ui.graphics.luminance
 import com.melo.music.ui.theme.bouncyOverscroll
-import com.melo.music.ui.theme.verticalScrollEdgeItemEffect
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -48,7 +48,6 @@ import androidx.compose.material.icons.rounded.Waves
 import android.content.Intent
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.runtime.rememberCoroutineScope
-import com.melo.music.update.DexPatchManager
 import com.melo.music.update.UpdateActivity
 import com.melo.music.update.UpdateManager
 import kotlinx.coroutines.launch
@@ -92,6 +91,14 @@ fun SettingsScreen(
 ) {
     BackHandler(onBack = onBack)
     val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
+    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
+    val subCardBg = if (isDark) Color.White.copy(alpha = 0.08f) else cs.surfaceContainerHigh
+    val subCardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.1f) else cs.outlineVariant.copy(alpha = 0.3f))
+    val titleColor = cs.onSurface
+    val subtitleColor = cs.onSurfaceVariant
+    val trackInactive = if (isDark) Color.White.copy(alpha = 0.12f) else cs.outlineVariant.copy(alpha = 0.35f)
     val settingsContext = LocalContext.current
     val settingsScope = rememberCoroutineScope()
     var isSettingsSyncing by remember { mutableStateOf(false) }
@@ -100,7 +107,7 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0F1411))
+            .background(MaterialTheme.colorScheme.background)
             .bouncyOverscroll()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp),
@@ -114,8 +121,8 @@ fun SettingsScreen(
         ) {
             Surface(
                 shape = CircleShape,
-                color = Color.White.copy(alpha = 0.08f),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                color = subCardBg,
+                border = subCardBorder,
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
@@ -125,7 +132,7 @@ fun SettingsScreen(
                     Icon(
                         Icons.AutoMirrored.Rounded.ArrowBack,
                         contentDescription = "Назад",
-                        tint = Color.White,
+                        tint = cs.onSurface,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -138,7 +145,7 @@ fun SettingsScreen(
                     letterSpacing = (-0.5).sp,
                 ),
                 fontWeight = FontWeight.Black,
-                color = Color.White,
+                color = cs.onBackground,
             )
         }
 
@@ -148,11 +155,10 @@ fun SettingsScreen(
 
         Surface(
             shape = RoundedCornerShape(28.dp),
-            color = Color.White.copy(alpha = 0.05f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            color = cardBg,
+            border = cardBorder,
             modifier = Modifier
-                .fillMaxWidth()
-                .verticalScrollEdgeItemEffect(),
+                .fillMaxWidth(),
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(
@@ -161,7 +167,7 @@ fun SettingsScreen(
                 ) {
                     Surface(
                         shape = CircleShape,
-                        color = if (isYtLoggedIn) cs.primaryContainer else Color.White.copy(alpha = 0.1f),
+                        color = if (isYtLoggedIn) cs.primaryContainer else subCardBg,
                         modifier = Modifier.size(48.dp),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
@@ -169,7 +175,7 @@ fun SettingsScreen(
                                 text = if (isYtLoggedIn) "YT" else "G",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Black,
-                                color = if (isYtLoggedIn) cs.onPrimaryContainer else Color.White,
+                                color = if (isYtLoggedIn) cs.onPrimaryContainer else cs.onSurface,
                             )
                         }
                     }
@@ -179,14 +185,14 @@ fun SettingsScreen(
                             "YouTube Music / Google",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
+                            color = titleColor,
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
                             if (isYtLoggedIn) "Подключено"
                             else "Войдите для доступа к вашей медиатеке",
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (isYtLoggedIn) cs.primary else Color.White.copy(alpha = 0.65f),
+                            color = if (isYtLoggedIn) cs.primary else subtitleColor,
                         )
                     }
                 }
@@ -229,8 +235,8 @@ fun SettingsScreen(
 
                         Surface(
                             shape = RoundedCornerShape(14.dp),
-                            color = Color.White.copy(alpha = 0.08f),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                            color = subCardBg,
+                            border = subCardBorder,
                             modifier = Modifier.clickable {
                                 ClickFeedback.play()
                                 com.melo.music.auth.YouTubeAccountManager.logout()
@@ -240,7 +246,7 @@ fun SettingsScreen(
                                 text = "Выйти",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color.White.copy(alpha = 0.8f),
+                                color = cs.onSurface,
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                             )
                         }
@@ -304,11 +310,10 @@ fun SettingsScreen(
         // ── 🎤 Тексты и Караоке (Bento Card) ─────────────────────
         Surface(
             shape = RoundedCornerShape(26.dp),
-            color = Color.White.copy(alpha = 0.05f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            color = cardBg,
+            border = cardBorder,
             modifier = Modifier
-                .fillMaxWidth()
-                .verticalScrollEdgeItemEffect(),
+                .fillMaxWidth(),
         ) {
             Row(
                 modifier = Modifier
@@ -336,13 +341,13 @@ fun SettingsScreen(
                         "Караоке-подсветка",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = titleColor,
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
                         "Слова песни загораются в такт музыке",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.65f),
+                        color = subtitleColor,
                     )
                 }
                 Switch(
@@ -364,11 +369,10 @@ fun SettingsScreen(
         // ── 📳 Тактильный отклик и щелчок (Bento Card) ────────────
         Surface(
             shape = RoundedCornerShape(26.dp),
-            color = Color.White.copy(alpha = 0.05f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            color = cardBg,
+            border = cardBorder,
             modifier = Modifier
-                .fillMaxWidth()
-                .verticalScrollEdgeItemEffect(),
+                .fillMaxWidth(),
         ) {
             Row(
                 modifier = Modifier
@@ -396,13 +400,13 @@ fun SettingsScreen(
                         "Тактильный отклик",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = titleColor,
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
                         "Звук щелчка и виброотклик при нажатии кнопок",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.65f),
+                        color = subtitleColor,
                     )
                 }
                 Switch(
@@ -424,11 +428,10 @@ fun SettingsScreen(
         // ── 📥 Автозагрузка избранного (Bento Card) ───────────────
         Surface(
             shape = RoundedCornerShape(26.dp),
-            color = Color.White.copy(alpha = 0.05f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            color = cardBg,
+            border = cardBorder,
             modifier = Modifier
-                .fillMaxWidth()
-                .verticalScrollEdgeItemEffect(),
+                .fillMaxWidth(),
         ) {
             Row(
                 modifier = Modifier
@@ -456,13 +459,13 @@ fun SettingsScreen(
                         "Скачивать избранное",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = titleColor,
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
                         "Автоматически сохранять лайкнутые треки для офлайн-прослушивания",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.65f),
+                        color = subtitleColor,
                     )
                 }
                 Switch(
@@ -484,11 +487,10 @@ fun SettingsScreen(
         // ── 💿 Виниловая пластинка (Bento Card) ───────────────────
         Surface(
             shape = RoundedCornerShape(28.dp),
-            color = Color.White.copy(alpha = 0.05f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            color = cardBg,
+            border = cardBorder,
             modifier = Modifier
-                .fillMaxWidth()
-                .verticalScrollEdgeItemEffect(),
+                .fillMaxWidth(),
         ) {
             Row(
                 modifier = Modifier
@@ -516,13 +518,13 @@ fun SettingsScreen(
                         "Виниловая пластинка",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
+                        color = titleColor,
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
                         "Крутящаяся виниловая пластинка с дорожками вместо квадратной обложки в плеере",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.65f),
+                        color = subtitleColor,
                     )
                 }
                 Switch(
@@ -548,11 +550,10 @@ fun SettingsScreen(
         }
         Surface(
             shape = RoundedCornerShape(28.dp),
-            color = Color.White.copy(alpha = 0.05f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            color = cardBg,
+            border = cardBorder,
             modifier = Modifier
-                .fillMaxWidth()
-                .verticalScrollEdgeItemEffect(),
+                .fillMaxWidth(),
         ) {
             Row(
                 modifier = Modifier
@@ -581,7 +582,7 @@ fun SettingsScreen(
                             "Плавность (120 Гц)",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
+                            color = titleColor,
                         )
                         Spacer(Modifier.width(8.dp))
                         Surface(
@@ -604,7 +605,7 @@ fun SettingsScreen(
                         else
                             "Ограничение 60 Гц активно для максимальной экономии заряда аккумулятора",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.65f),
+                        color = subtitleColor,
                     )
                 }
                 Switch(
@@ -626,11 +627,10 @@ fun SettingsScreen(
         // ── 🌀 Больше эффектов (3D наклон, размытие и затухание) (Bento Card) ──
         Surface(
             shape = RoundedCornerShape(28.dp),
-            color = Color.White.copy(alpha = 0.05f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            color = cardBg,
+            border = cardBorder,
             modifier = Modifier
-                .fillMaxWidth()
-                .verticalScrollEdgeItemEffect(),
+                .fillMaxWidth(),
         ) {
             Row(
                 modifier = Modifier
@@ -658,7 +658,7 @@ fun SettingsScreen(
                         "Больше эффектов",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
+                        color = titleColor,
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
@@ -667,7 +667,7 @@ fun SettingsScreen(
                         else
                             "Классический плоский стиль отображения карточек без дополнительной 3D-нагрузки",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.65f),
+                        color = subtitleColor,
                     )
                 }
                 Switch(
@@ -686,20 +686,18 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // ── 🚀 Обновления и патчи (Bento Card) ──────────────────────
+        // ── 🚀 Обновления приложения (Bento Card) ──────────────────
         val context = LocalContext.current
         val coroutineScope = rememberCoroutineScope()
-        val patchVersion = remember { DexPatchManager.getCurrentPatchVersion(context) }
         var isCheckingUpdates by remember { mutableStateOf(false) }
         var updateStatusText by remember { mutableStateOf(UpdateManager.lastCheckStatus) }
 
         Surface(
             shape = RoundedCornerShape(28.dp),
-            color = Color.White.copy(alpha = 0.05f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            color = cardBg,
+            border = cardBorder,
             modifier = Modifier
-                .fillMaxWidth()
-                .verticalScrollEdgeItemEffect(),
+                .fillMaxWidth(),
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(
@@ -723,29 +721,18 @@ fun SettingsScreen(
                     Spacer(Modifier.width(16.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "Автообновление",
+                            "Обновления",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
+                            color = titleColor,
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            "Автоматически обновлять компоненты и приложение в фоне без системных диалогов",
+                            "Проверка релизов на GitHub и уведомление о новых версиях",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.65f),
+                            color = subtitleColor,
                         )
                     }
-                    Switch(
-                        checked = AppSettings.autoUpdate,
-                        onCheckedChange = {
-                            ClickFeedback.play()
-                            AppSettings.updateAutoUpdate(it)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = cs.onPrimary,
-                            checkedTrackColor = cs.primary,
-                        ),
-                    )
                 }
 
                 Spacer(Modifier.height(14.dp))
@@ -757,10 +744,10 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                         Text(
-                            text = "Версия ${com.melo.music.BuildConfig.VERSION_NAME}" + if (patchVersion > 0) " (Патч #$patchVersion)" else "",
+                            text = "Версия ${com.melo.music.BuildConfig.VERSION_NAME} (Сборка ${com.melo.music.BuildConfig.VERSION_CODE})",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
-                            color = Color.White.copy(alpha = 0.7f),
+                            color = subtitleColor,
                         )
                         updateStatusText?.let { status ->
                             Text(
@@ -782,7 +769,7 @@ fun SettingsScreen(
                                 val res = UpdateManager.checkForUpdates(context, manual = true)
                                 isCheckingUpdates = false
                                 updateStatusText = UpdateManager.lastCheckStatus
-                                if (res != null && !AppSettings.autoUpdate) {
+                                if (res != null) {
                                     val intent = Intent(context, UpdateActivity::class.java)
                                     context.startActivity(intent)
                                 }
@@ -807,11 +794,10 @@ fun SettingsScreen(
             var byedpiActive by remember { mutableStateOf(ByeDpiProxy.isEnabled()) }
             Surface(
                 shape = RoundedCornerShape(28.dp),
-                color = Color.White.copy(alpha = 0.05f),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                color = cardBg,
+                border = cardBorder,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScrollEdgeItemEffect(),
+                    .fillMaxWidth(),
             ) {
                 Row(
                     modifier = Modifier
@@ -839,7 +825,7 @@ fun SettingsScreen(
                             "Обход блокировок (ByeDPI)",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
+                            color = titleColor,
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
@@ -848,7 +834,7 @@ fun SettingsScreen(
                             else
                                 "Включите, если треки не загружаются или бесконечно буферизуются",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.65f),
+                            color = subtitleColor,
                         )
                     }
                     Switch(
@@ -878,11 +864,10 @@ fun SettingsScreen(
         val currentScale = com.melo.music.settings.AppSettings.uiScale
         Surface(
             shape = RoundedCornerShape(28.dp),
-            color = Color.White.copy(alpha = 0.05f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            color = cardBg,
+            border = cardBorder,
             modifier = Modifier
-                .fillMaxWidth()
-                .verticalScrollEdgeItemEffect(),
+                .fillMaxWidth(),
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(
@@ -909,13 +894,13 @@ fun SettingsScreen(
                             "Масштаб интерфейса (DPI)",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
+                            color = titleColor,
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
                             "Регулировка размера элементов и текста под магнитолы и экраны с высоким DPI",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.65f),
+                            color = subtitleColor,
                         )
                     }
                     Text(
@@ -940,7 +925,7 @@ fun SettingsScreen(
                     colors = SliderDefaults.colors(
                         thumbColor = cs.primary,
                         activeTrackColor = cs.primary,
-                        inactiveTrackColor = Color.White.copy(alpha = 0.12f),
+                        inactiveTrackColor = trackInactive,
                     ),
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -961,7 +946,7 @@ fun SettingsScreen(
                         val isSelected = kotlin.math.abs(currentScale - presetScale) < 0.03f
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) cs.primary else Color.White.copy(alpha = 0.08f),
+                            color = if (isSelected) cs.primary else subCardBg,
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(12.dp))
@@ -975,7 +960,7 @@ fun SettingsScreen(
                                 text = label,
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = if (isSelected) cs.onPrimary else Color.White.copy(alpha = 0.8f),
+                                color = if (isSelected) cs.onPrimary else titleColor,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth(),
                             )
@@ -1001,14 +986,19 @@ private fun SpatialAudioSection() {
     var enabled by remember { mutableStateOf(EqualizerManager.isSpatialEnabled()) }
     var strength by remember { mutableIntStateOf(EqualizerManager.getSpatialStrength()) }
     val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
+    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
+    val titleColor = cs.onSurface
+    val subtitleColor = cs.onSurfaceVariant
+    val trackInactive = if (isDark) Color.White.copy(alpha = 0.12f) else cs.outlineVariant.copy(alpha = 0.35f)
 
     Surface(
         shape = RoundedCornerShape(28.dp),
-        color = Color.White.copy(alpha = 0.05f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        color = cardBg,
+        border = cardBorder,
         modifier = Modifier
-            .fillMaxWidth()
-            .verticalScrollEdgeItemEffect(),
+            .fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -1035,13 +1025,13 @@ private fun SpatialAudioSection() {
                         "Пространственный звук 3D",
                         style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = titleColor,
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
                         if (enabled) "Melo 3D Surround активен" else "Выключен",
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (enabled) cs.primary else Color.White.copy(alpha = 0.5f),
+                        color = if (enabled) cs.primary else subtitleColor,
                         fontWeight = FontWeight.Medium,
                     )
                 }
@@ -1074,7 +1064,7 @@ private fun SpatialAudioSection() {
                             "Глубина виртуализации сцены",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.8f),
+                            color = titleColor,
                             modifier = Modifier.weight(1f),
                         )
                         Surface(
@@ -1103,7 +1093,7 @@ private fun SpatialAudioSection() {
                         colors = SliderDefaults.colors(
                             thumbColor = cs.primary,
                             activeTrackColor = cs.primary,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.1f),
+                            inactiveTrackColor = trackInactive,
                         ),
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -1118,14 +1108,19 @@ private fun CrystalAudioSection() {
     var enabled by remember { mutableStateOf(EqualizerManager.isCrystalEnabled()) }
     var intensity by remember { mutableIntStateOf(EqualizerManager.getCrystalIntensity()) }
     val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
+    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
+    val titleColor = cs.onSurface
+    val subtitleColor = cs.onSurfaceVariant
+    val trackInactive = if (isDark) Color.White.copy(alpha = 0.12f) else cs.outlineVariant.copy(alpha = 0.35f)
 
     Surface(
         shape = RoundedCornerShape(28.dp),
-        color = Color.White.copy(alpha = 0.05f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        color = cardBg,
+        border = cardBorder,
         modifier = Modifier
-            .fillMaxWidth()
-            .verticalScrollEdgeItemEffect(),
+            .fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -1153,7 +1148,7 @@ private fun CrystalAudioSection() {
                             "Кристальный звук",
                             style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                            color = titleColor,
                         )
                         Spacer(Modifier.width(6.dp))
                         Surface(
@@ -1174,7 +1169,7 @@ private fun CrystalAudioSection() {
                     Text(
                         if (enabled) "Синтез ВЧ, глубокий саб-бас и деклиппинг" else "Улучшение звука выключено",
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (enabled) cs.primary else Color.White.copy(alpha = 0.5f),
+                        color = if (enabled) cs.primary else subtitleColor,
                         fontWeight = FontWeight.Medium,
                     )
                 }
@@ -1207,7 +1202,7 @@ private fun CrystalAudioSection() {
                             "Интенсивность восстановления",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.8f),
+                            color = titleColor,
                             modifier = Modifier.weight(1f),
                         )
                         Surface(
@@ -1236,7 +1231,7 @@ private fun CrystalAudioSection() {
                         colors = SliderDefaults.colors(
                             thumbColor = cs.primary,
                             activeTrackColor = cs.primary,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.1f),
+                            inactiveTrackColor = trackInactive,
                         ),
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -1245,7 +1240,7 @@ private fun CrystalAudioSection() {
                     Text(
                         "Психоакустический алгоритм генерирует ультра-высокие гармоники (14–22+ кГц), срезанные сжатием MP3/AAC, возвращая чистоту тарелкам, дыханию и струнам.",
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                        color = Color.White.copy(alpha = 0.5f),
+                        color = subtitleColor,
                         lineHeight = 16.sp,
                     )
                 }
@@ -1259,14 +1254,18 @@ private fun GainReverbSection() {
     var gain by remember { mutableIntStateOf(EqualizerManager.getGain()) }
     var reverb by remember { mutableIntStateOf(EqualizerManager.getReverbPreset()) }
     val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
+    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
+    val titleColor = cs.onSurface
+    val trackInactive = if (isDark) Color.White.copy(alpha = 0.12f) else cs.outlineVariant.copy(alpha = 0.35f)
 
     Surface(
         shape = RoundedCornerShape(28.dp),
-        color = Color.White.copy(alpha = 0.05f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        color = cardBg,
+        border = cardBorder,
         modifier = Modifier
-            .fillMaxWidth()
-            .verticalScrollEdgeItemEffect(),
+            .fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             // ── Усиление (Gain) ──
@@ -1293,7 +1292,7 @@ private fun GainReverbSection() {
                     "Усиление звука",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = titleColor,
                 )
                 Spacer(Modifier.weight(1f))
                 Surface(
@@ -1322,7 +1321,7 @@ private fun GainReverbSection() {
                 colors = SliderDefaults.colors(
                     thumbColor = cs.primary,
                     activeTrackColor = cs.primary,
-                    inactiveTrackColor = Color.White.copy(alpha = 0.1f),
+                    inactiveTrackColor = trackInactive,
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -1353,7 +1352,7 @@ private fun GainReverbSection() {
                     "Пространство",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = titleColor,
                 )
                 Spacer(Modifier.weight(1f))
                 Surface(
@@ -1383,7 +1382,7 @@ private fun GainReverbSection() {
                 colors = SliderDefaults.colors(
                     thumbColor = cs.primary,
                     activeTrackColor = cs.primary,
-                    inactiveTrackColor = Color.White.copy(alpha = 0.1f),
+                    inactiveTrackColor = trackInactive,
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -1400,14 +1399,21 @@ private fun EqualizerSection() {
     val frequencies = EqualizerManager.bandFrequencies
     val presets = EqualizerManager.presetNames
     val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
+    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
+    val subCardBg = if (isDark) Color.White.copy(alpha = 0.08f) else cs.surfaceContainerHigh
+    val subCardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.1f) else cs.outlineVariant.copy(alpha = 0.3f))
+    val titleColor = cs.onSurface
+    val subtitleColor = cs.onSurfaceVariant
+    val trackInactive = if (isDark) Color.White.copy(alpha = 0.12f) else cs.outlineVariant.copy(alpha = 0.35f)
 
     Surface(
         shape = RoundedCornerShape(28.dp),
-        color = Color.White.copy(alpha = 0.05f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        color = cardBg,
+        border = cardBorder,
         modifier = Modifier
-            .fillMaxWidth()
-            .verticalScrollEdgeItemEffect(),
+            .fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -1434,13 +1440,13 @@ private fun EqualizerSection() {
                         "Эквалайзер",
                         style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = titleColor,
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
                         if (enabled) "Активен" else "Выключен",
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (enabled) cs.primary else Color.White.copy(alpha = 0.5f),
+                        color = if (enabled) cs.primary else subtitleColor,
                         fontWeight = FontWeight.Medium,
                     )
                 }
@@ -1470,7 +1476,7 @@ private fun EqualizerSection() {
                         "Пресеты звучания",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.8f),
+                        color = titleColor,
                     )
                     Spacer(Modifier.height(10.dp))
 
@@ -1485,11 +1491,8 @@ private fun EqualizerSection() {
                             val isSelected = selectedPreset == index
                             Surface(
                                 shape = CircleShape,
-                                color = if (isSelected) cs.primary else Color.White.copy(alpha = 0.06f),
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (isSelected) cs.primary else Color.White.copy(alpha = 0.08f),
-                                ),
+                                color = if (isSelected) cs.primary else subCardBg,
+                                border = if (isSelected) BorderStroke(1.dp, cs.primary) else subCardBorder,
                                 modifier = Modifier
                                     .clip(CircleShape)
                                     .clickable {
@@ -1501,7 +1504,7 @@ private fun EqualizerSection() {
                                     text = name,
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) cs.onPrimary else Color.White.copy(alpha = 0.8f),
+                                    color = if (isSelected) cs.onPrimary else titleColor,
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                                 )
                             }
@@ -1521,7 +1524,7 @@ private fun EqualizerSection() {
                             "Точная настройка частот",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.8f),
+                            color = titleColor,
                         )
                         Spacer(Modifier.height(10.dp))
 
@@ -1536,7 +1539,7 @@ private fun EqualizerSection() {
                                     freqLabel,
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Medium,
-                                    color = Color.White.copy(alpha = 0.75f),
+                                    color = subtitleColor,
                                     modifier = Modifier.width(56.dp),
                                 )
                                 Slider(
@@ -1551,7 +1554,7 @@ private fun EqualizerSection() {
                                     colors = SliderDefaults.colors(
                                         thumbColor = cs.primary,
                                         activeTrackColor = cs.primary,
-                                        inactiveTrackColor = Color.White.copy(alpha = 0.1f),
+                                        inactiveTrackColor = trackInactive,
                                     ),
                                     modifier = Modifier.weight(1f),
                                 )
@@ -1576,27 +1579,33 @@ private fun IconPickerSection() {
     val context = LocalContext.current
     var current by remember { mutableStateOf(AppSettings.launcherIcon) }
     val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
+    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
+    val subCardBg = if (isDark) Color.White.copy(alpha = 0.08f) else cs.surfaceContainerHigh
+    val subCardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.1f) else cs.outlineVariant.copy(alpha = 0.3f))
+    val titleColor = cs.onSurface
+    val subtitleColor = cs.onSurfaceVariant
 
     Surface(
         shape = RoundedCornerShape(28.dp),
-        color = Color.White.copy(alpha = 0.05f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        color = cardBg,
+        border = cardBorder,
         modifier = Modifier
-            .fillMaxWidth()
-            .verticalScrollEdgeItemEffect(),
+            .fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
                 "Иконка приложения",
                 style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = titleColor,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 "Выберите стиль иконки для рабочего стола",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.65f),
+                color = subtitleColor,
             )
 
             Spacer(Modifier.height(18.dp))
@@ -1632,11 +1641,8 @@ private fun IconPickerSection() {
                         ) {
                             Surface(
                                 shape = RoundedCornerShape(20.dp),
-                                color = if (isSelected) cs.primaryContainer else Color.White.copy(alpha = 0.06f),
-                                border = BorderStroke(
-                                    if (isSelected) 2.dp else 1.dp,
-                                    if (isSelected) cs.primary else Color.White.copy(alpha = 0.1f),
-                                ),
+                                color = if (isSelected) cs.primaryContainer else subCardBg,
+                                border = if (isSelected) BorderStroke(2.dp, cs.primary) else subCardBorder,
                                 modifier = Modifier.size(64.dp),
                             ) {
                                 Image(
@@ -1670,7 +1676,7 @@ private fun IconPickerSection() {
                             preset.label,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) cs.primary else Color.White.copy(alpha = 0.7f),
+                            color = if (isSelected) cs.primary else titleColor,
                         )
                     }
                 }

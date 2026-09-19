@@ -214,7 +214,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeRenderEffect
+import com.melo.music.R
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -273,6 +276,10 @@ import com.airbnb.lottie.compose.rememberLottieComposition
 import com.melo.music.ui.sound.ClickFeedback
 import java.util.Locale
 import kotlin.math.roundToInt
+
+private val FoglihtenFontFamily = FontFamily(
+    Font(R.font.foglihtenblackpcs, FontWeight.Normal),
+)
 
 /**
  * Главный экран MVP в стиле Material 3 Expressive: поиск + популярная музыка
@@ -686,11 +693,19 @@ fun PlayerScreen(
                         it.message?.contains("правообладател", ignoreCase = true) == true ||
                         it.message?.contains("copyright", ignoreCase = true) == true ||
                         it.message?.contains("interscope", ignoreCase = true) == true
+                    val isAgeRestricted = it is org.schabi.newpipe.extractor.exceptions.AgeRestrictedContentException ||
+                        it.message?.contains("age-restricted", ignoreCase = true) == true ||
+                        it.message?.contains("confirm your age", ignoreCase = true) == true ||
+                        it.message?.contains("inappropriate for some users", ignoreCase = true) == true
                     if (isCopyright) {
                         copyrightBlockedTrack = item
                     }
                     if (resolvingUrl == item.url) {
-                        listError = if (isCopyright) "Трек удалён правообладателем" else "Не удалось воспроизвести: ${it.message}"
+                        listError = when {
+                            isCopyright -> "Трек удалён правообладателем"
+                            isAgeRestricted -> "Трек 18+. Войдите в аккаунт Google в настройках Melo"
+                            else -> "Не удалось воспроизвести: ${it.message}"
+                        }
                     }
                 }
             if (resolvingUrl == item.url) {
@@ -852,10 +867,11 @@ fun PlayerScreen(
         }
     }
 
-    // Пятна тонируем в зелёный (≈#19261E), а не нейтрально-белый.
+    // Пятна мягко тонируем в системный цвет темы (Monet), адаптивно для тёмной и светлой темы.
     val ambientBg = MaterialTheme.colorScheme.background
-    val ambientLight = lerp(ambientBg, Color(0xFF3E6B4E), 0.22f)
-    val ambientDark = lerp(ambientBg, Color.Black, 0.32f)
+    val isDarkTheme = ambientBg.luminance() < 0.5f
+    val ambientLight = if (isDarkTheme) lerp(ambientBg, MaterialTheme.colorScheme.primary, 0.18f) else Color.Transparent
+    val ambientDark = if (isDarkTheme) lerp(ambientBg, Color.Black, 0.32f) else Color.Transparent
     val onBg = MaterialTheme.colorScheme.onBackground
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     // Плавающие над контентом плашки: лента скроллится под ними (без фоновой подложки).
@@ -1168,13 +1184,12 @@ fun PlayerScreen(
               }
           }
 
-          // ── Плашка доступного обновления (когда выключено автообновление) ──
+          // ── Плашка доступного обновления ──
           val updateAvailable = com.melo.music.update.UpdateManager.availableUpdate
           var updateBannerDismissed by remember { mutableStateOf(false) }
-          val screenContext = androidx.compose.ui.platform.LocalContext.current
 
           androidx.compose.animation.AnimatedVisibility(
-              visible = updateAvailable != null && !com.melo.music.settings.AppSettings.autoUpdate && !updateBannerDismissed && !playerExpanded,
+              visible = updateAvailable != null && !updateBannerDismissed && !playerExpanded,
               enter = androidx.compose.animation.slideInVertically(initialOffsetY = { -it }) + androidx.compose.animation.fadeIn(),
               exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { -it }) + androidx.compose.animation.fadeOut(),
               modifier = Modifier
@@ -1184,10 +1199,6 @@ fun PlayerScreen(
               updateAvailable?.let { info ->
                   com.melo.music.ui.components.UpdatePillBanner(
                       updateInfo = info,
-                      onUpdateClick = {
-                          val intent = android.content.Intent(screenContext, com.melo.music.update.UpdateActivity::class.java)
-                          screenContext.startActivity(intent)
-                      },
                       onDismiss = {
                           updateBannerDismissed = true
                       },
@@ -1717,6 +1728,11 @@ private fun MeloBottomNav(selected: MeloTab, onSelect: (MeloTab) -> Unit) {
         )
     }
 
+    val isDark = cs.background.luminance() < 0.5f
+    val navBg = if (isDark) cs.surfaceContainer.copy(alpha = 0.95f) else cs.surfaceContainer.copy(alpha = 0.98f)
+    val navBorder = BorderStroke(1.dp, if (isDark) cs.outlineVariant.copy(alpha = 0.20f) else cs.outlineVariant.copy(alpha = 0.35f))
+    val unselectedTint = cs.onSurfaceVariant
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1725,9 +1741,9 @@ private fun MeloBottomNav(selected: MeloTab, onSelect: (MeloTab) -> Unit) {
     ) {
         Surface(
             shape = RoundedCornerShape(32.dp),
-            color = Color(0xF2141F19),
+            color = navBg,
             shadowElevation = 8.dp,
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            border = navBorder,
             modifier = Modifier.fillMaxWidth().height(62.dp),
         ) {
             Row(
@@ -1754,7 +1770,7 @@ private fun MeloBottomNav(selected: MeloTab, onSelect: (MeloTab) -> Unit) {
                             Icon(
                                 imageVector = icon,
                                 contentDescription = label,
-                                tint = if (isSelected) cs.onPrimaryContainer else Color.White.copy(alpha = 0.65f),
+                                tint = if (isSelected) cs.onPrimaryContainer else unselectedTint,
                                 modifier = Modifier.size(22.dp),
                             )
                             AnimatedVisibility(
@@ -1784,6 +1800,10 @@ private fun MeloBottomNav(selected: MeloTab, onSelect: (MeloTab) -> Unit) {
 @Composable
 private fun MeloNavRail(selected: MeloTab, onSelect: (MeloTab) -> Unit, modifier: Modifier = Modifier) {
     val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val navBg = if (isDark) cs.surfaceContainer.copy(alpha = 0.95f) else cs.surfaceContainer.copy(alpha = 0.98f)
+    val navBorder = BorderStroke(1.dp, if (isDark) cs.outlineVariant.copy(alpha = 0.20f) else cs.outlineVariant.copy(alpha = 0.35f))
+    val unselectedTint = cs.onSurfaceVariant
     val tabs = remember {
         listOf(
             Triple(MeloTab.Home, Icons.Rounded.Home, MeloTab.Home.label),
@@ -1801,9 +1821,9 @@ private fun MeloNavRail(selected: MeloTab, onSelect: (MeloTab) -> Unit, modifier
     ) {
         Surface(
             shape = RoundedCornerShape(32.dp),
-            color = Color(0xF2141F19),
+            color = navBg,
             shadowElevation = 8.dp,
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            border = navBorder,
             modifier = Modifier.width(64.dp).fillMaxHeight(),
         ) {
             Column(
@@ -1829,7 +1849,7 @@ private fun MeloNavRail(selected: MeloTab, onSelect: (MeloTab) -> Unit, modifier
                             Icon(
                                 imageVector = icon,
                                 contentDescription = label,
-                                tint = if (isSelected) cs.onPrimaryContainer else Color.White.copy(alpha = 0.65f),
+                                tint = if (isSelected) cs.onPrimaryContainer else unselectedTint,
                                 modifier = Modifier.size(22.dp),
                             )
                         }
@@ -1878,11 +1898,14 @@ private fun AccountTab(
     bottomInset: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
     val accountScope = rememberCoroutineScope()
+    val cs = MaterialTheme.colorScheme
     var playlists by remember(refreshKey) { mutableStateOf(PlaylistManager.getAll().toList()) }
     var showCreate by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<Playlist?>(null) }
     var menuTarget by remember { mutableStateOf<Playlist?>(null) }
-    val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
+    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
 
     Column(
         modifier = Modifier
@@ -1906,13 +1929,13 @@ private fun AccountTab(
                         letterSpacing = (-0.5).sp,
                     ),
                     fontWeight = FontWeight.Black,
-                    color = Color.White,
+                    color = cs.onBackground,
                 )
                 com.melo.music.auth.AuthManager.email?.let { mail ->
                     Text(
                         mail,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.65f),
+                        color = cs.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1925,7 +1948,8 @@ private fun AccountTab(
                 if (com.melo.music.auth.AuthManager.loggedIn) {
                     Surface(
                         shape = CircleShape,
-                        color = Color.White.copy(alpha = 0.08f),
+                        color = if (isDark) Color.White.copy(alpha = 0.08f) else cs.surfaceContainerHigh,
+                        border = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.1f) else cs.outlineVariant.copy(alpha = 0.35f)),
                         modifier = Modifier
                             .clip(CircleShape)
                             .clickable { accountScope.launch { com.melo.music.auth.AuthManager.logout() } },
@@ -1934,7 +1958,7 @@ private fun AccountTab(
                             "Выйти",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color.White.copy(alpha = 0.8f),
+                            color = cs.onSurface,
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                         )
                     }
@@ -1958,7 +1982,8 @@ private fun AccountTab(
 
                 Surface(
                     shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.08f),
+                    color = if (isDark) Color.White.copy(alpha = 0.08f) else cs.surfaceContainerHigh,
+                    border = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.1f) else cs.outlineVariant.copy(alpha = 0.35f)),
                     modifier = Modifier
                         .size(42.dp)
                         .clip(CircleShape)
@@ -1968,7 +1993,7 @@ private fun AccountTab(
                         Icon(
                             Icons.Rounded.Settings,
                             contentDescription = "Настройки",
-                            tint = Color.White,
+                            tint = cs.onSurface,
                             modifier = Modifier.size(20.dp),
                         )
                     }
@@ -2001,8 +2026,8 @@ private fun AccountTab(
             // Bento Hero карточка для Гостя (в едином стиле темы приложения)
             Surface(
                 shape = RoundedCornerShape(28.dp),
-                color = Color.White.copy(alpha = 0.05f),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                color = cardBg,
+                border = cardBorder,
                 shadowElevation = 8.dp,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2032,13 +2057,13 @@ private fun AccountTab(
                                 "Гостевой профиль",
                                 style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp),
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White,
+                                color = cs.onSurface,
                             )
                             Spacer(Modifier.height(3.dp))
                             Text(
                                 "Синхронизируй плейлисты и делись треками на карте",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.7f),
+                                color = cs.onSurfaceVariant,
                             )
                         }
                     }
@@ -2069,8 +2094,8 @@ private fun AccountTab(
             // Карточка «Избранное»
             Surface(
                 shape = RoundedCornerShape(22.dp),
-                color = Color.White.copy(alpha = 0.05f),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                color = cardBg,
+                border = cardBorder,
                 modifier = Modifier.weight(1f),
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -2093,12 +2118,12 @@ private fun AccountTab(
                         "$favCount треков",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = cs.onSurface,
                     )
                     Text(
                         "В Избранном",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = cs.onSurfaceVariant,
                     )
                 }
             }
@@ -2106,8 +2131,8 @@ private fun AccountTab(
             // Карточка «Плейлисты»
             Surface(
                 shape = RoundedCornerShape(22.dp),
-                color = Color.White.copy(alpha = 0.05f),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                color = cardBg,
+                border = cardBorder,
                 modifier = Modifier.weight(1f),
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -2130,12 +2155,12 @@ private fun AccountTab(
                         "${playlists.size} шт.",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = cs.onSurface,
                     )
                     Text(
                         "Мои плейлисты",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = cs.onSurfaceVariant,
                     )
                 }
             }
@@ -2153,7 +2178,7 @@ private fun AccountTab(
                     letterSpacing = (-0.3).sp,
                 ),
                 fontWeight = FontWeight.ExtraBold,
-                color = Color.White,
+                color = cs.onBackground,
                 modifier = Modifier.weight(1f),
             )
             Surface(
@@ -2238,12 +2263,12 @@ private fun AccountTab(
                             if (isSyncingLib) "Синхронизация с YouTube..." else "Синхронизировать YouTube Music",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                            color = cs.onSurface,
                         )
                         Text(
                             syncMsg ?: "Подтянуть «Понравившиеся» и личные плейлисты",
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (syncMsg != null) cs.primary else Color.White.copy(alpha = 0.65f),
+                            color = if (syncMsg != null) cs.primary else cs.onSurfaceVariant,
                         )
                     }
                 }
@@ -2253,8 +2278,8 @@ private fun AccountTab(
         // Импорт плейлиста из других сервисов (Material 3 Expressive Frosted Card)
         Surface(
             shape = RoundedCornerShape(24.dp),
-            color = Color.White.copy(alpha = 0.05f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            color = cardBg,
+            border = cardBorder,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 16.dp)
@@ -2287,18 +2312,18 @@ private fun AccountTab(
                         "Импорт плейлиста",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = cs.onSurface,
                     )
                     Text(
                         "Из YouTube Music или SoundCloud",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.65f),
+                        color = cs.onSurfaceVariant,
                     )
                 }
                 Icon(
                     Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                     contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.4f),
+                    tint = cs.onSurfaceVariant,
                 )
             }
         }
@@ -2741,10 +2766,17 @@ private fun SeaCard(
 ) {
     val cs = MaterialTheme.colorScheme
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isDark = cs.background.luminance() < 0.5f
     val outerShape = remember { CookieShape(8, 0.11f) }
     val btnShape = remember { CookieShape(8, 0.16f) }
-    val innerColor = lerp(cs.secondaryContainer, Color.Black, 0.22f)
-    val onColor = Color.White
+    val innerColor = if (isDark) {
+        lerp(cs.secondaryContainer, Color.Black, 0.25f)
+    } else {
+        cs.primaryContainer
+    }
+    val onColor = if (isDark) Color.White else cs.onPrimaryContainer
+    val sideBtnBg = if (isDark) cs.primaryContainer else cs.surfaceContainerHighest.copy(alpha = 0.85f)
+    val sideBtnTint = if (isDark) cs.onPrimaryContainer else cs.onSurface
 
     val outerSize = if (isLandscape) 180.dp else 300.dp
     val innerSize = if (isLandscape) 140.dp else 232.dp
@@ -2803,7 +2835,7 @@ private fun SeaCard(
                         modifier = Modifier
                             .size(if (isLandscape) 36.dp else 46.dp)
                             .clip(btnShape)
-                            .background(cs.primaryContainer)
+                            .background(sideBtnBg)
                             .clickable(onClick = {
                                 ClickFeedback.play()
                                 onLike()
@@ -2813,7 +2845,7 @@ private fun SeaCard(
                         Icon(
                             imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                             contentDescription = "Нравится",
-                            tint = cs.onPrimaryContainer,
+                            tint = if (isLiked) (if (isDark) cs.primary else Color(0xFFE53935)) else sideBtnTint,
                             modifier = Modifier.size(if (isLandscape) 16.dp else 20.dp),
                         )
                     }
@@ -2857,7 +2889,7 @@ private fun SeaCard(
                         modifier = Modifier
                             .size(if (isLandscape) 36.dp else 46.dp)
                             .clip(btnShape)
-                            .background(cs.primaryContainer)
+                            .background(sideBtnBg)
                             .clickable(onClick = {
                                 ClickFeedback.play()
                                 onNext()
@@ -2867,7 +2899,7 @@ private fun SeaCard(
                         Icon(
                             Icons.Rounded.SkipNext,
                             contentDescription = "Дальше",
-                            tint = cs.onPrimaryContainer,
+                            tint = sideBtnTint,
                             modifier = Modifier.size(if (isLandscape) 18.dp else 22.dp),
                         )
                     }
@@ -3102,6 +3134,7 @@ private fun HomeFeed(
 
 @Composable
 private fun Greeting(onOpenAccount: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
     val greet = when (hour) {
@@ -3130,12 +3163,12 @@ private fun Greeting(onOpenAccount: () -> Unit) {
                     letterSpacing = (-0.3).sp,
                 ),
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = cs.onBackground,
             )
             Text(
                 text = "Твоя музыка всегда с тобой",
                 style = if (isLandscape) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.65f),
+                color = cs.onBackground.copy(alpha = 0.65f),
             )
         }
     }
@@ -3150,7 +3183,7 @@ private fun SectionTitle(text: String) {
             letterSpacing = (-0.3).sp,
         ),
         fontWeight = FontWeight.ExtraBold,
-        color = Color.White,
+        color = MaterialTheme.colorScheme.onBackground,
         modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 12.dp),
     )
 }
@@ -3181,6 +3214,10 @@ private fun QuickPickGrid(
         return
     }
     if (tracks.isEmpty()) return
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val qpBg = if (isDark) Color.White.copy(alpha = 0.06f) else cs.surfaceContainerHigh
+    val qpBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.06f) else cs.outlineVariant.copy(alpha = 0.35f))
     val grid = tracks.distinctBy { it.url }.take(12)
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     LazyHorizontalGrid(
@@ -3205,8 +3242,8 @@ private fun QuickPickGrid(
                         onClick = { onPlay(grid, index) },
                         onLongClick = { onLongClick(t) },
                     )
-                    .background(Color.White.copy(alpha = 0.06f))
-                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)), RoundedCornerShape(20.dp))
+                    .background(qpBg)
+                    .border(qpBorder, RoundedCornerShape(20.dp))
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -3220,14 +3257,14 @@ private fun QuickPickGrid(
                         t.title,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
+                        color = cs.onSurface,
                         maxLines = 1,
                     )
                     t.uploader?.let {
                         Text(
                             it,
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.65f),
+                            color = cs.onSurfaceVariant,
                             maxLines = 1,
                         )
                     }
@@ -4036,7 +4073,9 @@ private fun ArtistScreen(
     val otherTracks = tracks.filter { it.url !in popularUrls }
 
     val hiRes = remember(artist.thumbnailUrl) { upscaleThumb(artist.thumbnailUrl, 700) }
-    val white = Color.White
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val white = if (isDark) Color.White else cs.onBackground
 
     val context = LocalContext.current
     val fallback = MaterialTheme.colorScheme.primary
@@ -4058,9 +4097,9 @@ private fun ArtistScreen(
     }
 
     val animatedAccent by animateColorAsState(targetValue = accent, animationSpec = tween(500), label = "artistAccent")
-    val cardTint = lerp(animatedAccent, Color(0xFF141218), 0.78f)
+    val cardTint = if (isDark) lerp(animatedAccent, Color(0xFF141218), 0.78f) else lerp(animatedAccent, cs.surfaceContainerLow, 0.85f)
     val onAccent = if (animatedAccent.luminance() > 0.45f) Color.Black else Color.White
-    val pageBg = Color(0xFF0E0C11)
+    val pageBg = if (isDark) Color(0xFF0E0C11) else cs.background
 
     Box(modifier = Modifier.fillMaxSize().background(pageBg)) {
         LazyColumn(
@@ -4083,8 +4122,8 @@ private fun ArtistScreen(
                             .fillMaxSize()
                             .background(
                                 Brush.verticalGradient(
-                                    0f to Color.Black.copy(alpha = 0.25f),
-                                    0.40f to animatedAccent.copy(alpha = 0.20f),
+                                    0f to (if (isDark) Color.Black.copy(alpha = 0.25f) else Color.Transparent),
+                                    0.40f to animatedAccent.copy(alpha = if (isDark) 0.20f else 0.12f),
                                     0.75f to pageBg.copy(alpha = 0.88f),
                                     1f to pageBg,
                                 ),
@@ -4439,7 +4478,9 @@ private fun AlbumCard(
     onPlay: (List<TrackItem>, Int) -> Unit,
     onTrackLongClick: (TrackItem) -> Unit,
 ) {
-    val white = Color.White
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val white = if (isDark) Color.White else cs.onBackground
     var expanded by remember(album.url) { mutableStateOf(false) }
     var tracks by remember(album.url) { mutableStateOf<List<TrackItem>>(emptyList()) }
     var loading by remember(album.url) { mutableStateOf(false) }
@@ -4461,7 +4502,7 @@ private fun AlbumCard(
     Surface(
         shape = RoundedCornerShape(22.dp),
         color = cardTint,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        border = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column {
@@ -4593,11 +4634,15 @@ private fun ArtistTrackTile(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val white = Color.White
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val white = if (isDark) Color.White else cs.onSurface
+    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
+    val cardBorder = if (isDark) Color.White.copy(alpha = 0.06f) else cs.outlineVariant.copy(alpha = 0.35f)
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = if (playing) accent.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.05f),
-        border = BorderStroke(1.dp, if (playing) accent.copy(alpha = 0.40f) else Color.White.copy(alpha = 0.06f)),
+        color = if (playing) accent.copy(alpha = 0.18f) else cardBg,
+        border = BorderStroke(1.dp, if (playing) accent.copy(alpha = 0.40f) else cardBorder),
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
@@ -4711,9 +4756,11 @@ private fun PlaylistScreen(
     BackHandler(onBack = onClose)
     val tracks = playlist.tracks
     val hiRes = remember(playlist.coverUrl) { upscaleThumb(playlist.coverUrl, 600) }
-    val white = Color.White
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val white = if (isDark) Color.White else cs.onBackground
 
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0E0E12))) {
+    Box(modifier = Modifier.fillMaxSize().background(cs.background)) {
         if (hiRes != null) {
             AsyncImage(
                 model = hiRes,
@@ -4725,7 +4772,8 @@ private fun PlaylistScreen(
         Box(
             modifier = Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
-                    listOf(Color.Black.copy(alpha = 0.45f), Color.Black.copy(alpha = 0.88f)),
+                    if (isDark) listOf(Color.Black.copy(alpha = 0.45f), Color.Black.copy(alpha = 0.88f))
+                    else listOf(cs.background.copy(alpha = 0.65f), cs.background.copy(alpha = 0.95f)),
                 ),
             ),
         )
@@ -5036,7 +5084,6 @@ fun Artwork(url: String?, modifier: Modifier = Modifier) {
         val request = remember(url) {
             coil.request.ImageRequest.Builder(context)
                 .data(url)
-                .transformations(SquareCropTransformation())
                 .memoryCacheKey(url)
                 .diskCacheKey(url)
                 .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
@@ -5049,7 +5096,7 @@ fun Artwork(url: String?, modifier: Modifier = Modifier) {
             contentDescription = null,
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             filterQuality = androidx.compose.ui.graphics.FilterQuality.Medium,
-            modifier = modifier.background(Color(0xFF141414)),
+            modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest),
         )
     } else {
         Box(
@@ -5130,6 +5177,9 @@ private fun NowPlayingBarInner(
     onNext: () -> Unit,
     onClick: () -> Unit = {},
 ) {
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -5151,7 +5201,7 @@ private fun NowPlayingBarInner(
             ) {
                 Surface(
                     shape = scallopedArt,
-                    color = Color(0xFF1E1A16),
+                    color = if (isDark) Color(0xFF1E1A16) else cs.surfaceContainerHighest,
                     border = BorderStroke(1.8.dp, animatedTrackColor),
                     modifier = Modifier.size(52.dp),
                 ) {
@@ -5196,7 +5246,7 @@ private fun NowPlayingBarInner(
                         letterSpacing = (-0.2).sp,
                     ),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = if (isDark) Color.White else cs.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -5206,7 +5256,11 @@ private fun NowPlayingBarInner(
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 13.sp,
                     ),
-                    color = lerp(Color.White.copy(alpha = 0.7f), animatedTrackColor, 0.35f),
+                    color = if (isDark) {
+                        lerp(Color.White.copy(alpha = 0.7f), animatedTrackColor, 0.35f)
+                    } else {
+                        lerp(cs.onSurfaceVariant, animatedTrackColor, 0.35f)
+                    },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -5218,8 +5272,10 @@ private fun NowPlayingBarInner(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            val btnBg = lerp(Color(0xFFE2D6BE), animatedTrackColor, 0.12f)
-            val playBg = lerp(Color(0xFFF5EACF), animatedTrackColor, 0.20f)
+            val btnBg = if (isDark) lerp(Color(0xFFE2D6BE), animatedTrackColor, 0.12f) else cs.surfaceContainerHighest
+            val playBg = if (isDark) lerp(Color(0xFFF5EACF), animatedTrackColor, 0.20f) else cs.primary
+            val btnIconTint = if (isDark) Color(0xFF1A1612) else cs.onSurface
+            val playIconTint = if (isDark) Color(0xFF1A1612) else cs.onPrimary
 
             // Prev
             Surface(
@@ -5234,7 +5290,7 @@ private fun NowPlayingBarInner(
                     Icon(
                         Icons.Rounded.SkipPrevious,
                         contentDescription = "Назад",
-                        tint = Color(0xFF1A1612),
+                        tint = btnIconTint,
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -5262,7 +5318,7 @@ private fun NowPlayingBarInner(
                     if (resolving) {
                         LoadingIndicator(
                             modifier = Modifier.size(24.dp),
-                            color = Color(0xFF1A1612),
+                            color = playIconTint,
                         )
                     } else {
                         androidx.compose.animation.AnimatedContent(
@@ -5276,7 +5332,7 @@ private fun NowPlayingBarInner(
                             Icon(
                                 imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                                 contentDescription = if (playing) "Пауза" else "Играть",
-                                tint = Color(0xFF1A1612),
+                                tint = playIconTint,
                                 modifier = Modifier.size(26.dp),
                             )
                         }
@@ -5297,7 +5353,7 @@ private fun NowPlayingBarInner(
                     Icon(
                         Icons.Rounded.SkipNext,
                         contentDescription = "Вперед",
-                        tint = Color(0xFF1A1612),
+                        tint = btnIconTint,
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -5391,12 +5447,22 @@ private fun NowPlayingBar(
         label = "miniPlayerPlayIntensity",
     )
 
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+
+    val miniBarBg = if (isDark) Color(0xEB13110E) else cs.surfaceContainerHigh.copy(alpha = 0.95f)
+    val miniBarBorder = if (isDark) {
+        BorderStroke(1.2.dp, lerp(Color(0x33FFFFFF), animatedTrackColor, androidx.compose.ui.util.lerp(0.18f, 0.45f, playIntensity)))
+    } else {
+        BorderStroke(1.2.dp, lerp(cs.outlineVariant.copy(alpha = 0.45f), animatedTrackColor, androidx.compose.ui.util.lerp(0.20f, 0.50f, playIntensity)))
+    }
+
     Surface(
         // Матовое полупрозрачное стекло
-        color = Color(0xEB13110E),
+        color = miniBarBg,
         shape = RoundedCornerShape(42.dp),
         shadowElevation = androidx.compose.ui.unit.lerp(8.dp, 18.dp, playIntensity),
-        border = BorderStroke(1.2.dp, lerp(Color(0x33FFFFFF), animatedTrackColor, androidx.compose.ui.util.lerp(0.18f, 0.45f, playIntensity))),
+        border = miniBarBorder,
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 10.dp)
@@ -5411,8 +5477,8 @@ private fun NowPlayingBar(
                     val w = size.width
                     val h = size.height
 
-                    // 1. Матовое темное стекло (база)
-                    drawRect(color = Color(0xEB13110E))
+                    // 1. Базовый фон карточки
+                    drawRect(color = miniBarBg)
 
                     // 2. Живой плавающий волновой градиент с плавным затуханием при паузе
                     val waveShift = kotlin.math.sin(phase1.toDouble() * 1.5).toFloat() * (h * 0.15f) * playIntensity
@@ -5424,8 +5490,8 @@ private fun NowPlayingBar(
                         brush = Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                animatedTrackColor.copy(alpha = androidx.compose.ui.util.lerp(0.02f, glowAlpha * 0.35f, playIntensity)),
-                                animatedTrackColor.copy(alpha = glowAlpha),
+                                animatedTrackColor.copy(alpha = androidx.compose.ui.util.lerp(0.02f, glowAlpha * (if (isDark) 0.35f else 0.18f), playIntensity)),
+                                animatedTrackColor.copy(alpha = glowAlpha * (if (isDark) 1f else 0.40f)),
                             ),
                             startY = startY,
                             endY = h,
@@ -5437,6 +5503,7 @@ private fun NowPlayingBar(
                     val dotRadius = 1.6.dp.toPx()
                     val cols = (w / dotSpacing).toInt() + 1
                     val rows = (h / dotSpacing).toInt() + 1
+                    val dotColorBase = if (isDark) Color(0xFFF5E6CC) else cs.onSurfaceVariant.copy(alpha = 0.6f)
                     for (r in 0..rows) {
                         val yFactor = (r.toFloat() / rows.coerceAtLeast(1)).coerceIn(0f, 1f)
                         // Сверху (первые 40% высоты) точки полностью отсутствуют
@@ -5446,7 +5513,7 @@ private fun NowPlayingBar(
                             if (verticalAlpha > 0.005f) {
                                 for (c in 0..cols) {
                                     drawCircle(
-                                        color = lerp(Color(0xFFF5E6CC), animatedTrackColor, 0.75f).copy(alpha = verticalAlpha),
+                                        color = lerp(dotColorBase, animatedTrackColor, 0.75f).copy(alpha = verticalAlpha),
                                         radius = dotRadius,
                                         center = Offset(
                                             x = c * dotSpacing + (dotSpacing / 2),
@@ -5537,28 +5604,39 @@ private fun ExpressiveSpeedButtonGroup(
                 modifier = modifier
                     .padding(horizontal = 2.dp)
                     .fillMaxWidth(),
+                expandedRatio = 0f,
                 horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
-                overflowIndicator = {},
             ) {
                 buttonTexts.forEachIndexed { index, label ->
                     val targetSpeed = speeds[index]
                     val isChecked = kotlin.math.abs(speed - targetSpeed) < 0.015f
-                    toggleableItem(
-                        weight = 1f,
+                    ToggleButton(
                         checked = isChecked,
                         onCheckedChange = {
                             ClickFeedback.play()
                             onSetSpeed(targetSpeed)
                         },
-                        label = label,
-                        icon = {
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
                             Icon(
                                 imageVector = if (isChecked && targetSpeed == 1.0f) Icons.Rounded.Check else buttonIcons[index],
                                 contentDescription = label,
                                 modifier = Modifier.size(14.dp),
                             )
-                        },
-                    )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = label,
+                                maxLines = 1,
+                                softWrap = false,
+                                style = compactStyle,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -6105,7 +6183,7 @@ private fun FullPlayer(
         label = "sideBtnColor",
     )
     val iconTint by animateColorAsState(
-        targetValue = if (playBtnColor.luminance() > 0.45f) Color(0xFF0F1E28) else Color.White,
+        targetValue = if (playBtnColor.luminance() > 0.22f) Color(0xFF0F1E28) else Color.White,
         animationSpec = tween(500),
         label = "iconTint",
     )
@@ -6237,11 +6315,21 @@ private fun FullPlayer(
         Box(
             modifier = Modifier.fillMaxSize()
         ) {
+            val fullCs = MaterialTheme.colorScheme
+            val fullIsDark = fullCs.background.luminance() < 0.5f
+            val collapseBg = if (fullIsDark) Color(0xEB13110E) else fullCs.surfaceContainerHigh.copy(alpha = 0.95f)
             Surface(
                 shape = RoundedCornerShape(currentCorner),
-                color = Color(0xEB13110E),
+                color = collapseBg,
                 shadowElevation = currentElevation,
-                border = if (p > 0.08f) BorderStroke(1.2.dp, lerp(Color(0x33FFFFFF), artColor, 0.45f).copy(alpha = ((p - 0.08f) / 0.92f).coerceIn(0f, 1f))) else null,
+                border = if (p > 0.08f) BorderStroke(
+                    1.2.dp,
+                    if (fullIsDark) {
+                        lerp(Color(0x33FFFFFF), artColor, 0.45f).copy(alpha = ((p - 0.08f) / 0.92f).coerceIn(0f, 1f))
+                    } else {
+                        lerp(fullCs.outlineVariant.copy(alpha = 0.45f), artColor, 0.45f).copy(alpha = ((p - 0.08f) / 0.92f).coerceIn(0f, 1f))
+                    }
+                ) else null,
                 modifier = Modifier
                     .offset { IntOffset(currentX.roundToInt(), currentY.roundToInt()) }
                     .size(
@@ -6634,13 +6722,10 @@ private fun FullPlayer(
                         }
                     }
 
-                    // Круглая кнопка Текста (Lyrics) с 3D-наклоном
-                    Surface(
-                        shape = CircleShape,
-                        color = if (showLyrics) cs.primaryContainer else Color.White.copy(alpha = 0.10f),
+                    // Кнопка Текста (Lyrics) в форме округлой диагональной гальки (pebble) без обводки (непрозрачная)
+                    Box(
                         modifier = Modifier
-                            .size(if (isLandscape) 42.dp else 48.dp)
-                            .clip(CircleShape)
+                            .size(if (isLandscape) 48.dp else 56.dp)
                             .graphicsLayer {
                                 rotationY = tiltRoll * 3.5f
                                 rotationX = -tiltPitch * 3.5f
@@ -6649,15 +6734,24 @@ private fun FullPlayer(
                                 cameraDistance = 20f * density
                             }
                             .clickable { showLyrics = !showLyrics },
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Rounded.Lyrics,
-                                contentDescription = "Текст песни",
-                                tint = if (showLyrics) cs.onPrimaryContainer else white,
-                                modifier = Modifier.size(if (isLandscape) 20.dp else 22.dp),
-                            )
-                        }
+                        // Наклонная округлая галька (без обводки, сплошная заливка)
+                        Box(
+                            modifier = Modifier
+                                .width(if (isLandscape) 48.dp else 54.dp)
+                                .height(if (isLandscape) 38.dp else 44.dp)
+                                .graphicsLayer { rotationZ = -40f }
+                                .clip(RoundedCornerShape(22.dp))
+                                .background(playBtnColor),
+                        )
+                        // Прямая (не повернутая) иконка поверх наклонной гальки
+                        Icon(
+                            imageVector = Icons.Rounded.Lyrics,
+                            contentDescription = "Текст песни",
+                            tint = iconTint,
+                            modifier = Modifier.size(if (isLandscape) 20.dp else 22.dp),
+                        )
                     }
                 }
 
@@ -6996,30 +7090,72 @@ private fun FullPlayer(
                 }
             }
 
+            // ── Кнопка верхнего бара с 3D-объёмом и световым бликом ──
+            @Composable
+            fun TopBarCircleButton(
+                onClick: () -> Unit,
+                modifier: Modifier = Modifier,
+                isActive: Boolean = false,
+                enabled: Boolean = true,
+                isLandscape: Boolean = false,
+                content: @Composable () -> Unit,
+            ) {
+                val buttonSize = if (isLandscape) 36.dp else 42.dp
+                val baseModifier = if (isActive) {
+                    // Активная кнопка: полностью непрозрачная, залита цветом темы, без обводки
+                    Modifier
+                        .size(buttonSize)
+                        .clip(CircleShape)
+                        .background(playBtnColor)
+                } else {
+                    // Неактивная кнопка: деликатная полупрозрачность со слабым мягким верхним бликом
+                    Modifier
+                        .size(buttonSize)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.White.copy(alpha = 0.12f), Color.White.copy(alpha = 0.05f))
+                            )
+                        )
+                        .border(
+                            BorderStroke(
+                                1.dp,
+                                Brush.verticalGradient(
+                                    listOf(Color.White.copy(alpha = 0.18f), Color.White.copy(alpha = 0.03f))
+                                )
+                            ),
+                            CircleShape,
+                        )
+                }
+
+                Box(
+                    modifier = modifier
+                        .then(baseModifier)
+                        .clickable(enabled = enabled, onClick = onClick),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    content()
+                }
+            }
+
             // ── Верхний бар действий ──
             @Composable
             fun RenderTopBar(isLandscape: Boolean) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(if (isLandscape) 36.dp else 42.dp),
+                    modifier = Modifier.fillMaxWidth().height(if (isLandscape) 40.dp else 48.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = Color.White.copy(alpha = 0.08f),
-                        modifier = Modifier
-                            .size(if (isLandscape) 36.dp else 42.dp)
-                            .clip(CircleShape)
-                            .clickable(onClick = requestCollapse),
+                    TopBarCircleButton(
+                        onClick = requestCollapse,
+                        isLandscape = isLandscape,
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Rounded.KeyboardArrowDown,
-                                contentDescription = "Свернуть",
-                                tint = white,
-                                modifier = Modifier.size(if (isLandscape) 20.dp else 24.dp),
-                            )
-                        }
+                        Icon(
+                            Icons.Rounded.KeyboardArrowDown,
+                            contentDescription = "Свернуть",
+                            tint = white,
+                            modifier = Modifier.size(if (isLandscape) 20.dp else 24.dp),
+                        )
                     }
 
                     Row(
@@ -7034,118 +7170,98 @@ private fun FullPlayer(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = if (showLyrics) "Текст песни" else "Сейчас играет",
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontSize = if (isLandscape) 13.5.sp else 14.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                letterSpacing = 0.1.sp,
-                            ),
-                            color = white,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-
-                        if (speed != 1.0f) {
-                            Spacer(Modifier.width(6.dp))
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = artColor.copy(alpha = 0.35f),
-                                border = BorderStroke(1.dp, artColor),
-                            ) {
-                                Text(
-                                    text = if (speed < 1f) "slowed" else "speed up",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-                                )
-                            }
+                        Column(
+                            horizontalAlignment = Alignment.Start,
+                        ) {
+                            Text(
+                                text = if (showLyrics) "ТЕКСТ" else "СЕЙЧАС",
+                                fontFamily = FoglihtenFontFamily,
+                                fontSize = if (isLandscape) 14.sp else 16.sp,
+                                letterSpacing = 1.2.sp,
+                                lineHeight = if (isLandscape) 13.5.sp else 15.5.sp,
+                                color = white,
+                                maxLines = 1,
+                                modifier = if (!showLyrics) Modifier.offset(x = (-8).dp) else Modifier,
+                            )
+                            Text(
+                                text = if (showLyrics) "ПЕСНИ" else "ИГРАЕТ",
+                                fontFamily = FoglihtenFontFamily,
+                                fontSize = if (isLandscape) 14.sp else 16.sp,
+                                letterSpacing = 1.2.sp,
+                                lineHeight = if (isLandscape) 13.5.sp else 15.5.sp,
+                                color = white,
+                                maxLines = 1,
+                                modifier = if (!showLyrics) Modifier.offset(x = 16.dp, y = (-5).dp) else Modifier.offset(x = 10.dp),
+                            )
                         }
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         val vocalCut = com.melo.music.audio.VocalCutManager.isEnabled
-                        Surface(
-                            shape = CircleShape,
-                            color = if (vocalCut) accent.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f),
-                            border = if (vocalCut) BorderStroke(1.dp, accent) else null,
-                            modifier = Modifier
-                                .size(if (isLandscape) 36.dp else 42.dp)
-                                .clip(CircleShape)
-                                .clickable { com.melo.music.audio.VocalCutManager.toggle() },
+                        TopBarCircleButton(
+                            onClick = { com.melo.music.audio.VocalCutManager.toggle() },
+                            isActive = vocalCut,
+                            isLandscape = isLandscape,
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = if (vocalCut) Icons.Rounded.MicOff else Icons.Rounded.Mic,
-                                    contentDescription = if (vocalCut) "Вокал выключен (Караоке)" else "Убрать вокал",
-                                    tint = if (vocalCut) accent else white,
-                                    modifier = Modifier.size(if (isLandscape) 18.dp else 20.dp),
-                                )
-                            }
+                            Icon(
+                                imageVector = if (vocalCut) Icons.Rounded.MicOff else Icons.Rounded.Mic,
+                                contentDescription = if (vocalCut) "Вокал выключен (Караоке)" else "Убрать вокал",
+                                tint = if (vocalCut) iconTint else white,
+                                modifier = Modifier.size(if (isLandscape) 18.dp else 20.dp),
+                            )
                         }
 
-                        Surface(
-                            shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.08f),
-                            modifier = Modifier
-                                .size(if (isLandscape) 36.dp else 42.dp)
-                                .clip(CircleShape)
-                                .clickable(onClick = onShowQueue),
+                        TopBarCircleButton(
+                            onClick = onShowQueue,
+                            isLandscape = isLandscape,
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.AutoMirrored.Rounded.QueueMusic,
-                                    contentDescription = "Очередь",
-                                    tint = white,
-                                    modifier = Modifier.size(if (isLandscape) 18.dp else 20.dp),
-                                )
-                            }
+                            Icon(
+                                Icons.AutoMirrored.Rounded.QueueMusic,
+                                contentDescription = "Очередь",
+                                tint = white,
+                                modifier = Modifier.size(if (isLandscape) 18.dp else 20.dp),
+                            )
                         }
 
                         if (videoUrl != null || videoLoading) {
-                            Surface(
-                                shape = CircleShape,
-                                color = if (showVideo) cs.primaryContainer else Color.White.copy(alpha = 0.08f),
-                                modifier = Modifier
-                                    .size(if (isLandscape) 36.dp else 42.dp)
-                                    .clip(CircleShape)
-                                    .clickable(enabled = !videoLoading && videoUrl != null) {
-                                        val next = !showVideo
-                                        showVideo = next
-                                        if (next) {
-                                            showLyrics = false
-                                            videoUrl?.let { vUrl ->
-                                                com.melo.music.playback.PlaybackService.switchToVideo(vUrl)
-                                            }
-                                        } else {
-                                            com.melo.music.playback.PlaybackService.switchToAudio()
+                            TopBarCircleButton(
+                                onClick = {
+                                    val next = !showVideo
+                                    showVideo = next
+                                    if (next) {
+                                        showLyrics = false
+                                        videoUrl?.let { vUrl ->
+                                            com.melo.music.playback.PlaybackService.switchToVideo(vUrl)
                                         }
-                                    },
+                                    } else {
+                                        com.melo.music.playback.PlaybackService.switchToAudio()
+                                    }
+                                },
+                                isActive = showVideo,
+                                enabled = !videoLoading && videoUrl != null,
+                                isLandscape = isLandscape,
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    androidx.compose.animation.AnimatedVisibility(
-                                        visible = videoLoading,
-                                        enter = fadeIn(tween(260)) + scaleIn(tween(260), initialScale = 0.65f),
-                                        exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.65f),
-                                    ) {
-                                        LoadingIndicator(
-                                            color = white,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
-                                    androidx.compose.animation.AnimatedVisibility(
-                                        visible = !videoLoading,
-                                        enter = fadeIn(tween(260)) + scaleIn(tween(260), initialScale = 0.65f),
-                                        exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.65f),
-                                    ) {
-                                        Icon(
-                                            Icons.Rounded.Videocam,
-                                            contentDescription = "Клип",
-                                            tint = if (showVideo) cs.onPrimaryContainer else white,
-                                            modifier = Modifier.size(if (isLandscape) 18.dp else 20.dp),
-                                        )
-                                    }
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = videoLoading,
+                                    enter = fadeIn(tween(260)) + scaleIn(tween(260), initialScale = 0.65f),
+                                    exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.65f),
+                                ) {
+                                    LoadingIndicator(
+                                        color = if (showVideo) iconTint else white,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = !videoLoading,
+                                    enter = fadeIn(tween(260)) + scaleIn(tween(260), initialScale = 0.65f),
+                                    exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.65f),
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Videocam,
+                                        contentDescription = "Клип",
+                                        tint = if (showVideo) iconTint else white,
+                                        modifier = Modifier.size(if (isLandscape) 18.dp else 20.dp),
+                                    )
                                 }
                             }
                         }
@@ -7295,6 +7411,14 @@ private fun FullPlayer(
                     Spacer(Modifier.height(14.dp))
                 }
             }
+
+            // ── Атмосферный медленно движущийся туман (наплывает на кнопки и низ экрана) ──
+            AtmosphericMistLayer(
+                mistColor = lerp(playBtnColor, Color.White, 0.35f),
+                tiltRoll = tiltRoll,
+                tiltPitch = tiltPitch,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 
@@ -7679,6 +7803,104 @@ private fun CopyrightBlockedBanner(
                 )
             }
         }
+    }
+}
+
+/**
+ * Кинематографичный плавный туман, медленно дрейфующий в нижней части плеера
+ * и мягко наплывающий на кнопки управления и нижний край обложки.
+ */
+@Composable
+private fun AtmosphericMistLayer(
+    mistColor: Color,
+    tiltRoll: Float,
+    tiltPitch: Float,
+    modifier: Modifier = Modifier,
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "mistDrift")
+
+    val phase1 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2f * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(28_000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "phase1",
+    )
+    val phase2 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2f * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(36_000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "phase2",
+    )
+
+    Canvas(modifier = modifier.fillMaxSize()) {
+        val w = size.width
+        val h = size.height
+
+        val p1 = phase1
+        val p2 = phase2
+
+        val tiltX = tiltRoll * 6.dp.toPx()
+        val tiltY = tiltPitch * 6.dp.toPx()
+
+        // 1. Основное облако в зоне кнопок воспроизведения
+        val c1x = (w * 0.35f) + (kotlin.math.cos(p1) * 32.dp.toPx()) + tiltX
+        val c1y = (h * 0.82f) + (kotlin.math.sin(p1) * 20.dp.toPx()) + tiltY
+        val r1 = w * 0.72f
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    mistColor.copy(alpha = 0.16f),
+                    mistColor.copy(alpha = 0.07f),
+                    Color.Transparent,
+                ),
+                center = Offset(c1x, c1y),
+                radius = r1,
+            ),
+            center = Offset(c1x, c1y),
+            radius = r1,
+        )
+
+        // 2. Второе облако в правой части (сикер и правая часть кнопок)
+        val c2x = (w * 0.72f) + (kotlin.math.sin(p2) * 36.dp.toPx()) + (tiltX * 1.2f)
+        val c2y = (h * 0.76f) + (kotlin.math.cos(p2) * 18.dp.toPx()) + (tiltY * 1.2f)
+        val r2 = w * 0.65f
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    mistColor.copy(alpha = 0.13f),
+                    mistColor.copy(alpha = 0.05f),
+                    Color.Transparent,
+                ),
+                center = Offset(c2x, c2y),
+                radius = r2,
+            ),
+            center = Offset(c2x, c2y),
+            radius = r2,
+        )
+
+        // 3. Более высокое мягкое облако, поднимающееся к низу обложки
+        val c3x = (w * 0.50f) + (kotlin.math.cos(p2 * 0.8f) * 25.dp.toPx()) + (tiltX * 0.8f)
+        val c3y = (h * 0.64f) + (kotlin.math.sin(p1 * 0.8f) * 16.dp.toPx()) + (tiltY * 0.8f)
+        val r3 = w * 0.55f
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    mistColor.copy(alpha = 0.10f),
+                    mistColor.copy(alpha = 0.04f),
+                    Color.Transparent,
+                ),
+                center = Offset(c3x, c3y),
+                radius = r3,
+            ),
+            center = Offset(c3x, c3y),
+            radius = r3,
+        )
     }
 }
 

@@ -27,7 +27,6 @@ object MeloNet {
             return if (ByeDpiProxy.shouldRoute()) {
                 listOf(
                     Proxy(Proxy.Type.SOCKS, InetSocketAddress(ByeDpiProxy.DEFAULT_HOST, ByeDpiProxy.DEFAULT_PORT)),
-                    Proxy.NO_PROXY,
                 )
             } else {
                 listOf(Proxy.NO_PROXY)
@@ -64,15 +63,6 @@ object MeloNet {
      */
     val dns: Dns = object : Dns {
         override fun lookup(hostname: String): List<InetAddress> {
-            val lower = hostname.lowercase()
-            if (lower == "soundcloud.com" || lower == "www.soundcloud.com") {
-                return try {
-                    val sndcdnIps = resolveInternal("a-v2.sndcdn.com")
-                    if (sndcdnIps.isNotEmpty()) sndcdnIps else resolveInternal(hostname)
-                } catch (_: Exception) {
-                    resolveInternal(hostname)
-                }
-            }
             return resolveInternal(hostname)
         }
 

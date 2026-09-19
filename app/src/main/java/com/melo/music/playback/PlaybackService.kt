@@ -22,8 +22,8 @@ import okhttp3.OkHttpClient
 import java.io.IOException
 import java.net.Proxy
 import java.net.ProxySelector
-import java.net.SocketAddress
 import java.net.URI
+import okio.buffer
 
 class PlaybackService : MediaSessionService() {
 
@@ -183,20 +183,15 @@ class PlaybackService : MediaSessionService() {
             .dns(com.melo.music.net.MeloNet.dns)
             .proxySelector(com.melo.music.net.MeloNet.byedpiSelector)
             .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
-            .connectTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .connectTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
-            .connectionPool(okhttp3.ConnectionPool(12, 5, java.util.concurrent.TimeUnit.MINUTES))
+            .connectionPool(okhttp3.ConnectionPool(16, 25, java.util.concurrent.TimeUnit.SECONDS))
             .addInterceptor { chain ->
                 var req = chain.request()
                 val host = req.url.host
-                if (host.contains("sndcdn") || host.contains("soundcloud")) {
-                    // Переиспользованные соединения через ByeDPI к SoundCloud немеют;
-                    // свежий коннект гарантирует немедленную доставку сегмента.
-                    req = req.newBuilder().header("Connection", "close").build()
-                }
                 if (com.melo.music.auth.YouTubeAccountManager.isLoggedIn) {
-                    if (host.contains("googlevideo.com") || host.contains("youtube.com")) {
+                    if (host.contains("youtube.com") && !host.contains("googlevideo.com")) {
                         com.melo.music.auth.YouTubeAccountManager.getCookies()?.let { cookies ->
                             val curCookie = req.header("Cookie")
                             val newCookie = if (!curCookie.isNullOrBlank()) "$curCookie; $cookies" else cookies
@@ -204,13 +199,52 @@ class PlaybackService : MediaSessionService() {
                         }
                     }
                 }
+                val t0 = System.currentTimeMillis()
                 try {
-                    val resp = chain.proceed(req)
+                    var resp = chain.proceed(req)
+                    val dt = System.currentTimeMillis() - t0
+                    if (host.contains("sndcdn") || host.contains("soundcloud")) {
+                        com.melo.music.util.FileLog.d("MeloPlay", "SC chunk ${resp.code} in ${dt}ms: ${req.url.pathSegments.lastOrNull()}")
+                        val body = resp.body
+                        if (body != null) {
+                            val loggingSource = object : okio.ForwardingSource(body.source()) {
+                                var totalBytes = 0L
+                                override fun read(sink: okio.Buffer, byteCount: Long): Long {
+                                    return try {
+                                        val read = super.read(sink, byteCount)
+                                        if (read > 0) {
+                                            totalBytes += read
+                                            if (totalBytes % (256 * 1024) < read) {
+                                                com.melo.music.util.FileLog.d("MeloPlay", "SC stream: read ${totalBytes / 1024} KB")
+                                            }
+                                        } else if (read == -1L) {
+                                            com.melo.music.util.FileLog.d("MeloPlay", "SC stream: EOF (${totalBytes / 1024} KB)")
+                                        }
+                                        read
+                                    } catch (e: Exception) {
+                                        com.melo.music.util.FileLog.e("MeloPlay", "SC stream ERROR at ${totalBytes / 1024} KB: ${e.javaClass.simpleName}: ${e.message}")
+                                        throw e
+                                    }
+                                }
+                            }
+                            val bufferedSource = loggingSource.buffer()
+                            val wrappedBody = object : okhttp3.ResponseBody() {
+                                override fun contentType() = body.contentType()
+                                override fun contentLength() = body.contentLength()
+                                override fun source() = bufferedSource
+                            }
+                            resp = resp.newBuilder().body(wrappedBody).build()
+                        }
+                    }
                     val tag = if (resp.code !in 200..299) req.url.toString().take(180) else host
-                    android.util.Log.d("MeloPlay", "${resp.code} <- $tag")
+                    if (resp.code !in 200..299) {
+                        android.util.Log.e("MeloPlay", "HTTP ${resp.code} <- $tag")
+                    }
                     resp
                 } catch (e: Exception) {
-                    android.util.Log.e("MeloPlay", "$host FAILED: ${e.javaClass.simpleName}: ${e.message}")
+                    val dt = System.currentTimeMillis() - t0
+                    android.util.Log.e("MeloPlay", "$host FAILED after ${dt}ms: ${e.javaClass.simpleName}: ${e.message}")
+                    com.melo.music.util.FileLog.e("MeloPlay", "$host FAILED after ${dt}ms: ${e.javaClass.simpleName}: ${e.message}")
                     throw e
                 }
             }
@@ -266,7 +300,13 @@ class PlaybackService : MediaSessionService() {
                 )
                 .setLoadControl(
                     DefaultLoadControl.Builder()
-                        .setBufferDurationsMs(15_000, 50_000, 500, 1_000)
+                        .setBufferDurationsMs(
+                            20_000,
+                            60_000,
+                            800,
+                            1_000,
+                        )
+                        .setPrioritizeTimeOverSizeThresholds(false)
                         .build(),
                 )
                 .build()
@@ -279,10 +319,17 @@ class PlaybackService : MediaSessionService() {
         switchStreamUrlCmd = { streamUrl, pos ->
             handler.post {
                 val curMeta = active.mediaMetadata
-                active.setMediaItem(
-                    MediaItem.Builder().setUri(streamUrl).setMediaMetadata(curMeta).build(),
-                    pos,
-                )
+                val isHls = com.melo.music.extractor.isHlsUrl(streamUrl)
+                val item = MediaItem.Builder()
+                    .setUri(streamUrl)
+                    .apply {
+                        if (isHls) {
+                            setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
+                        }
+                    }
+                    .setMediaMetadata(curMeta)
+                    .build()
+                active.setMediaItem(item, pos)
                 active.prepare()
                 active.play()
             }
@@ -489,9 +536,15 @@ class PlaybackService : MediaSessionService() {
             .setSubtitle(artist ?: "")
         artwork?.let { meta.setArtworkUri(android.net.Uri.parse(it)) }
         currentAudioStreamUrl = url
+        val isHls = com.melo.music.extractor.isHlsUrl(url)
         toP.setMediaItem(
             MediaItem.Builder()
                 .setUri(url)
+                .apply {
+                    if (isHls) {
+                        setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
+                    }
+                }
                 .setMediaMetadata(meta.build())
                 .build(),
         )

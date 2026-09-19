@@ -80,14 +80,13 @@
 
   a { color: inherit; text-decoration: none; }
 
-  /* ХЕДЕР: НА ВСЮ ШИРИНУ */
+  /* ХЕДЕР: НА ВСЮ ШИРИНУ (ПОЛНОСТЬЮ ПРОЗРАЧНЫЙ, ВИНЬЕТКА ЗАХОДИТ ПРЯМО НА НЕГО) */
   header {
     position: sticky;
     top: 0;
     z-index: 60;
-    background: rgba(255, 255, 255, 0.96);
-    backdrop-filter: blur(14px);
-    border-bottom: 1px solid var(--border);
+    background: transparent;
+    border-bottom: 1px solid rgba(0, 115, 75, 0.08);
     width: 100%;
   }
 
@@ -110,9 +109,23 @@
   }
 
   .brand img {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    width: 38px;
+    height: 38px;
+    border-radius: 0;
+    object-fit: cover;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='15' y='15' width='70' height='70' rx='18' fill='%23000'/%3E%3Crect x='15' y='15' width='70' height='70' rx='18' transform='rotate(45 50 50)' fill='%23000'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='15' y='15' width='70' height='70' rx='18' fill='%23000'/%3E%3Crect x='15' y='15' width='70' height='70' rx='18' transform='rotate(45 50 50)' fill='%23000'/%3E%3C/svg%3E");
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    transition: opacity 0.2s ease;
+  }
+
+  .brand:hover img {
+    opacity: 0.9;
   }
 
   .nav-links {
@@ -184,6 +197,87 @@
     padding: 60px 0 20px;
     text-align: center;
     width: 100%;
+    overflow: hidden;
+  }
+
+  /* АТМОСФЕРНЫЙ ФОН: НАЧИНАЕТСЯ С ВЕРХА СТРАНИЦЫ (ПОКРЫВАЕТ ШАПКУ И HERO) */
+  .hero-light-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 840px; /* плавно заходит на шапку и спускается по hero */
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+    /* Плавное растворение внизу перед смартфонами */
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 68%, transparent 100%);
+    mask-image: linear-gradient(180deg, #000 0%, #000 68%, transparent 100%);
+  }
+
+  /* 1. Виньетка: еще чутка светлее, мягкая и свежая */
+  .hero-vignette-glow {
+    position: absolute;
+    inset: 0;
+    background:
+      /* верхние углы на уровне шапки */
+      radial-gradient(ellipse 65% 55% at 0% 0%, rgba(167, 243, 208, 0.28) 0%, transparent 75%),
+      radial-gradient(ellipse 65% 55% at 100% 0%, rgba(153, 246, 228, 0.30) 0%, transparent 75%),
+      /* боковые зоны */
+      radial-gradient(circle at 3% 40%, rgba(186, 245, 220, 0.22) 0%, transparent 60%),
+      radial-gradient(circle at 97% 40%, rgba(175, 246, 232, 0.24) 0%, transparent 60%),
+      /* мягкий свет по верху шапки */
+      linear-gradient(180deg, rgba(200, 250, 228, 0.22) 0%, rgba(230, 253, 242, 0.08) 45%, transparent 70%);
+  }
+
+  /* 2. Рассеянные лучи (еще чутка светлее) */
+  .hero-subtle-rays {
+    position: absolute;
+    inset: 0;
+    filter: blur(64px);
+    opacity: 0.50;
+    pointer-events: none;
+  }
+
+  .hero-subtle-rays .ray {
+    position: absolute;
+    transform-origin: top center;
+    border-radius: 50%;
+  }
+
+  /* Левый мягкий луч (задевает шапку и заголовок) */
+  .hero-subtle-rays .ray-1 {
+    top: -60px;
+    left: 8%;
+    width: 290px;
+    height: 720px;
+    transform: rotate(20deg);
+    background: linear-gradient(180deg, rgba(74, 222, 168, 0.24) 0%, rgba(140, 240, 195, 0.09) 60%, transparent 85%);
+  }
+
+  /* Правый бирюзовый луч (задевает шапку, правую карточку и текст) */
+  .hero-subtle-rays .ray-2 {
+    top: -70px;
+    right: 12%;
+    width: 320px;
+    height: 760px;
+    transform: rotate(-22deg);
+    background: linear-gradient(180deg, rgba(69, 225, 206, 0.26) 0%, rgba(175, 248, 235, 0.09) 60%, transparent 85%);
+  }
+
+  /* 3. Сетка наложением с самого верха шапки */
+  .hero-mesh-grid {
+    position: absolute;
+    inset: 0;
+    background-image: 
+      linear-gradient(to right, rgba(0, 110, 70, 0.055) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0, 110, 70, 0.055) 1px, transparent 1px);
+    background-size: 42px 42px;
+    background-position: center top;
+    mix-blend-mode: multiply;
+    -webkit-mask-image: radial-gradient(ellipse 92% 75% at 50% 25%, #000 35%, rgba(0, 0, 0, 0.45) 65%, transparent 92%);
+    mask-image: radial-gradient(ellipse 92% 75% at 50% 25%, #000 35%, rgba(0, 0, 0, 0.45) 65%, transparent 92%);
+    pointer-events: none;
   }
 
   .hero-container {
@@ -382,27 +476,98 @@
     padding: 50px 44px 90px;
   }
 
-  .cards-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 28px;
+  .cards-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    width: 100%;
+  }
+
+  .cards-row {
+    display: flex;
+    gap: 24px;
+    width: 100%;
+    align-items: stretch;
+  }
+
+  /* Ряд 1: Изначально разные размеры карточек */
+  .row-1 #card-streams {
+    flex: 1.12;
+    min-height: 275px;
+    border-radius: 36px 20px 36px 20px;
+  }
+  .row-1 #card-wave {
+    flex: 0.88;
+    min-height: 275px;
+    border-radius: 20px 36px 20px 36px;
+  }
+
+  /* Наведение на «Каталог»: удлиняется по длине, сосед плавно уступает */
+  .row-1:has(#card-streams:hover) #card-streams {
+    flex: 1.28;
+  }
+  .row-1:has(#card-streams:hover) #card-wave {
+    flex: 0.72;
+  }
+
+  /* Наведение на «Волна Sea»: удлиняется по длине, сосед плавно уступает */
+  .row-1:has(#card-wave:hover) #card-wave {
+    flex: 1.24;
+  }
+  .row-1:has(#card-wave:hover) #card-streams {
+    flex: 0.76;
+  }
+
+  /* Ряд 2: Изначально другая высота и пропорции (Bento) */
+  .row-2 #card-byedpi {
+    flex: 0.88;
+    min-height: 300px;
+    border-radius: 20px 36px 20px 36px;
+  }
+  .row-2 #card-offline {
+    flex: 1.12;
+    min-height: 300px;
+    border-radius: 36px 20px 36px 20px;
+  }
+
+  /* Наведение на «ByeDPI»: удлиняется по длине, сосед плавно уступает */
+  .row-2:has(#card-byedpi:hover) #card-byedpi {
+    flex: 1.24;
+  }
+  .row-2:has(#card-byedpi:hover) #card-offline {
+    flex: 0.76;
+  }
+
+  /* Наведение на «Офлайн»: удлиняется по длине, сосед плавно уступает */
+  .row-2:has(#card-offline:hover) #card-offline {
+    flex: 1.28;
+  }
+  .row-2:has(#card-offline:hover) #card-byedpi {
+    flex: 0.72;
   }
 
   .m3-card {
-    border-radius: var(--radius-card);
-    padding: 44px 44px 38px;
+    padding: 38px 36px 32px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    min-height: 250px;
     position: relative;
     overflow: hidden;
     border: none;
-    transition: none;
+    box-shadow: none !important;
+    min-width: 0;
+    z-index: 1;
+    transform: none !important;
+    transition: flex 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                min-height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                height 0.28s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  .m3-card:hover {
-    transform: none;
+  /* Фиксация ширины контента: текст не пересчитывает переносы слов во время анимации! */
+  .card-content {
+    width: 350px;
+    max-width: none;
+    flex-shrink: 0;
   }
 
   .card-green { background-color: var(--card-green); }
@@ -443,6 +608,14 @@
     font-size: 15px;
     color: var(--primary);
     margin-top: auto;
+  }
+
+  .card-footer-link .material-symbols-rounded {
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .m3-card:hover .card-footer-link .material-symbols-rounded {
+    transform: translateX(4px);
   }
 
 
@@ -598,7 +771,21 @@
     .doodle-arrow { left: -16px; top: -10px; width: 46px; }
     .nav-full { padding: 0 24px; }
     .features-container { padding: 40px 24px 70px; }
-    .cards-grid { grid-template-columns: 1fr; }
+    .cards-row {
+      flex-direction: column !important;
+      gap: 20px;
+    }
+    .row-1 #card-streams, .row-1 #card-wave,
+    .row-2 #card-byedpi, .row-2 #card-offline {
+      flex: 1 1 auto !important;
+      min-height: auto !important;
+      height: auto !important;
+      border-radius: 28px !important;
+      padding: 32px 28px 26px !important;
+    }
+    .card-content {
+      width: 100% !important;
+    }
     .pano-card.outer { display: none; }
     .nav-links { display: none; }
   }
@@ -751,6 +938,15 @@
       min-height: auto;
     }
 
+    #card-streams, #card-wave, #card-byedpi, #card-offline {
+      min-height: auto;
+    }
+
+    #card-streams:hover, #card-wave:hover, #card-byedpi:hover, #card-offline:hover {
+      transform: none;
+      box-shadow: none;
+    }
+
     .m3-card h3 {
       font-size: 20px;
       margin-bottom: 10px;
@@ -801,6 +997,18 @@
 </head>
 <body>
 
+<!-- АТМОСФЕРНЫЙ ФОН: ВИНЬЕТКА И СЕТКА НАЧИНАЮТСЯ С САМОГО ВЕРХА СТРАНИЦЫ И ПОКРЫВАЮТ ШАПКУ И HERO -->
+<div class="hero-light-backdrop" aria-hidden="true">
+  <div class="hero-vignette-glow"></div>
+  <div class="hero-subtle-rays">
+    <div class="ray ray-1"></div>
+    <div class="ray ray-2"></div>
+    <div class="ray ray-3"></div>
+    <div class="ray ray-4"></div>
+  </div>
+  <div class="hero-mesh-grid"></div>
+</div>
+
 <!-- ХЕДЕР -->
 <header>
   <div class="nav-full">
@@ -829,6 +1037,7 @@
 
   <!-- HERO -->
   <section class="hero">
+
     <!-- Левая информационная карточка -->
     <div class="hero-side-card left">
       <div style="display: flex; align-items: center; gap: 6px; color: var(--primary);">
@@ -919,56 +1128,60 @@
 
   <!-- КАРТОЧКИ: ОСНОВНЫЕ ФИЧИ (БЕЗ АКЦЕНТА НА МИКРОФИЧАХ) -->
   <div class="features-container">
-    <div class="cards-grid">
-
-      <!-- Карточка 1: Каталог -->
-      <div class="m3-card card-green" id="card-streams">
-        <div>
-          <div class="card-tag">Каталог без ограничений</div>
-          <h3>YouTube Music и SoundCloud</h3>
-          <p>Слушайте любые композиции, редкие ремиксы и альбомы без создания учётных записей и ограничений по регионам. Потоки разрешаются прямо на устройстве.</p>
+    <div class="cards-layout">
+      <!-- Ряд 1: Каталог и Волна Sea -->
+      <div class="cards-row row-1">
+        <!-- Карточка 1: Каталог -->
+        <div class="m3-card card-green" id="card-streams">
+          <div class="card-content">
+            <div class="card-tag">Каталог без ограничений</div>
+            <h3>YouTube Music и SoundCloud</h3>
+            <p>Слушайте любые композиции, редкие ремиксы и альбомы без создания учётных записей и ограничений по регионам. Потоки разрешаются прямо на устройстве.</p>
+          </div>
           <a class="card-footer-link" href="#faq">
             Как устроено воспроизведение <span class="material-symbols-rounded">arrow_forward</span>
           </a>
         </div>
-      </div>
 
-      <!-- Карточка 2: Бесконечная персональная волна Sea -->
-      <div class="m3-card card-purple" id="card-wave">
-        <div>
-          <div class="card-tag">Умные рекомендации</div>
-          <h3>Бесконечная волна под ваш вкус</h3>
-          <p>Поток похожих треков, который подстраивается под ваши предпочтения. Алгоритм учитывает историю прослушиваний и пропуски, исключая повторы и нелюбимые жанры.</p>
+        <!-- Карточка 2: Бесконечная персональная волна Sea -->
+        <div class="m3-card card-purple" id="card-wave">
+          <div class="card-content">
+            <div class="card-tag">Умные рекомендации</div>
+            <h3>Бесконечная волна под ваш вкус</h3>
+            <p>Поток похожих треков, который подстраивается под ваши предпочтения. Алгоритм учитывает историю прослушиваний и пропуски, исключая повторы и нелюбимые жанры.</p>
+          </div>
           <a class="card-footer-link" href="#faq">
             Подробнее об алгоритме Sea <span class="material-symbols-rounded">arrow_forward</span>
           </a>
         </div>
       </div>
 
-      <!-- Карточка 3: ByeDPI -->
-      <div class="m3-card card-yellow" id="card-byedpi">
-        <div>
-          <div class="card-tag">Сетевая независимость</div>
-          <h3>Встроенный обход ByeDPI</h3>
-          <p>В бинарник приложения встроен нативный C-демон ByeDPI. Он фрагментирует TCP/TLS-пакеты на лету, поэтому музыка играет без заиканий и без сторонних VPN.</p>
+      <!-- Ряд 2: ByeDPI и Офлайн -->
+      <div class="cards-row row-2">
+        <!-- Карточка 3: ByeDPI -->
+        <div class="m3-card card-yellow" id="card-byedpi">
+          <div class="card-content">
+            <div class="card-tag">Сетевая независимость</div>
+            <h3>Встроенный обход ByeDPI</h3>
+            <p>В бинарник приложения встроен нативный C-демон ByeDPI. Он фрагментирует TCP/TLS-пакеты на лету, поэтому музыка играет без заиканий и без сторонних VPN.</p>
+          </div>
           <a class="card-footer-link" href="#faq">
             Подробнее о работе прокси <span class="material-symbols-rounded">arrow_forward</span>
           </a>
         </div>
-      </div>
 
-      <!-- Карточка 4: Офлайн -->
-      <div class="m3-card card-blue" id="card-offline">
-        <div>
-          <div class="card-tag">Автономное прослушивание</div>
-          <h3>Музыка без интернета</h3>
-          <p>Сохраняйте любимые треки и плейлисты в память телефона. Скачанная музыка доступна всегда — в самолёте, метро или за городом.</p>
+        <!-- Карточка 4: Офлайн -->
+        <div class="m3-card card-blue" id="card-offline">
+          <div class="card-content">
+            <div class="card-tag">Автономное прослушивание</div>
+            <h3>Музыка без интернета</h3>
+            <p>Сохраняйте любимые треки и плейлисты в память телефона. Скачанная музыка доступна всегда — в самолёте, метро или за городом.</p>
+          </div>
           <a class="card-footer-link" href="https://github.com/Bebrazui/Melo-Releases/releases/download/ALPHA/app-release.apk" download>
             Скачать и слушать офлайн <span class="material-symbols-rounded">arrow_forward</span>
           </a>
         </div>
       </div>
-
     </div>
   </div>
 

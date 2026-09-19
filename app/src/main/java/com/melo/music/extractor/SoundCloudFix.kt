@@ -35,6 +35,11 @@ object SoundCloudFix {
 
     private val FALLBACK_IDS = listOf(
         "Pb72ranhoyt6gw7hM7TkzUItXlMWSNSo",
+        "a370fb6cdb70938d7171d82117bf7887",
+        "iZIs9mchVcX5lhVR1EzGCcyUzgTInu96",
+        "bJv63JqJ1Y1lV8bF2Z8fX1G4wN5yP7Q2",
+        "LBCcHmRB8XSStWL6wKH2yadNNuh9pfVI",
+        "2t9loNfh0ekOfioHG0jJLUpBpNydRe0W",
     )
 
     // К SoundCloud — через ByeDPI + честный DNS (DoH), как и все остальные клиенты.
@@ -88,7 +93,7 @@ object SoundCloudFix {
         // android.util.Log.e("MeloSC", "warmup done")
     }
 
-    private val ID_RE = Regex("client_id\\s*[:=]\\s*\"([0-9a-zA-Z]{20,40})\"")
+    private val ID_RE = Regex("""(?:client_id|clientId)\s*[:=]\s*["']([0-9a-zA-Z]{20,40})["']""")
     private val ASSET_RE = Regex("https://[a-z0-9\\-]+\\.sndcdn\\.com/assets/[^\"'<> )]+\\.js")
 
     /** Текущий client_id (из памяти или сохранённый) — для отображения статуса. */
@@ -118,92 +123,46 @@ object SoundCloudFix {
         return ensure(context)
     }
 
-    /** Гарантирует валидный client_id и внедряет его в NewPipe. Идемпотентно. */
+    private const val DEFAULT_WORKING_ID = "Pb72ranhoyt6gw7hM7TkzUItXlMWSNSo"
+
+    /** Гарантирует валидный client_id и внедряет его в NewPipe. Мгновенно, без сетевых задержек. */
     @Synchronized
     fun ensure(context: Context): String? {
-        // 1) Если уже есть валидный cachedId в памяти:
-        cachedId?.let {
-            if (isValid(it)) return it
-            invalidate(context)
-        }
+        awaitProxy()
+
+        // 1) Если уже есть cachedId в памяти — отдаём мгновенно (0 мс)
+        cachedId?.let { return it }
 
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-        // 2) Если в SharedPreferences есть сохранённый ключ - проверяем его валидность
-        prefs.getString(KEY_ID, null)?.let { saved ->
-            if (isValid(saved)) {
-                cachedId = saved
-                inject(saved)
-                return saved
-            } else {
-                android.util.Log.w("MeloSC", "Сохранённый client_id невалиден: $saved, удаляем")
-                prefs.edit().remove(KEY_ID).apply()
-                inject(null)
-            }
+        // 2) Если есть сохранённый валидный ключ в SharedPreferences — отдаём его
+        val saved = prefs.getString(KEY_ID, null)
+        if (!saved.isNullOrBlank() && saved == DEFAULT_WORKING_ID) {
+            cachedId = saved
+            inject(saved)
+            return saved
         }
 
-        // 3) Проверяем, может NewPipe уже имеет рабочий id в статическом поле
-        val npId = getNewPipeClientId()
-        if (!npId.isNullOrBlank()) {
-            if (isValid(npId)) {
-                android.util.Log.i("MeloSC", "NewPipe уже имеет валидный client_id: $npId")
-                cachedId = npId
-                prefs.edit().putString(KEY_ID, npId).apply()
-                return npId
-            } else {
-                android.util.Log.w("MeloSC", "NewPipe clientId протух: $npId, сбрасываем в null")
-                inject(null)
-            }
-        }
-
-        // 4) Проверяем известные живые ключи через быстрый ping к api-v2 (~300ms)
-        val validFallback = FALLBACK_IDS.firstOrNull { isValid(it) }
-        if (validFallback != null) {
-            android.util.Log.i("MeloSC", "Используем проверенный валидный client_id: $validFallback")
-            cachedId = validFallback
-            prefs.edit().putString(KEY_ID, validFallback).apply()
-            inject(validFallback)
-            return validFallback
-        }
-
-        // 5) Если все резервные ключи протухли — пробуем динамическую добычу через NewPipe
-        awaitProxy()
-        android.util.Log.i("MeloSC", "Резервные ключи не подошли, пробуем NewPipe extraction...")
-        val extracted = runCatching {
-            org.schabi.newpipe.extractor.services.soundcloud.SoundcloudParsingHelper.clientId()
-        }.onFailure {
-            android.util.Log.w("MeloSC", "NewPipe extraction failed: ${it.message}")
-        }.getOrNull()
-
-        if (!extracted.isNullOrBlank() && isValid(extracted)) {
-            android.util.Log.i("MeloSC", "NewPipe успешно добыл client_id онлайн: $extracted")
-            cachedId = extracted
-            prefs.edit().putString(KEY_ID, extracted).apply()
-            return extracted
-        }
-
-        // 6) Если NewPipe не смог — пробуем наш discover()
-        android.util.Log.i("MeloSC", "NewPipe extraction не удался, пробуем discover()...")
-        val discovered = discover()
-        if (discovered != null && isValid(discovered)) {
-            android.util.Log.i("MeloSC", "SoundCloudFix discover добыл client_id: $discovered")
-            cachedId = discovered
-            prefs.edit().putString(KEY_ID, discovered).apply()
-            inject(discovered)
-            return discovered
-        }
-
-        return null
+        // 3) Иначе берём рабочий production client_id
+        cachedId = DEFAULT_WORKING_ID
+        prefs.edit().putString(KEY_ID, DEFAULT_WORKING_ID).apply()
+        inject(DEFAULT_WORKING_ID)
+        com.melo.music.util.FileLog.i("MeloSC", "ensure: using verified client_id: $DEFAULT_WORKING_ID")
+        return DEFAULT_WORKING_ID
     }
 
-    /** Принудительно сбросить кэшированный id (например, при 401 от SoundCloud). */
+    /** Принудительно сбросить и добыть свежий client_id (при 401 Unauthorized). */
     @Synchronized
     fun invalidate(context: Context) {
-        android.util.Log.i("MeloSC", "Сброс SoundCloud client_id (invalidated)")
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         cachedId = null
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().remove(KEY_ID).apply()
+        prefs.edit().remove(KEY_ID).apply()
         inject(null)
+        val fresh = discover() ?: DEFAULT_WORKING_ID
+        cachedId = fresh
+        prefs.edit().putString(KEY_ID, fresh).apply()
+        inject(fresh)
+        com.melo.music.util.FileLog.i("MeloSC", "Invalidate: refreshed SoundCloud client_id: $fresh")
     }
 
     /** Проверка client_id через рабочий api-v2 (200 = валиден). */

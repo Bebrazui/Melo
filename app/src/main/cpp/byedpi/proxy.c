@@ -430,7 +430,7 @@ int create_conn(struct poolhd *pool,
         return -1;
     }
     #ifdef __linux__
-    int syn_count = 1;
+    int syn_count = 3;
     if (setsockopt(sfd, IPPROTO_TCP,
             TCP_SYNCNT, (char *)&syn_count, sizeof(syn_count))) {
         uniperror("setsockopt TCP_SYNCNT");
