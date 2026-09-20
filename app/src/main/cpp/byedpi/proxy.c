@@ -1053,7 +1053,7 @@ int listen_socket(const union sockaddr_u *srv)
         close(srvfd);
         return -1;
     }
-    if (listen(srvfd, 10)) {
+    if (listen(srvfd, 128)) {
         uniperror("listen");
         close(srvfd);
         return -1;

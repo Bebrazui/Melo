@@ -37,9 +37,6 @@ import java.util.concurrent.TimeUnit
  */
 class MeloApp : Application(), ImageLoaderFactory {
 
-    /** Лимит одновременных запросов обложек SoundCloud (i1-i4): при шторме ByeDPI рвёт коннекты. */
-    private val scImgSemaphore = java.util.concurrent.Semaphore(8)
-
     override fun onCreate() {
         super.onCreate()
         CrashHandler.install(this)
@@ -93,68 +90,99 @@ class MeloApp : Application(), ImageLoaderFactory {
      */
     override fun newImageLoader(): ImageLoader {
         val dispatcher = Dispatcher().apply {
-            maxRequests = 64
-            maxRequestsPerHost = 8
+            maxRequests = 10
+            maxRequestsPerHost = 4
         }
         val clientBuilder = OkHttpClient.Builder()
             .dispatcher(dispatcher)
+            .retryOnConnectionFailure(true)
             .dns(com.melo.music.net.MeloNet.dns)
-            .connectTimeout(6, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
             // ByeDPI + честный DNS.
             // HTTP/1.1: десинк ByeDPI ломает HTTP/2 (обложки виснут).
             .proxySelector(com.melo.music.net.MeloNet.byedpiSelector)
             .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
             .addInterceptor { chain ->
-                val host = chain.request().url.host
+                val origReq = chain.request()
+                val host = origReq.url.host
                 val sc = host.contains("sndcdn") || host.contains("soundcloud")
-                // SoundCloud-обложки t500x500 (~73КБ) захлёбываются на ByeDPI; t200x200
-                // (~10КБ) пролезает надёжно и для мелких превью списка более чем хватает.
-                val origUrl = chain.request().url.toString()
-                val url = if (sc) {
-                    origUrl.replace(Regex("-(?:large|t\\d+x\\d+|original)\\.(jpg|jpeg|png)"), "-t200x200.$1")
+                val origUrl = origReq.url.toString()
+
+                val isAvatar = origUrl.contains("/avatars-")
+                val is500 = origUrl.contains("-t500x500.")
+                val is300 = origUrl.contains("-t300x300.")
+                val primaryUrl = if (sc) {
+                    if (isAvatar) {
+                        if (!is300) {
+                            origUrl.replace(Regex("-(?:large|badge|small|mini|t500x500)\\.(jpg|jpeg|png)"), "-t300x300.$1")
+                        } else {
+                            origUrl
+                        }
+                    } else {
+                        if (!is500) {
+                            origUrl.replace(Regex("-(?:large|badge|small|mini|t300x300)\\.(jpg|jpeg|png)"), "-t500x500.$1")
+                        } else {
+                            origUrl
+                        }
+                    }
                 } else {
                     origUrl
                 }
-                var reqBuilder = chain.request().newBuilder().url(url).header(
-                    "User-Agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
-                )
-                if (sc) {
-                    reqBuilder = reqBuilder.header("Connection", "close")
-                }
-                val request = reqBuilder.build()
-                if (!sc) return@addInterceptor chain.proceed(request)
-                // SoundCloud-обложки: ограничиваем параллельность + повторяем при reset
-                // (Socket closed падает за ~100мс на свежем коннекте, повтор дёшев).
-                // Coil сам не ретраит — без этого упавшая обложка остаётся серой.
-                scImgSemaphore.acquire()
+                val fallbackUrl = if (sc) {
+                    primaryUrl.replace("-t500x500.", "-large.").replace("-t300x300.", "-large.")
+                } else null
+
+                com.melo.music.util.FileLog.d("MeloImg", "--> GET $primaryUrl (sc=$sc, avatar=$isAvatar)")
+
+                val primaryRequest = origReq.newBuilder()
+                    .url(primaryUrl)
+                    .header(
+                        "User-Agent",
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                    )
+                    .build()
+
+                var resp: okhttp3.Response? = null
                 try {
-                    var last: Exception? = null
-                    repeat(4) {
-                        try {
-                            val resp = chain
-                                .withConnectTimeout(8, TimeUnit.SECONDS)
-                                .withReadTimeout(12, TimeUnit.SECONDS)
-                                .proceed(request)
-                            if (resp.code in 400..499) return@addInterceptor resp
-                            if (!resp.isSuccessful) { resp.close(); last = java.io.IOException("HTTP ${resp.code}"); return@repeat }
-                            // Читаем ВСЁ тело здесь — под таймаут+ретрай (иначе Coil
-                            // дочитывает тело при декоде и ловит таймаут через ByeDPI).
-                            val ct = resp.body?.contentType()
-                            val bytes = resp.body!!.bytes()
-                            return@addInterceptor resp.newBuilder()
-                                .body(bytes.toResponseBody(ct))
+                    resp = chain.proceed(primaryRequest)
+                    com.melo.music.util.FileLog.d("MeloImg", "<-- HTTP ${resp.code} for $primaryUrl")
+                    if (sc && resp.code == 404 && fallbackUrl != null && fallbackUrl != primaryUrl) {
+                        com.melo.music.util.FileLog.w("MeloImg", "404 on high-res -> fallback to: $fallbackUrl")
+                        resp.close()
+                        val fallbackReq = origReq.newBuilder()
+                            .url(fallbackUrl)
+                            .header(
+                                "User-Agent",
+                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                            )
+                            .build()
+                        resp = chain.withConnectTimeout(chain.connectTimeoutMillis(), TimeUnit.MILLISECONDS)
+                            .proceed(fallbackReq)
+                        com.melo.music.util.FileLog.d("MeloImg", "<-- HTTP ${resp.code} for fallback $fallbackUrl")
+                    }
+                } catch (e: Exception) {
+                    com.melo.music.util.FileLog.e("MeloImg", "Primary FAIL $primaryUrl: ${e.javaClass.simpleName} ${e.message}")
+                    if (sc && fallbackUrl != null && fallbackUrl != primaryUrl) {
+                        com.melo.music.util.FileLog.w("MeloImg", "Exception on high-res -> trying fallback $fallbackUrl")
+                        resp = runCatching {
+                            val fallbackReq = origReq.newBuilder()
+                                .url(fallbackUrl)
+                                .header(
+                                    "User-Agent",
+                                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                                )
                                 .build()
-                        } catch (e: Exception) {
-                            last = e
+                            chain.withConnectTimeout(chain.connectTimeoutMillis(), TimeUnit.MILLISECONDS)
+                                .proceed(fallbackReq)
+                        }.getOrNull()
+                        if (resp != null) {
+                            com.melo.music.util.FileLog.d("MeloImg", "<-- HTTP ${resp.code} for fallback $fallbackUrl")
                         }
                     }
-                    android.util.Log.e("MeloImg", "FAILx4 ${last?.javaClass?.simpleName} ${request.url}")
-                    throw last ?: java.io.IOException("img fail")
-                } finally {
-                    scImgSemaphore.release()
+                    if (resp == null) throw e
                 }
+                resp
             }
         val client = clientBuilder.build()
         return ImageLoader.Builder(this)

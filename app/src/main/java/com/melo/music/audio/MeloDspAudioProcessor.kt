@@ -45,6 +45,20 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
     var eqEnabled: Boolean = false
     private val eqBands = Array(5) { BiquadPeakFilter() }
 
+    // ── Лютый Басс Буст (Monster Bass Boost™) ──
+    @Volatile
+    var bassBoostEnabled: Boolean = false
+    @Volatile
+    var bassBoostStrength: Float = 0.85f // 0.1f .. 1.0f
+    private val bassBoostShelfL = BiquadLowShelfFilter()
+    private val bassBoostShelfR = BiquadLowShelfFilter()
+    private val bassBoostSubL = BiquadPeakFilter()
+    private val bassBoostSubR = BiquadPeakFilter()
+    private val bassBoostPunchL = BiquadPeakFilter()
+    private val bassBoostPunchR = BiquadPeakFilter()
+    private val bassBoostThumpL = BiquadPeakFilter()
+    private val bassBoostThumpR = BiquadPeakFilter()
+
     // ── Crystal Audio™ (Super-Resolution Harmonic Exciter + Deep Bass + Anti-Clipping) ──
     @Volatile
     var crystalEnabled: Boolean = false
@@ -106,7 +120,24 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         sampleRate = inputAudioFormat.sampleRate.coerceAtLeast(8000)
         initEqFilters(sampleRate)
         initCrystalFilters(sampleRate)
+        initBassBoostFilters(sampleRate)
         return inputAudioFormat
+    }
+
+    private fun initBassBoostFilters(sr: Int) {
+        val shelfFreq = (125f).coerceAtMost(sr * 0.25f)
+        val subFreq = (65f).coerceAtMost(sr * 0.15f)
+        val punchFreq = (115f).coerceAtMost(sr * 0.22f)
+        val thumpFreq = (175f).coerceAtMost(sr * 0.30f)
+
+        bassBoostShelfL.set(shelfFreq, 0.80f, 15.0f, sr.toFloat())
+        bassBoostShelfR.set(shelfFreq, 0.80f, 15.0f, sr.toFloat())
+        bassBoostSubL.set(subFreq, 1.2f, 9.0f, sr.toFloat())
+        bassBoostSubR.set(subFreq, 1.2f, 9.0f, sr.toFloat())
+        bassBoostPunchL.set(punchFreq, 1.1f, 8.0f, sr.toFloat())
+        bassBoostPunchR.set(punchFreq, 1.1f, 8.0f, sr.toFloat())
+        bassBoostThumpL.set(thumpFreq, 1.0f, 5.5f, sr.toFloat())
+        bassBoostThumpR.set(thumpFreq, 1.0f, 5.5f, sr.toFloat())
     }
 
     private fun initCrystalFilters(sr: Int) {
@@ -357,42 +388,70 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 right += bassPunch
             }
 
+            // 4.5 Лютый Басс Буст (Monster Bass Boost™)
+            if (bassBoostEnabled) {
+                val strengthFactor = bassBoostStrength.coerceIn(0.1f, 1.0f)
+
+                // 4-каскадная фильтрация: низкая полка 125 Гц (+15 dB) + суб-бас 65 Гц (+9 dB) + панч 115 Гц (+8 dB) + памп 175 Гц (+5.5 dB)
+                val bL = bassBoostThumpL.process(bassBoostPunchL.process(bassBoostSubL.process(bassBoostShelfL.process(left))))
+                val bR = bassBoostThumpR.process(bassBoostPunchR.process(bassBoostSubR.process(bassBoostShelfR.process(right))))
+
+                // Извлекаем добавленный басовый контент с учётом силы буста
+                val addedBassL = (bL - left) * strengthFactor
+                val addedBassR = (bR - right) * strengthFactor
+
+                // Лампово-плёночный овердрайв баса (сочные аналоговые обертоны, пробивающие любые динамики)
+                val satL = tanh(addedBassL / 16000f) * 19000f * strengthFactor
+                val satR = tanh(addedBassR / 16000f) * 19000f * strengthFactor
+
+                left += satL
+                right += satR
+            }
+
             // 5. Усиление громкости (Gain Booster)
             if (gain != 1.0f) {
                 left *= gain
                 right *= gain
             }
 
-            // 6. Мастеринговый адаптивный лимитер с огибающей (Envelope-Follower Anti-Clipping Limiter)
-            // Предотвращает пердёж динамиков, сглаживая перегрузы во времени, а не срезая волну
-            val peak = max(abs(left), abs(right))
-            val threshold = 31000f // Защитный headroom против искажений ЦАП и динамиков
-
-            val targetGain = if (peak > threshold) (threshold / peak) else 1.0f
-
-            // Атака мгновенная (0 сэмплов) — ни один пик физически не сможет превысить порог
-            if (targetGain < limiterGain) {
-                limiterGain = targetGain
+            // 6. Мастеринговый адаптивный лимитер и защита от клиппинга
+            if (bassBoostEnabled) {
+                // Мгновенный музыкальный мягкий сатуратор без зажатия и дакинга остального микса
+                left = softLimitSample(left)
+                right = softLimitSample(right)
             } else {
-                // Плавный музыкальный релиз (~40 мс) — волна баса сохраняет чистую форму без сплющивания
-                limiterGain += (targetGain - limiterGain) * limiterReleaseCoeff
+                val peak = max(abs(left), abs(right))
+                val threshold = 31000f // Защитный headroom против искажений ЦАП и динамиков
+
+                val targetGain = if (peak > threshold) (threshold / peak) else 1.0f
+
+                // Атака мгновенная (0 сэмплов) — ни один пик физически не сможет превысить порог
+                if (targetGain < limiterGain) {
+                    limiterGain = targetGain
+                } else {
+                    // Плавный музыкальный релиз (~40 мс) — волна баса сохраняет чистую форму без сплющивания
+                    limiterGain += (targetGain - limiterGain) * limiterReleaseCoeff
+                }
+
+                left *= limiterGain
+                right *= limiterGain
+
+                // Мягкое аналоговое насыщение для предотвращения цифрового клиппинга
+                val normL = left / 32768f
+                val normR = right / 32768f
+                val finalL = if (abs(normL) > 0.95f) {
+                    sign(normL) * (0.95f + 0.05f * tanh((abs(normL) - 0.95f) / 0.18f))
+                } else normL
+                val finalR = if (abs(normR) > 0.95f) {
+                    sign(normR) * (0.95f + 0.05f * tanh((abs(normR) - 0.95f) / 0.18f))
+                } else normR
+
+                left = finalL * 32767f
+                right = finalR * 32767f
             }
 
-            left *= limiterGain
-            right *= limiterGain
-
-            // Мягкое аналоговое насыщение для предотвращения цифрового клиппинга
-            val normL = left / 32768f
-            val normR = right / 32768f
-            val finalL = if (abs(normL) > 0.95f) {
-                sign(normL) * (0.95f + 0.05f * tanh((abs(normL) - 0.95f) / 0.18f))
-            } else normL
-            val finalR = if (abs(normR) > 0.95f) {
-                sign(normR) * (0.95f + 0.05f * tanh((abs(normR) - 0.95f) / 0.18f))
-            } else normR
-
-            val outL = (finalL * 32767f).toInt().coerceIn(-32768, 32767).toShort()
-            val outR = (finalR * 32767f).toInt().coerceIn(-32768, 32767).toShort()
+            val outL = left.toInt().coerceIn(-32768, 32767).toShort()
+            val outR = right.toInt().coerceIn(-32768, 32767).toShort()
 
             output.putShort(outL)
             output.putShort(outR)
@@ -416,6 +475,10 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         crystalBandL.reset(); crystalBandR.reset()
         crystalHighPassL.reset(); crystalHighPassR.reset()
         crystalSubBassLpL.reset(); crystalSubBassLpR.reset()
+        bassBoostShelfL.reset(); bassBoostShelfR.reset()
+        bassBoostSubL.reset(); bassBoostSubR.reset()
+        bassBoostPunchL.reset(); bassBoostPunchR.reset()
+        bassBoostThumpL.reset(); bassBoostThumpR.reset()
         crystalHighEnergyEnv = 0f
         crystalSubEnergyEnv = 0f
         limiterGain = 1.0f
@@ -430,6 +493,14 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
 
     override fun onReset() {
         onFlush()
+    }
+
+    private fun softLimitSample(x: Float): Float {
+        val absX = abs(x)
+        if (absX <= 24000f) return x
+        val excess = absX - 24000f
+        val compressed = 24000f + tanh(excess / 7500f) * 7500f
+        return sign(x) * compressed.coerceAtMost(32000f)
     }
 
     private class CombFilter(size: Int) {
@@ -585,6 +656,41 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
             b2 = ((1.0f - cosW) / 2.0f) / a0
             a1 = (-2.0f * cosW) / a0
             a2 = (1.0f - alpha) / a0
+        }
+
+        fun process(x: Float): Float {
+            val y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+            x2 = x1; x1 = x
+            y2 = y1; y1 = y
+            return if (y.isNaN()) 0f else y
+        }
+
+        fun reset() {
+            x1 = 0f; x2 = 0f; y1 = 0f; y2 = 0f
+        }
+    }
+
+    /**
+     * Полочный фильтр низких частот 2-го порядка (Audio EQ Cookbook Low-Shelf) для мощного басс-буста
+     */
+    private class BiquadLowShelfFilter {
+        var b0 = 1f; var b1 = 0f; var b2 = 0f; var a1 = 0f; var a2 = 0f
+        var x1 = 0f; var x2 = 0f; var y1 = 0f; var y2 = 0f
+
+        fun set(freq: Float, q: Float, gainDb: Float, sr: Float) {
+            val a = 10.0.pow((gainDb / 40.0)).toFloat()
+            val w0 = (2.0 * Math.PI * freq / sr).toFloat()
+            val cosW = cos(w0.toDouble()).toFloat()
+            val sinW = sin(w0.toDouble()).toFloat()
+            val alpha = (sinW / (2.0 * q)).toFloat()
+            val twoSqrtAAlpha = 2.0f * sqrt(a) * alpha
+
+            val a0 = (a + 1.0f) + (a - 1.0f) * cosW + twoSqrtAAlpha
+            b0 = (a * ((a + 1.0f) - (a - 1.0f) * cosW + twoSqrtAAlpha)) / a0
+            b1 = (2.0f * a * ((a - 1.0f) - (a + 1.0f) * cosW)) / a0
+            b2 = (a * ((a + 1.0f) - (a - 1.0f) * cosW - twoSqrtAAlpha)) / a0
+            a1 = (-2.0f * ((a - 1.0f) + (a + 1.0f) * cosW)) / a0
+            a2 = ((a + 1.0f) + (a - 1.0f) * cosW - twoSqrtAAlpha) / a0
         }
 
         fun process(x: Float): Float {

@@ -302,6 +302,11 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(16.dp))
 
+        // ── 💥 Лютый Басс Буст (Monster Bass Boost™) ──────────────
+        BassBoostSection()
+
+        Spacer(Modifier.height(16.dp))
+
         // ── 🔊 Усиление и Реверберация (Bento Card) ──────────────
         GainReverbSection()
 
@@ -1239,6 +1244,151 @@ private fun CrystalAudioSection() {
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "Психоакустический алгоритм генерирует ультра-высокие гармоники (14–22+ кГц), срезанные сжатием MP3/AAC, возвращая чистоту тарелкам, дыханию и струнам.",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                        color = subtitleColor,
+                        lineHeight = 16.sp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BassBoostSection() {
+    var enabled by remember { mutableStateOf(EqualizerManager.isBassBoostEnabled()) }
+    var strength by remember { mutableIntStateOf(EqualizerManager.getBassBoostStrength()) }
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
+    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
+    val titleColor = cs.onSurface
+    val subtitleColor = cs.onSurfaceVariant
+    val trackInactive = if (isDark) Color.White.copy(alpha = 0.12f) else cs.outlineVariant.copy(alpha = 0.35f)
+
+    Surface(
+        shape = RoundedCornerShape(28.dp),
+        color = cardBg,
+        border = cardBorder,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = cs.primaryContainer,
+                    modifier = Modifier.size(46.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.GraphicEq,
+                            contentDescription = null,
+                            tint = cs.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Басс буст",
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                            fontWeight = FontWeight.Bold,
+                            color = titleColor,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = cs.primary.copy(alpha = 0.2f),
+                            border = BorderStroke(0.5.dp, cs.primary.copy(alpha = 0.5f)),
+                        ) {
+                            Text(
+                                "BASS",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                fontWeight = FontWeight.Black,
+                                color = cs.primary,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        if (enabled) "Суб-бас +24 dB, плотный панч и ламповый овердрайв" else "Басс-буст выключен",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (enabled) cs.primary else subtitleColor,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = {
+                        ClickFeedback.play()
+                        enabled = it
+                        EqualizerManager.setBassBoostEnabled(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = cs.onPrimary,
+                        checkedTrackColor = cs.primary,
+                    ),
+                )
+            }
+
+            AnimatedVisibility(
+                visible = enabled,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
+                Column {
+                    Spacer(Modifier.height(18.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            "Сила басс-буста",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = titleColor,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Surface(
+                            shape = CircleShape,
+                            color = cs.primaryContainer.copy(alpha = 0.7f),
+                        ) {
+                            Text(
+                                "$strength%",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = cs.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Slider(
+                        value = strength.toFloat(),
+                        onValueChange = {
+                            strength = it.toInt()
+                            EqualizerManager.setBassBoostStrength(strength)
+                        },
+                        valueRange = 10f..100f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = cs.primary,
+                            activeTrackColor = cs.primary,
+                            inactiveTrackColor = trackInactive,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Регулирует мощность 4-каскадного фильтра НЧ (30–180 Гц) и аналогового сатуратора. Кнопка «Bass» в меню плеера переключает этот эффект на лету.",
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                         color = subtitleColor,
                         lineHeight = 16.sp,

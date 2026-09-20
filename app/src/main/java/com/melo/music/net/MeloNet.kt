@@ -32,7 +32,11 @@ object MeloNet {
                 listOf(Proxy.NO_PROXY)
             }
         }
-        override fun connectFailed(uri: URI, sa: java.net.SocketAddress, ioe: java.io.IOException) {}
+        override fun connectFailed(uri: URI, sa: java.net.SocketAddress, ioe: java.io.IOException) {
+            if (sa is InetSocketAddress && sa.port == ByeDpiProxy.DEFAULT_PORT) {
+                ByeDpiProxy.ensureRunning()
+            }
+        }
     }
 
     // Бутстрап для DoH: прямой коннект без проксирования и без задержек.
@@ -57,22 +61,36 @@ object MeloNet {
     }
 
     /**
-     * Безопасный резолвер: системный DNS отвечает мгновенно (<5мс).
-     * Если системный DNS дал сбой или не разрешил имя, пробуем DoH.
-     * Для заблокированного по IP soundcloud.com подставляем живой Anycast CloudFront IP (a-v2.sndcdn.com).
+     * Безопасный резолвер: для заблокированных сервисов (SoundCloud, YouTube, Bandcamp)
+     * сразу опрашивает DoH (Cloudflare 1.1.1.1), чтобы избежать подмены IP системным DNS провайдера в РФ.
+     * Для остальных хостов сначала пробует быстрый системный DNS.
      */
     val dns: Dns = object : Dns {
         override fun lookup(hostname: String): List<InetAddress> {
-            return resolveInternal(hostname)
-        }
+            val isBlocked = hostname.contains("sndcdn") ||
+                hostname.contains("soundcloud") ||
+                hostname.contains("youtube") ||
+                hostname.contains("googlevideo") ||
+                hostname.contains("ytimg") ||
+                hostname.contains("ggpht") ||
+                hostname.contains("bcbits") ||
+                hostname.contains("bandcamp") ||
+                hostname.contains("discord")
 
-        private fun resolveInternal(hostname: String): List<InetAddress> {
+            if (isBlocked) {
+                return try {
+                    doh.lookup(hostname)
+                } catch (_: Exception) {
+                    Dns.SYSTEM.lookup(hostname)
+                }
+            }
+
             return try {
                 Dns.SYSTEM.lookup(hostname)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 try {
                     doh.lookup(hostname)
-                } catch (e2: Exception) {
+                } catch (e: Exception) {
                     throw e
                 }
             }

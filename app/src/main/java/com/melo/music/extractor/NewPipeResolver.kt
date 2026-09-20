@@ -196,8 +196,11 @@ object NewPipeResolver {
                                 uploader = info.uploaderName?.takeIf { it.isNotBlank() },
                                 url = info.url ?: url,
                                 durationSeconds = info.duration,
-                                thumbnailUrl = info.thumbnails.maxByOrNull { it.height }?.url
-                                    ?: info.thumbnails.firstOrNull()?.url,
+                                thumbnailUrl = fixThumb(
+                                    info.thumbnails.maxByOrNull { it.height }?.url
+                                        ?: info.thumbnails.firstOrNull()?.url,
+                                    if (isSoundCloud(url)) Source.SOUNDCLOUD else Source.YOUTUBE_MUSIC,
+                                ),
                                 source = if (isSoundCloud(url)) Source.SOUNDCLOUD else Source.YOUTUBE_MUSIC,
                                 kind = ItemKind.TRACK,
                             )
@@ -228,10 +231,14 @@ object NewPipeResolver {
 
         suspend fun emitAll(tag: String, source: Source, block: suspend () -> List<TrackItem>) {
             val part = runCatching { block() }
-                .onFailure { android.util.Log.e("MeloSearch", "$tag failed: $it", it) }
+                .onFailure {
+                    android.util.Log.e("MeloSearch", "$tag failed: $it", it)
+                    com.melo.music.util.MeloLog.e("MeloSearch", "$tag search failed: ${it.message}", it)
+                }
                 .getOrDefault(emptyList())
                 .take(15)
             android.util.Log.i("MeloSearch", "$tag -> ${part.size} items")
+            com.melo.music.util.MeloLog.d("MeloSearch", "$tag -> ${part.size} items")
             if (part.isEmpty()) return
             mutex.withLock {
                 allItems.addAll(part)
@@ -782,13 +789,27 @@ object NewPipeResolver {
         else -> "popular music"
     }
 
+    private fun fixThumb(url: String?, source: Source): String? {
+        if (url == null) return null
+        if (source == Source.SOUNDCLOUD || url.contains("sndcdn.com") || url.contains("soundcloud.com")) {
+            return if (url.contains("/avatars-")) {
+                url.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t300x300.$1")
+            } else {
+                url.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t500x500.$1")
+            }
+        }
+        return url
+    }
+
     private fun StreamInfoItem.toTrackItem(source: Source) = TrackItem(
         title = name,
         uploader = uploaderName?.takeIf { it.isNotBlank() },
         url = url,
         durationSeconds = duration,
-        thumbnailUrl = thumbnails.maxByOrNull { it.height }?.url
-            ?: thumbnails.firstOrNull()?.url,
+        thumbnailUrl = fixThumb(
+            thumbnails.maxByOrNull { it.height }?.url ?: thumbnails.firstOrNull()?.url,
+            source,
+        ),
         source = source,
         kind = ItemKind.TRACK,
         viewCount = runCatching { viewCount }.getOrDefault(0L),
@@ -799,8 +820,10 @@ object NewPipeResolver {
         uploader = "Исполнитель",
         url = url,
         durationSeconds = 0,
-        thumbnailUrl = thumbnails.maxByOrNull { it.height }?.url
-            ?: thumbnails.firstOrNull()?.url,
+        thumbnailUrl = fixThumb(
+            thumbnails.maxByOrNull { it.height }?.url ?: thumbnails.firstOrNull()?.url,
+            source,
+        ),
         source = source,
         kind = ItemKind.ARTIST,
     )
@@ -810,8 +833,10 @@ object NewPipeResolver {
         uploader = uploaderName?.takeIf { it.isNotBlank() },
         url = url,
         durationSeconds = 0,
-        thumbnailUrl = thumbnails.maxByOrNull { it.height }?.url
-            ?: thumbnails.firstOrNull()?.url,
+        thumbnailUrl = fixThumb(
+            thumbnails.maxByOrNull { it.height }?.url ?: thumbnails.firstOrNull()?.url,
+            source,
+        ),
         source = source,
         kind = ItemKind.ALBUM,
     )

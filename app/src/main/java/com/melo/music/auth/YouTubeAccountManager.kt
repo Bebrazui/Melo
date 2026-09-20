@@ -145,9 +145,10 @@ object YouTubeAccountManager {
      * Формат: SAPISIDHASH <timestamp>_<sha1(timestamp + " " + sapisid + " " + origin)>
      */
     fun getSapisidHash(origin: String = "https://music.youtube.com"): String? {
-        val cookies = cachedCookieString ?: return null
+        val cookies = getCookies() ?: return null
         val sapisid = extractCookieValue(cookies, "SAPISID")
             ?: extractCookieValue(cookies, "__Secure-3PAPISID")
+            ?: extractCookieValue(cookies, "__Secure-1PAPISID")
             ?: return null
 
         val timestamp = System.currentTimeMillis() / 1000

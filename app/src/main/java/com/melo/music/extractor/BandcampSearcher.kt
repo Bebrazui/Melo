@@ -14,6 +14,9 @@ import java.util.concurrent.TimeUnit
 object BandcampSearcher {
 
     private val client = OkHttpClient.Builder()
+        .dns(com.melo.music.net.MeloNet.dns)
+        .proxySelector(com.melo.music.net.MeloNet.byedpiSelector)
+        .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
         .callTimeout(10, TimeUnit.SECONDS)
         .build()
 
@@ -29,7 +32,7 @@ object BandcampSearcher {
             .url(url)
             .header(
                 "User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             )
             .build()
 
@@ -53,9 +56,15 @@ object BandcampSearcher {
                     val trackUrl = fixUrl(rawUrl)
                     if (trackUrl.isBlank()) continue
 
-                    // API отдаёт art_id — добавляем префикс `a` для CDN.
+                    // API отдаёт art_id или img — собираем thumbnail
+                    val artId = obj.optLong("art_id", 0L).takeIf { it > 0 }
+                        ?: obj.optLong("img_id", 0L).takeIf { it > 0 }
                     val rawThumb = obj.optString("img", "").ifBlank { null }
-                    val thumb = rawThumb?.let { fixThumb(it) }
+                    val thumb = when {
+                        artId != null -> "https://f4.bcbits.com/img/a${artId}_10.jpg"
+                        rawThumb != null -> fixThumb(rawThumb)
+                        else -> null
+                    }
 
                     items.add(
                         TrackItem(

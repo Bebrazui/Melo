@@ -131,6 +131,6 @@ class OkHttpDownloader(
         // Поставь true, чтобы видеть ВСЕ запросы NewPipe (не только SoundCloud).
         const val LOG_ALL = true
         const val USER_AGENT =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     }
 }

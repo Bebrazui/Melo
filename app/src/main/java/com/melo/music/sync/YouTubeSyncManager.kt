@@ -115,20 +115,26 @@ object YouTubeSyncManager {
             return viaNewPipe
         }
 
-        // 2. Запрос через InnerTube browse (VLLM = full Liked Music playlist)
-        val bodyJson = createInnerTubeContext().apply {
-            put("browseId", "VLLM")
+        // 2. Запрос через InnerTube browse (VLLM или FEmusic_liked_videos)
+        for (browseId in listOf("VLLM", "FEmusic_liked_videos")) {
+            val bodyJson = createInnerTubeContext().apply {
+                put("browseId", browseId)
+            }
+            val responseJson = postInnerTube(getBrowseUrl(), bodyJson) ?: continue
+            parseTracksFromJson(context, responseJson, tracks)
+            if (tracks.isNotEmpty()) {
+                MeloLog.d("YouTubeSync", "Liked Music успешно получены через $browseId: ${tracks.size}")
+                break
+            }
         }
-        val responseJson = postInnerTube(getBrowseUrl(), bodyJson) ?: return emptyList()
-        parseTracksFromJson(context, responseJson, tracks)
         return tracks
     }
 
     private fun fetchUserPlaylists(context: Context): List<Pair<String, String>> {
         val playlists = mutableListOf<Pair<String, String>>()
         val browseIdsToTry = listOf(
-            "FEmusic_liked_playlists",
-            "FEmusic_library_landing"
+            "FEmusic_library_landing",
+            "FEmusic_liked_playlists"
         )
 
         for (bId in browseIdsToTry) {
@@ -360,7 +366,7 @@ object YouTubeSyncManager {
         val reqBuilder = Request.Builder()
             .url(url)
             .post(json.toString().toRequestBody("application/json".toMediaType()))
-            .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0")
+            .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
             .addHeader("Referer", "https://music.youtube.com/")
             .addHeader("Origin", "https://music.youtube.com")
             .addHeader("X-Origin", "https://music.youtube.com")
@@ -376,8 +382,8 @@ object YouTubeSyncManager {
                 val bodyStr = resp.body?.string()
                 if (!resp.isSuccessful) {
                     MeloLog.e("YouTubeSync", "postInnerTube ошибка HTTP ${resp.code}: ${resp.message} | Тело: $bodyStr")
-                    if (resp.code == 401 || resp.code == 403 || (resp.code == 400 && bodyStr?.contains("API_KEY") == true)) {
-                        // Возможна ротация ключа или версии, запускаем фоновое обновление кэша
+                    if (resp.code == 401 || resp.code == 403 || resp.code == 404 || (resp.code == 400 && bodyStr?.contains("API_KEY") == true)) {
+                        InnerTubeConfig.resetToDefault()
                         InnerTubeConfig.triggerRefreshAsync()
                     }
                     return null

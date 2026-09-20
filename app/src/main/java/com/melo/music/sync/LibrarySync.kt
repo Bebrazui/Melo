@@ -232,7 +232,7 @@ object LibrarySync {
     private fun unionTracks(tracks: List<TrackItem>): List<TrackItem> {
         val seen = LinkedHashMap<String, TrackItem>()
         for (t in tracks) {
-            val key = t.url + "@" + Math.round(t.speed * 100)
+            val key = t.url + "@" + Math.round(t.speed * 100) + "@" + (if (t.bassBoost) "b" else "n")
             if (!seen.containsKey(key)) seen[key] = t
         }
         return seen.values.toList()
@@ -250,6 +250,7 @@ object LibrarySync {
                     put("thumbnail", t.thumbnailUrl ?: "")
                     put("source", t.source.name)
                     put("speed", t.speed.toDouble())
+                    put("bassBoost", t.bassBoost)
                 },
             )
         }
@@ -270,6 +271,7 @@ object LibrarySync {
                     .getOrDefault(Source.YOUTUBE_MUSIC),
                 kind = ItemKind.TRACK,
                 speed = obj.optDouble("speed", 1.0).toFloat(),
+                bassBoost = obj.optBoolean("bassBoost", false),
             )
         }
     }.getOrDefault(emptyList())

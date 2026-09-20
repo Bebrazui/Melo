@@ -110,6 +110,7 @@ import androidx.compose.material.icons.rounded.DownloadForOffline
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Map
@@ -421,8 +422,8 @@ fun PlayerScreen(
     }
 
     var contextMenuTrack by remember { mutableStateOf<TrackItem?>(null) }
-    // Цель сохранения slowed/sped up версии: (исходный трек, скорость).
-    var speedVariantTarget by remember { mutableStateOf<Pair<TrackItem, Float>?>(null) }
+    // Цель сохранения slowed/sped up/bass версии: (исходный трек, скорость, басс-буст).
+    var speedVariantTarget by remember { mutableStateOf<Triple<TrackItem, Float, Boolean>?>(null) }
     // Поиск людей + открытый чужой профиль.
     var userResults by remember { mutableStateOf<List<com.melo.music.profile.MeloProfile>>(emptyList()) }
     var profileOpen by remember { mutableStateOf<com.melo.music.profile.MeloProfile?>(null) }
@@ -452,13 +453,23 @@ fun PlayerScreen(
         speed = value
         playerProvider()?.playbackParameters = PlaybackParameters(value, value)
         com.melo.music.playback.PlaybackService.playbackSpeed = value
+        nowPlaying = nowPlaying?.copy(speed = value)
     }
 
-    // Применяем скорость/тон САМОГО трека при смене трека или переподключении плеера.
-    // После перезапуска создаётся новый плеер с дефолтными параметрами (1.0) —
-    // этот эффект восстанавливает сохранённую скорость slowed/sped up версий.
-    LaunchedEffect(nowPlaying?.url, nowPlaying?.speed, controller) {
+    // Басс-буст для текущего трека
+    var isBassBoost by rememberSaveable { mutableStateOf(false) }
+    fun setBassBoost(value: Boolean) {
+        isBassBoost = value
+        EqualizerManager.setBassBoostEnabled(value)
+        nowPlaying = nowPlaying?.copy(bassBoost = value)
+    }
+
+    // Применяем скорость/тон и басс-буст САМОГО трека при смене трека или переподключении плеера.
+    LaunchedEffect(nowPlaying?.url, nowPlaying?.speed, nowPlaying?.bassBoost, controller) {
         if (controller != null) setSpeed(nowPlaying?.speed ?: 1f)
+        val trackBass = nowPlaying?.bassBoost ?: false
+        isBassBoost = trackBass
+        EqualizerManager.setBassBoostEnabled(trackBass)
     }
 
     // Восстановление состояния при перезапуске/возвращении в приложение из фона:
@@ -577,16 +588,21 @@ fun PlayerScreen(
         }
     }
 
+    var searchJob: kotlinx.coroutines.Job? by remember { mutableStateOf(null) }
+    var userSearchJob: kotlinx.coroutines.Job? by remember { mutableStateOf(null) }
+
     fun runSearch() {
         val q = query.trim()
         if (q.isEmpty()) return
+        searchJob?.cancel()
+        userSearchJob?.cancel()
         searchMode = true
         ghostSuggestions = emptyList()
         ghostIndex = 0
         // Параллельно ищем людей.
         userResults = emptyList()
-        scope.launch { userResults = runCatching { onSearchUsers(q) }.getOrDefault(emptyList()) }
-        scope.launch {
+        userSearchJob = scope.launch { userResults = runCatching { onSearchUsers(q) }.getOrDefault(emptyList()) }
+        searchJob = scope.launch {
             listTitle = "Результаты: $q"
             listLoading = true
             listError = null
@@ -640,11 +656,12 @@ fun PlayerScreen(
         if (index !in list.indices) return
         // Любой ручной выбор трека выходит из волны (волна сама зовёт с keepSea=true).
         if (!keepSea) seaActive = false
-        // Тот же трек И та же скорость уже играют — это пауза/продолжить, а не перезапуск.
-        // (нормальная и slowed/sped up версии имеют одинаковый url, но разную speed).
+        // Тот же трек, та же скорость И тот же басс уже играют — это пауза/продолжить, а не перезапуск.
+        // (нормальная, slowed/sped up и bass версии имеют одинаковый url, но разные speed/bass).
         val cur = nowPlaying
         if (cur != null && list[index].url == cur.url &&
-            kotlin.math.abs(list[index].speed - cur.speed) < 0.01f
+            kotlin.math.abs(list[index].speed - cur.speed) < 0.01f &&
+            list[index].bassBoost == cur.bassBoost
         ) {
             playerProvider()?.let { if (it.isPlaying) it.pause() else it.play() }
             return
@@ -682,8 +699,9 @@ fun PlayerScreen(
                     if (resolvingUrl == item.url) {
                         val resolvedWithArtist = if (it.artist.isNullOrBlank()) it.copy(artist = item.uploader) else it
                         onPlayResolved(resolvedWithArtist)
-                        // Сохранённая slowed/sped up версия играет со своим тоном.
+                        // Сохранённая slowed/sped up/bass версия играет со своими параметрами.
                         setSpeed(item.speed)
+                        setBassBoost(item.bassBoost)
                         pushNextResolved(index)
                     }
                 }
@@ -859,6 +877,8 @@ fun PlayerScreen(
             artistOpen != null -> artistOpen = null
             selectedTab == MeloTab.Map -> selectedTab = previousTab
             searchMode -> {
+                searchJob?.cancel()
+                userSearchJob?.cancel()
                 searchMode = false
                 query = ""
                 ghostSuggestions = emptyList()
@@ -1062,7 +1082,14 @@ fun PlayerScreen(
                         query = query,
                         onQueryChange = { query = it },
                         onSearch = ::runSearch,
-                        onClear = { query = ""; searchMode = false; ghostSuggestions = emptyList(); ghostIndex = 0 },
+                        onClear = {
+                            searchJob?.cancel()
+                            userSearchJob?.cancel()
+                            query = ""
+                            searchMode = false
+                            ghostSuggestions = emptyList()
+                            ghostIndex = 0
+                        },
                         ghostSuggestion = ghostSuggestions.getOrNull(ghostIndex) ?: "",
                         onGhostAccept = { accepted ->
                             query = accepted
@@ -1107,12 +1134,14 @@ fun PlayerScreen(
                                     },
                                 )
                             }
-                            itemsIndexed(likedList, key = { _, it -> it.url + "@" + it.speed }) { index, item ->
+                            itemsIndexed(likedList, key = { _, it -> "${it.url}@${it.speed}@${it.bassBoost}" }) { index, item ->
                                 Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) {
                                     TrackCard(
                                         item = item,
                                         resolving = resolvingUrl == item.url,
-                                        playing = nowPlaying?.url == item.url && isPlaying,
+                                        playing = nowPlaying?.url == item.url &&
+                                            kotlin.math.abs((nowPlaying?.speed ?: 1f) - item.speed) < 0.01f &&
+                                            (nowPlaying?.bassBoost ?: false) == item.bassBoost && isPlaying,
                                         onClick = { playAt(likedList, index) },
                                         onLongClick = { contextMenuTrack = item },
                                     )
@@ -1269,14 +1298,16 @@ fun PlayerScreen(
                     audioSessionId = audioSessionIdProvider(),
                     speed = speed,
                     onSetSpeed = { setSpeed(it) },
-                    onAddSpeedVariant = { sp -> speedVariantTarget = item to sp },
+                    bassBoost = isBassBoost,
+                    onSetBassBoost = { setBassBoost(it) },
+                    onAddSpeedVariant = { sp -> speedVariantTarget = Triple(item, sp, isBassBoost) },
                     onSeek = { ms -> controller?.seekTo(ms) },
                     onTogglePlayPause = onTogglePlayPause,
                     onNext = { playNext() },
                     onPrev = { playPrev() },
                     onToggleShuffle = { shuffle = !shuffle },
                     onToggleRepeat = { repeatOne = !repeatOne },
-                    onToggleLike = { toggleLike(item) },
+                    onToggleLike = { toggleLike(nowPlaying ?: item) },
                     onShowQueue = { showQueue = true },
                     onFetchLyrics = { onFetchLyrics(item.title, item.uploader) },
                     onOpenArtist = { artistItem ->
@@ -1352,6 +1383,7 @@ fun PlayerScreen(
                     playlist = pl,
                     nowPlayingUrl = nowPlaying?.url,
                     nowPlayingSpeed = nowPlaying?.speed ?: 1f,
+                    nowPlayingBassBoost = nowPlaying?.bassBoost ?: false,
                     isPlaying = isPlaying,
                     resolvingUrl = resolvingUrl,
                     onPlay = { tracks, index -> playAt(tracks, index) },
@@ -1363,21 +1395,24 @@ fun PlayerScreen(
     }
 
     TrackContextMenu(
-        item = contextMenuTrack,
+        item = contextMenuTrack?.let {
+            if (nowPlaying?.url == it.url) nowPlaying else it
+        },
         onDismiss = { contextMenuTrack = null },
     )
 
-    speedVariantTarget?.let { (base, sp) ->
+    speedVariantTarget?.let { (base, sp, bb) ->
         SpeedVariantSheet(
             base = base,
             speed = sp,
+            bassBoost = bb,
             onFavorite = {
-                FavoritesManager.toggle(speedVariant(base, sp))
+                FavoritesManager.toggle(speedVariant(base, sp, bb))
                 likedVersion++
                 speedVariantTarget = null
             },
             onAddToPlaylist = { playlist ->
-                PlaylistManager.addTrack(playlist.id, speedVariant(base, sp))
+                PlaylistManager.addTrack(playlist.id, speedVariant(base, sp, bb))
                 speedVariantTarget = null
             },
             onDismiss = { speedVariantTarget = null },
@@ -1492,25 +1527,44 @@ fun PlayerScreen(
     }
 }
 
-/** Делает «slowed»/«sped up» копию трека: тот же URL, своя скорость и пометка в названии. */
-private fun speedVariant(base: TrackItem, speed: Float): TrackItem =
-    base.copy(
-        title = base.title + if (speed < 1f) " (slowed)" else " (sped up)",
+/** Делает «slowed»/«sped up»/«bass» копию трека: тот же URL, свои параметры и пометка в названии. */
+private fun speedVariant(base: TrackItem, speed: Float, bassBoost: Boolean = false): TrackItem {
+    val tags = mutableListOf<String>()
+    if (kotlin.math.abs(speed - 1f) > 0.01f) {
+        tags.add(if (speed < 1f) "slowed" else "sped up")
+    }
+    if (bassBoost) {
+        tags.add("bass")
+    }
+    val suffix = if (tags.isNotEmpty()) " (" + tags.joinToString(" + ") + ")" else ""
+    val cleanTitle = base.title
+        .replace(Regex("""\s*\((slowed|sped up|bass|\+)+\)""", RegexOption.IGNORE_CASE), "")
+    return base.copy(
+        title = cleanTitle + suffix,
         speed = speed,
+        bassBoost = bassBoost,
     )
+}
 
-/** Лист сохранения slowed/sped up версии: в избранное или в плейлист. */
+/** Лист сохранения slowed/sped up/bass версии: в избранное или в плейлист. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SpeedVariantSheet(
     base: TrackItem,
     speed: Float,
+    bassBoost: Boolean,
     onFavorite: () -> Unit,
     onAddToPlaylist: (Playlist) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val playlists = remember { PlaylistManager.getAll() }
-    val versionName = if (speed < 1f) "замедленную" else "ускоренную"
+    val versionName = when {
+        speed < 1f && bassBoost -> "замедленную + bass"
+        speed > 1f && bassBoost -> "ускоренную + bass"
+        bassBoost -> "bass"
+        speed < 1f -> "замедленную"
+        else -> "ускоренную"
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(),
@@ -4745,8 +4799,10 @@ private fun formatViews(v: Long): String = when {
 
 @Composable
 private fun PlaylistScreen(
-    playlist: Playlist,    nowPlayingUrl: String?,
+    playlist: Playlist,
+    nowPlayingUrl: String?,
     nowPlayingSpeed: Float,
+    nowPlayingBassBoost: Boolean = false,
     isPlaying: Boolean,
     resolvingUrl: String?,
     onPlay: (List<TrackItem>, Int) -> Unit,
@@ -4847,12 +4903,13 @@ private fun PlaylistScreen(
                     )
                 }
             } else {
-                itemsIndexed(tracks, key = { i, it -> "$i:${it.url}@${it.speed}" }) { index, t ->
+                itemsIndexed(tracks, key = { i, it -> "$i:${it.url}@${it.speed}@${it.bassBoost}" }) { index, t ->
                     TrackCard(
                         item = t,
                         resolving = resolvingUrl == t.url,
                         playing = nowPlayingUrl == t.url &&
-                            kotlin.math.abs(nowPlayingSpeed - t.speed) < 0.01f && isPlaying,
+                            kotlin.math.abs(nowPlayingSpeed - t.speed) < 0.01f &&
+                            nowPlayingBassBoost == t.bassBoost && isPlaying,
                         onClick = { onPlay(tracks, index) },
                         onLongClick = { onTrackLongClick(t) },
                     )
@@ -5079,13 +5136,14 @@ private fun SleepTimerControl(white: Color, accent: Color) {
 
 @Composable
 fun Artwork(url: String?, modifier: Modifier = Modifier) {
-    if (url != null) {
+    val upscaled = remember(url) { upscaleThumb(url, 600) }
+    if (upscaled != null) {
         val context = LocalContext.current
-        val request = remember(url) {
+        val request = remember(upscaled) {
             coil.request.ImageRequest.Builder(context)
-                .data(url)
-                .memoryCacheKey(url)
-                .diskCacheKey(url)
+                .data(upscaled)
+                .memoryCacheKey(upscaled)
+                .diskCacheKey(upscaled)
                 .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
                 .diskCachePolicy(coil.request.CachePolicy.ENABLED)
                 .crossfade(false)
@@ -5096,6 +5154,12 @@ fun Artwork(url: String?, modifier: Modifier = Modifier) {
             contentDescription = null,
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             filterQuality = androidx.compose.ui.graphics.FilterQuality.Medium,
+            onError = { state ->
+                com.melo.music.util.FileLog.e("MeloArtwork", "Artwork FAILED for $upscaled: ${state.result.throwable}")
+            },
+            onSuccess = {
+                com.melo.music.util.FileLog.d("MeloArtwork", "Artwork OK for $upscaled")
+            },
             modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest),
         )
     } else {
@@ -5552,6 +5616,8 @@ private fun NowPlayingBar(
 private fun ExpressiveSpeedButtonGroup(
     speed: Float,
     onSetSpeed: (Float) -> Unit,
+    bassBoost: Boolean,
+    onSetBassBoost: (Boolean) -> Unit,
     accent: Color,
     modifier: Modifier = Modifier,
 ) {
@@ -5582,9 +5648,9 @@ private fun ExpressiveSpeedButtonGroup(
     )
 
     val compactStyle = MaterialTheme.typography.labelMedium.copy(
-        fontSize = 11.sp,
+        fontSize = 10.5.sp,
         fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.2).sp,
+        letterSpacing = (-0.25).sp,
     )
     val compactTypography = MaterialTheme.typography.copy(
         labelLarge = compactStyle,
@@ -5617,7 +5683,7 @@ private fun ExpressiveSpeedButtonGroup(
                             onSetSpeed(targetSpeed)
                         },
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 6.dp),
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -5626,9 +5692,9 @@ private fun ExpressiveSpeedButtonGroup(
                             Icon(
                                 imageVector = if (isChecked && targetSpeed == 1.0f) Icons.Rounded.Check else buttonIcons[index],
                                 contentDescription = label,
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(13.dp),
                             )
-                            Spacer(Modifier.width(4.dp))
+                            Spacer(Modifier.width(3.dp))
                             Text(
                                 text = label,
                                 maxLines = 1,
@@ -5636,6 +5702,35 @@ private fun ExpressiveSpeedButtonGroup(
                                 style = compactStyle,
                             )
                         }
+                    }
+                }
+
+                // ── Басс буст — независимый переключатель ──
+                ToggleButton(
+                    checked = bassBoost,
+                    onCheckedChange = { checked ->
+                        ClickFeedback.play()
+                        onSetBassBoost(checked)
+                    },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 2.dp, vertical = 6.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.GraphicEq,
+                            contentDescription = "Bass",
+                            modifier = Modifier.size(13.dp),
+                        )
+                        Spacer(Modifier.width(3.dp))
+                        Text(
+                            text = "Bass",
+                            maxLines = 1,
+                            softWrap = false,
+                            style = compactStyle,
+                        )
                     }
                 }
             }
@@ -6021,6 +6116,8 @@ private fun FullPlayer(
     audioSessionId: Int,
     speed: Float,
     onSetSpeed: (Float) -> Unit,
+    bassBoost: Boolean,
+    onSetBassBoost: (Boolean) -> Unit,
     onAddSpeedVariant: (Float) -> Unit,
     onSeek: (Long) -> Unit,
     onTogglePlayPause: () -> Unit,
@@ -7322,6 +7419,8 @@ private fun FullPlayer(
                                     ExpressiveSpeedButtonGroup(
                                         speed = speed,
                                         onSetSpeed = onSetSpeed,
+                                        bassBoost = bassBoost,
+                                        onSetBassBoost = onSetBassBoost,
                                         accent = artColor,
                                     )
                                 }
@@ -7387,6 +7486,8 @@ private fun FullPlayer(
                             ExpressiveSpeedButtonGroup(
                                 speed = speed,
                                 onSetSpeed = onSetSpeed,
+                                bassBoost = bassBoost,
+                                onSetBassBoost = onSetBassBoost,
                                 accent = artColor,
                             )
                         }
@@ -7701,9 +7802,19 @@ private fun karaokeLine(
     }
 }
 
-/** Повышает запрашиваемый размер обложки googleusercontent (=wNNN-hNNN). */
-private fun upscaleThumb(url: String?, size: Int): String? {
+/** Повышает запрашиваемый размер обложки:
+ * - для SoundCloud/sndcdn: -large/-badge/-small/-mini -> -t500x500 (высокое разрешение 500x500)
+ * - для YouTube/googleusercontent: =wNNN-hNNN -> =w$size-h$size-l90-rj
+ */
+fun upscaleThumb(url: String?, size: Int = 600): String? {
     if (url == null) return null
+    if (url.contains("sndcdn.com") || url.contains("soundcloud.com")) {
+        return if (url.contains("/avatars-")) {
+            url.replace(Regex("-(?:large|badge|small|mini|t500x500|t300x300)\\.(jpg|jpeg|png)"), "-t300x300.$1")
+        } else {
+            url.replace(Regex("-(?:large|badge|small|mini|t300x300)\\.(jpg|jpeg|png)"), "-t500x500.$1")
+        }
+    }
     val cut = url.indexOf('=')
     return if (cut > 0) url.substring(0, cut) + "=w$size-h$size-l90-rj" else url
 }

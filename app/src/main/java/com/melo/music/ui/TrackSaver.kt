@@ -19,6 +19,7 @@ object TrackSaver {
                     putStringArrayList("thumbnails", ArrayList(list.map { it.thumbnailUrl ?: "" }))
                     putStringArrayList("sources", ArrayList(list.map { it.source.name }))
                     putFloatArray("speeds", list.map { it.speed }.toFloatArray())
+                    putBooleanArray("bassBoosts", list.map { it.bassBoost }.toBooleanArray())
                 }
             },
             restore = { bundle ->
@@ -29,6 +30,7 @@ object TrackSaver {
                 val thumbnails = bundle.getStringArrayList("thumbnails") ?: arrayListOf()
                 val sources = bundle.getStringArrayList("sources") ?: arrayListOf()
                 val speeds = bundle.getFloatArray("speeds") ?: floatArrayOf()
+                val bassBoosts = bundle.getBooleanArray("bassBoosts") ?: booleanArrayOf()
                 urls.mapIndexed { i, url ->
                     TrackItem(
                         title = titles.getOrElse(i) { "" },
@@ -40,6 +42,7 @@ object TrackSaver {
                             .getOrDefault(Source.YOUTUBE_MUSIC),
                         kind = ItemKind.TRACK,
                         speed = speeds.getOrElse(i) { 1f },
+                        bassBoost = bassBoosts.getOrElse(i) { false },
                     )
                 }
             },
@@ -58,6 +61,7 @@ object TrackSaver {
                         putString("thumbnail", it.thumbnailUrl ?: "")
                         putString("source", it.source.name)
                         putFloat("speed", it.speed)
+                        putBoolean("bassBoost", it.bassBoost)
                     }
                 }
             },
@@ -73,6 +77,7 @@ object TrackSaver {
                         .getOrDefault(Source.YOUTUBE_MUSIC),
                     kind = ItemKind.TRACK,
                     speed = bundle.getFloat("speed", 1f),
+                    bassBoost = bundle.getBoolean("bassBoost", false),
                 )
             },
         )

@@ -20,17 +20,23 @@ object SoundCloudResolver {
 
     private const val TAG = "MeloSC"
     private const val UA =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
     private val httpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(6, TimeUnit.SECONDS)
-            .callTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
+            .callTimeout(12, TimeUnit.SECONDS)
             .dns(MeloNet.dns)
             .proxySelector(MeloNet.byedpiSelector)
             .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
             .followRedirects(false) // Ручная обработка 302: SoundCloud при редиректе теряет client_id
+            .addInterceptor { chain ->
+                val req = chain.request().newBuilder()
+                    .header("Connection", "close")
+                    .build()
+                chain.proceed(req)
+            }
             .build()
     }
 
@@ -117,9 +123,15 @@ object SoundCloudResolver {
         // 1) Progressive MP3 (cf-media.sndcdn.com) — мгновенный файл, доступен
         // 2) HLS AAC/MP4/OGG (playback.media-streaming.soundcloud.cloud) — быстрый HLS, доступен
         // 3) HLS MP3 (cf-hls-media.sndcdn.com) — в РФ часто заблокирован на уровне CloudFront IP
-        val progMp3 = mutableListOf<String>()
+        // 5. Собираем потоки:
+        // 1) HLS AAC/OPUS (playback.media-streaming.soundcloud.cloud) — CDN Google Cloud, не режется РКН/ТСПУ
+        // 2) Progressive MP3 (cf-media.sndcdn.com) — CloudFront
+        // 3) HLS MP3 (cf-hls-media.sndcdn.com)
+        // 4) Сниппеты (30-сек превью), если полный трек недоступен в регионе
         val hlsAac = mutableListOf<String>()
+        val progMp3 = mutableListOf<String>()
         val hlsMp3 = mutableListOf<String>()
+        val snippedList = mutableListOf<String>()
 
         for (i in 0 until transcodings.length()) {
             val t = transcodings.optJSONObject(i) ?: continue
@@ -127,15 +139,21 @@ object SoundCloudResolver {
             val protocol = format.optString("protocol")
             val mime = format.optString("mime_type")
             val isSnipped = t.optBoolean("snipped", false)
-            if (isSnipped) continue
 
             val u = t.optString("url")
             if (u.isBlank()) continue
 
+            if (isSnipped) {
+                snippedList.add(u)
+                continue
+            }
+
             if (protocol == "progressive") {
                 progMp3.add(u)
             } else if (protocol == "hls") {
-                if (mime.contains("mpeg")) {
+                if (mime.contains("mp4") || mime.contains("aac") || mime.contains("ogg") || mime.contains("opus")) {
+                    hlsAac.add(u)
+                } else if (mime.contains("mpeg")) {
                     hlsMp3.add(u)
                 } else {
                     hlsAac.add(u)
@@ -143,16 +161,18 @@ object SoundCloudResolver {
             }
         }
 
-        val candidateTranscodings = progMp3 + hlsAac + hlsMp3
+        val fullStreams = hlsAac + progMp3 + hlsMp3
+        val candidateTranscodings = fullStreams + snippedList
 
         if (candidateTranscodings.isEmpty()) {
             FileLog.e(TAG, "No available stream found in transcodings")
             throw IllegalStateException("SoundCloud: не найден доступный аудио поток для этого трека")
         }
 
-        FileLog.i(TAG, "Testing ${candidateTranscodings.size} transcodings (prog=${progMp3.size}, hlsAac=${hlsAac.size}, hlsMp3=${hlsMp3.size})...")
+        FileLog.i(TAG, "Testing ${candidateTranscodings.size} transcodings (hlsAac=${hlsAac.size}, prog=${progMp3.size}, hlsMp3=${hlsMp3.size}, snipped=${snippedList.size})...")
         var finalAudioStreamUrl: String? = null
         var fallbackBlockedUrl: String? = null
+        var isFinalSnipped = false
 
         for (tUrl in candidateTranscodings) {
             val res = resolveTranscodingUrl(tUrl, clientId, trackAuth)
@@ -163,6 +183,7 @@ object SoundCloudResolver {
                     continue
                 }
                 finalAudioStreamUrl = res
+                isFinalSnipped = snippedList.contains(tUrl)
                 break
             }
         }
@@ -180,8 +201,15 @@ object SoundCloudResolver {
         val rawTitle = trackJson.optString("title").ifBlank { "SoundCloud Track" }
         val userObj = trackJson.optJSONObject("user")
         val artist = userObj?.optString("username")?.takeIf { it.isNotBlank() }
-        val artwork = trackJson.optString("artwork_url").takeIf { it.isNotBlank() }
+        val rawArtwork = trackJson.optString("artwork_url").takeIf { it.isNotBlank() }
             ?: userObj?.optString("avatar_url")?.takeIf { it.isNotBlank() }
+        val artwork = rawArtwork?.let {
+            if (it.contains("/avatars-")) {
+                it.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t300x300.$1")
+            } else {
+                it.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t500x500.$1")
+            }
+        }
 
         val title = if (artist != null && !rawTitle.contains(artist, ignoreCase = true)) {
             "$rawTitle — $artist"
@@ -190,7 +218,7 @@ object SoundCloudResolver {
         }
 
         val elapsed = System.currentTimeMillis() - t0
-        FileLog.i(TAG, "== SUCCESS resolve (${elapsed}ms): '$title' -> stream: ${finalAudioStreamUrl.take(70)} ==")
+        FileLog.i(TAG, "== SUCCESS resolve (${elapsed}ms, snipped=$isFinalSnipped): '$title' -> stream: ${finalAudioStreamUrl.take(70)} ==")
 
         ResolvedTrack(
             title = title,
@@ -198,6 +226,7 @@ object SoundCloudResolver {
             thumbnailUrl = artwork,
             artist = artist,
             videoUrl = null,
+            isSnipped = isFinalSnipped,
         )
     }
 

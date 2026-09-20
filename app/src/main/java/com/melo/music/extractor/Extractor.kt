@@ -25,6 +25,8 @@ data class ResolvedTrack(
     val artist: String? = null,
     /** Прямой URL видеоклипа (MP4), если у трека есть видеопоток. */
     val videoUrl: String? = null,
+    /** Является ли трек 30-секундным сниппетом (SoundCloud Go/Preview). */
+    val isSnipped: Boolean = false,
 )
 
 /** Определяет, является ли аудио-URL HLS-потоком (.m3u8, CloudFront HLS или SoundCloud media-streaming). */
@@ -56,6 +58,8 @@ data class TrackItem(
     val speed: Float = 1f,
     /** Просмотры (ранжирование «Популярного» на экране исполнителя); 0 если неизвестно. */
     val viewCount: Long = 0,
+    /** Басс-буст для трека. */
+    val bassBoost: Boolean = false,
 )
 
 class TrackCopyrightException(
@@ -178,10 +182,39 @@ object Extractor {
                     // SoundCloud — прямой нативный HLS-резолвер (<300мс)
                     if (NewPipeResolver.isSoundCloud(url)) {
                         com.melo.music.util.FileLog.i("MeloExtract", "Resolving via SoundCloudResolver: $url")
-                        val scResolved = SoundCloudResolver.resolve(app, url)
-                        streamCache.put(url, scResolved)
-                        StreamCacheStore.put(url, scResolved)
-                        return@async scResolved
+                        val scResolved = runCatching { SoundCloudResolver.resolve(app, url) }.getOrNull()
+                        if (scResolved != null) {
+                            val ytQuery = fallbackQuery ?: listOfNotNull(scResolved.title, scResolved.artist).joinToString(" ").takeIf { it.isNotBlank() }
+                            if (scResolved.isSnipped && !ytQuery.isNullOrBlank()) {
+                                com.melo.music.util.FileLog.i("MeloExtract", "SoundCloud track is 30s preview snippet, searching full track on YouTube: $ytQuery")
+                                val ytMatch = runCatching { NewPipeResolver.searchOne(app, ytQuery) }.getOrNull()
+                                if (ytMatch != null && ytMatch.url.isNotBlank()) {
+                                    val ytResolved = runCatching { NewPipeResolver.resolve(app, ytMatch.url) }.getOrNull()
+                                    if (ytResolved != null) {
+                                        streamCache.put(url, ytResolved)
+                                        StreamCacheStore.put(url, ytResolved)
+                                        return@async ytResolved
+                                    }
+                                }
+                            }
+                            streamCache.put(url, scResolved)
+                            StreamCacheStore.put(url, scResolved)
+                            return@async scResolved
+                        } else {
+                            com.melo.music.util.FileLog.w("MeloExtract", "SoundCloudResolver failed for $url, attempting fallback to YouTube: $fallbackQuery")
+                            if (!fallbackQuery.isNullOrBlank()) {
+                                val ytMatch = runCatching { NewPipeResolver.searchOne(app, fallbackQuery) }.getOrNull()
+                                if (ytMatch != null && ytMatch.url.isNotBlank()) {
+                                    val ytResolved = runCatching { NewPipeResolver.resolve(app, ytMatch.url) }.getOrNull()
+                                    if (ytResolved != null) {
+                                        streamCache.put(url, ytResolved)
+                                        StreamCacheStore.put(url, ytResolved)
+                                        return@async ytResolved
+                                    }
+                                }
+                            }
+                            throw IllegalStateException("SoundCloud: аудио поток трека недоступен")
+                        }
                     }
 
                     // YouTube и SoundCloud (fallback) — через NewPipe, с надёжным авто-фолбэком на yt-dlp при ошибках.

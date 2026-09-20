@@ -151,18 +151,22 @@ object SoundCloudFix {
         return DEFAULT_WORKING_ID
     }
 
-    /** Принудительно сбросить и добыть свежий client_id (при 401 Unauthorized). */
     @Synchronized
     fun invalidate(context: Context) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val oldId = cachedId ?: prefs.getString(KEY_ID, null)
         cachedId = null
         prefs.edit().remove(KEY_ID).apply()
         inject(null)
-        val fresh = discover() ?: DEFAULT_WORKING_ID
+        val discovered = discover()
+        val fresh = discovered
+            ?: FALLBACK_IDS.firstOrNull { it != oldId && isValid(it) }
+            ?: FALLBACK_IDS.firstOrNull { it != oldId }
+            ?: DEFAULT_WORKING_ID
         cachedId = fresh
         prefs.edit().putString(KEY_ID, fresh).apply()
         inject(fresh)
-        com.melo.music.util.FileLog.i("MeloSC", "Invalidate: refreshed SoundCloud client_id: $fresh")
+        com.melo.music.util.FileLog.i("MeloSC", "Invalidate: refreshed SoundCloud client_id: $fresh (was $oldId)")
     }
 
     /** Проверка client_id через рабочий api-v2 (200 = валиден). */
@@ -334,8 +338,11 @@ object SoundCloudFix {
             u
         }.getOrNull() ?: run { /* android.util.Log.e(tag, "нет artwork_url") */ ByeDpiProxy.restart(ByeDpiProxy.DEFAULT_CMD); return }
         val host = art.substringAfter("://").substringBefore("/")
-        // android.util.Log.e(tag, "=== COVER tuning (полное ТЕЛО), host=$host url=$art (VPN OFF) ===")
+        com.melo.music.util.FileLog.i(tag, "=== COVER tuning START, host=$host url=$art ===")
         val strategies = listOf(
+            "-An",
+            "-Kt,h -d1 -s1+s -s3+s -s6+s -s9+s -s12+s -s15+s -s20+s -s30+s -An",
+            "-Kt,h -d1 -s1+s -s3+s -s6+s -s9+s -a1 -An",
             "-Kt -r1+s -An",
             "-Kt -r2+s -An",
             "-Kt -r3+s -An",
@@ -344,7 +351,6 @@ object SoundCloudFix {
             "-Kt -s1+s -An",
             "-Kt -d1+s -An",
             "-Kt -q1+s -An",
-            "-Kt,h -d1 -s1+s -s3+s -s6+s -s9+s -a1 -An",
             "-Kt -f1+s -t5 -o1+s -An",
             "-Kt -f1+s -t2 -r1+s -An",
             "-f-200 -s2 -s5+hm -t6 -Qr -An",
@@ -364,13 +370,18 @@ object SoundCloudFix {
                         val n = resp.body?.bytes()?.size ?: 0  // ЧИТАЕМ ВСЁ ТЕЛО
                         "OK ${n / 1024}KB ${System.currentTimeMillis() - t0}ms"
                     }
-            }.getOrElse { "${it.javaClass.simpleName}" }
-            // android.util.Log.e(tag, "[$i] $s -> $res")
-            if (res.startsWith("OK") && found == null) { found = s; /* android.util.Log.e(tag, "★ COVER ТЕЛО OK: $s ($res)") */ }
+            }.getOrElse { "${it.javaClass.simpleName}: ${it.message}" }
+            com.melo.music.util.FileLog.i(tag, "[$i] $s -> $res")
+            if (res.startsWith("OK") && found == null) {
+                found = s
+                com.melo.music.util.FileLog.i(tag, "★ COVER BODY SUCCESS: $s ($res)")
+            }
         }
-        if (found == null) /* android.util.Log.e(tag, "обложки: тело не доставила ни одна") */
+        if (found == null) {
+            com.melo.music.util.FileLog.e(tag, "Covers: None of the ${strategies.size} strategies delivered body")
+        }
         runCatching { ByeDpiProxy.restart(ByeDpiProxy.DEFAULT_CMD) }
-        // android.util.Log.e(tag, "=== COVER DONE ===")
+        com.melo.music.util.FileLog.i(tag, "=== COVER DONE (winner: $found) ===")
     }
 
     /**

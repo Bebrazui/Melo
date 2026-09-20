@@ -2,13 +2,14 @@ package com.melo.music.audio
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.PresetReverb
 import android.media.audiofx.Virtualizer
 
 /**
- * Аудио-эффекты: эквалайзер + усиление (gain) + реверберация (reverb) + пространственный звук 3D (spatial audio).
+ * Аудио-эффекты: эквалайзер + усиление (gain) + реверберация (reverb) + пространственный звук 3D (spatial audio) + Лютый Басс Буст.
  * Обёртка над android.media.audiofx.*. Привязывается к audioSessionId плеера,
  * сохраняет настройки в SharedPreferences.
  */
@@ -24,6 +25,8 @@ object EqualizerManager {
     private const val KEY_SPATIAL_STRENGTH = "spatial_strength"
     private const val KEY_CRYSTAL = "crystal_audio"
     private const val KEY_CRYSTAL_INTENSITY = "crystal_intensity"
+    private const val KEY_BASS_BOOST = "bass_boost_enabled"
+    private const val KEY_BASS_BOOST_STRENGTH = "bass_boost_strength"
 
     /** Максимальное усиление (мДб) = +20 dB. */
     const val MAX_GAIN_MB = 2000
@@ -39,6 +42,7 @@ object EqualizerManager {
     private var loudness: LoudnessEnhancer? = null
     private var virtualizer: Virtualizer? = null
     private var insertReverb: PresetReverb? = null
+    private var bassBoost: BassBoost? = null
 
     // Реверберация — ГЛОБАЛЬНЫЙ вспомогательный (auxiliary) эффект на сессии 0.
     // Плеер шлёт в него звук через setAuxEffectInfo (вставка insert-реверба
@@ -152,6 +156,20 @@ object EqualizerManager {
         } catch (_: Exception) {
             insertReverb = null
         }
+
+        // ── Лютый Басс Буст (Hardware BassBoost на сессии) ──
+        try {
+            val bb = BassBoost(0, audioSessionId)
+            val bbEnabled = isBassBoostEnabled()
+            val factor = (getBassBoostStrength() / 100f).coerceIn(0.1f, 1.0f)
+            if (bb.strengthSupported) {
+                bb.setStrength((1000 * factor).toInt().toShort())
+            }
+            bb.enabled = bbEnabled
+            bassBoost = bb
+        } catch (_: Exception) {
+            bassBoost = null
+        }
     }
 
     @Synchronized
@@ -164,6 +182,8 @@ object EqualizerManager {
         virtualizer = null
         insertReverb?.release()
         insertReverb = null
+        bassBoost?.release()
+        bassBoost = null
         // auxReverb НЕ освобождаем — он глобальный, живёт всё время.
     }
 
@@ -186,11 +206,54 @@ object EqualizerManager {
         dsp.eqEnabled = isEnabled()
         dsp.crystalEnabled = isCrystalEnabled()
         dsp.crystalIntensity = (getCrystalIntensity() / 100f).coerceIn(0f, 1f)
+        dsp.bassBoostEnabled = isBassBoostEnabled()
+        dsp.bassBoostStrength = (getBassBoostStrength() / 100f).coerceIn(0.1f, 1.0f)
         val levels = loadBandLevels()
         for (i in 0 until 5) {
             val db = if (i < levels.size) levels[i] / 100f else 0f
             dsp.setBandGain(i, db)
         }
+    }
+
+    // ── Лютый Басс Буст (Monster Bass Boost™) ──────────────────────────────────
+
+    fun isBassBoostEnabled(): Boolean = prefs?.getBoolean(KEY_BASS_BOOST, false) ?: false
+
+    fun getBassBoostStrength(): Int = prefs?.getInt(KEY_BASS_BOOST_STRENGTH, 85) ?: 85
+
+    @Synchronized
+    fun setBassBoostEnabled(enabled: Boolean) {
+        val factor = (getBassBoostStrength() / 100f).coerceIn(0.1f, 1.0f)
+        bassBoost?.let {
+            runCatching {
+                if (enabled && it.strengthSupported) {
+                    it.setStrength((1000 * factor).toInt().toShort())
+                }
+                it.enabled = enabled
+            }
+        }
+        for (d in dspProcessors) {
+            d.bassBoostEnabled = enabled
+            d.bassBoostStrength = factor
+        }
+        prefs?.edit()?.putBoolean(KEY_BASS_BOOST, enabled)?.apply()
+    }
+
+    @Synchronized
+    fun setBassBoostStrength(strength: Int) {
+        val s = strength.coerceIn(10, 100)
+        val factor = (s / 100f).coerceIn(0.1f, 1.0f)
+        bassBoost?.let {
+            runCatching {
+                if (it.strengthSupported) {
+                    it.setStrength((1000 * factor).toInt().toShort())
+                }
+            }
+        }
+        for (d in dspProcessors) {
+            d.bassBoostStrength = factor
+        }
+        prefs?.edit()?.putInt(KEY_BASS_BOOST_STRENGTH, s)?.apply()
     }
 
     // ── Кристальный звук (Crystal Audio™ Super-Resolution) ───────────────────

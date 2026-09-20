@@ -76,8 +76,22 @@ object InnerTubeConfig {
     fun init(context: Context) {
         val p = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs = p
-        cachedApiKey = p.getString(KEY_API_KEY, DEFAULT_API_KEY) ?: DEFAULT_API_KEY
-        cachedClientVersion = p.getString(KEY_CLIENT_VERSION, DEFAULT_CLIENT_VERSION) ?: DEFAULT_CLIENT_VERSION
+        var key = p.getString(KEY_API_KEY, DEFAULT_API_KEY) ?: DEFAULT_API_KEY
+        var ver = p.getString(KEY_CLIENT_VERSION, DEFAULT_CLIENT_VERSION) ?: DEFAULT_CLIENT_VERSION
+
+        // YouTube Music версии начинаются с "1.", в то время как основной YouTube с "2.".
+        // Если в кэше остался ключ/версия от www.youtube.com, сбрасываем на валидный YouTube Music.
+        if (ver.startsWith("2.") || key.startsWith("AIzaSyAO_") || key.isBlank() || ver.isBlank()) {
+            key = DEFAULT_API_KEY
+            ver = DEFAULT_CLIENT_VERSION
+            p.edit()
+                .putString(KEY_API_KEY, DEFAULT_API_KEY)
+                .putString(KEY_CLIENT_VERSION, DEFAULT_CLIENT_VERSION)
+                .apply()
+        }
+
+        cachedApiKey = key
+        cachedClientVersion = ver
 
         val lastFetch = p.getLong(KEY_LAST_FETCH, 0L)
         val now = System.currentTimeMillis()
@@ -98,6 +112,15 @@ object InnerTubeConfig {
     fun getBrowseUrl(): String =
         "https://music.youtube.com/youtubei/v1/browse?key=$cachedApiKey&prettyPrint=false"
 
+    fun resetToDefault() {
+        cachedApiKey = DEFAULT_API_KEY
+        cachedClientVersion = DEFAULT_CLIENT_VERSION
+        prefs?.edit()
+            ?.putString(KEY_API_KEY, DEFAULT_API_KEY)
+            ?.putString(KEY_CLIENT_VERSION, DEFAULT_CLIENT_VERSION)
+            ?.apply()
+    }
+
     fun triggerRefreshAsync() {
         scope.launch {
             refresh(force = true)
@@ -108,18 +131,12 @@ object InnerTubeConfig {
         val p = prefs
         val lastFetch = p?.getLong(KEY_LAST_FETCH, 0L) ?: 0L
         val now = System.currentTimeMillis()
-        if (!force && (now - lastFetch < REFRESH_INTERVAL_MS) && cachedApiKey != DEFAULT_API_KEY) {
+        if (!force && (now - lastFetch < REFRESH_INTERVAL_MS) && cachedApiKey != DEFAULT_API_KEY && !cachedClientVersion.startsWith("2.")) {
             return@withContext true
         }
 
-        // 1. Сначала пробуем получить с music.youtube.com
-        if (fetchFromUrl("https://music.youtube.com/", now, p)) {
-            return@withContext true
-        }
-
-        // 2. Фолбэк на www.youtube.com
-        MeloLog.d(TAG, "Пробуем запасной URL https://www.youtube.com/...")
-        fetchFromUrl("https://www.youtube.com/", now, p)
+        // Получаем ТОЛЬКО с music.youtube.com (ни в коем случае не с www.youtube.com!)
+        fetchFromUrl("https://music.youtube.com/", now, p)
     }
 
     private fun fetchFromUrl(url: String, now: Long, p: SharedPreferences?): Boolean {
@@ -135,7 +152,7 @@ object InnerTubeConfig {
 
         val req = Request.Builder()
             .url(url)
-            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0")
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
             .header("Accept-Language", "en-US,en;q=0.9")
             .header("Cookie", cookieHeader)
             .build()
@@ -151,29 +168,20 @@ object InnerTubeConfig {
                 val verMatch = clientVerRegex.find(html)?.groupValues?.getOrNull(1)
 
                 var updated = false
-                if (!keyMatch.isNullOrBlank()) {
+                if (!keyMatch.isNullOrBlank() && !verMatch.isNullOrBlank() && verMatch.startsWith("1.")) {
                     cachedApiKey = keyMatch
-                    p?.edit()?.putString(KEY_API_KEY, keyMatch)?.apply()
-                    MeloLog.d(TAG, "Успешно извлечён INNERTUBE_API_KEY: $keyMatch")
-                    updated = true
-                } else {
-                    MeloLog.d(TAG, "INNERTUBE_API_KEY не найден регуляркой в $url")
-                }
-
-                if (!verMatch.isNullOrBlank()) {
                     cachedClientVersion = verMatch
-                    p?.edit()?.putString(KEY_CLIENT_VERSION, verMatch)?.apply()
-                    MeloLog.d(TAG, "Успешно извлечён INNERTUBE_CLIENT_VERSION: $verMatch")
-                    updated = true
-                } else {
-                    MeloLog.d(TAG, "INNERTUBE_CLIENT_VERSION не найден регуляркой в $url")
-                }
-
-                if (updated) {
-                    p?.edit()?.putLong(KEY_LAST_FETCH, now)?.apply()
+                    p?.edit()
+                        ?.putString(KEY_API_KEY, keyMatch)
+                        ?.putString(KEY_CLIENT_VERSION, verMatch)
+                        ?.putLong(KEY_LAST_FETCH, now)
+                        ?.apply()
+                    MeloLog.d(TAG, "Успешно извлечён актуальный InnerTube (YouTube Music): key=$keyMatch, ver=$verMatch")
                     return true
+                } else {
+                    MeloLog.d(TAG, "Некорректный ключ или версия для YouTube Music: key=$keyMatch, ver=$verMatch")
+                    return false
                 }
-                return false
             }
         } catch (e: Exception) {
             MeloLog.e(TAG, "Ошибка при получении данных с $url: ${e.message}", e)

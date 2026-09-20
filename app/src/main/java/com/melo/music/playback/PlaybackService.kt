@@ -87,6 +87,7 @@ class PlaybackService : MediaSessionService() {
             queue = list
             queueIndex = index
             currentTrackItem = list.getOrNull(index)
+            EqualizerManager.setBassBoostEnabled(currentTrackItem?.bassBoost ?: false)
         }
 
         /** Команда сервису: отменить текущий кроссфейд (при ручном переключении). */
@@ -184,7 +185,7 @@ class PlaybackService : MediaSessionService() {
             .proxySelector(com.melo.music.net.MeloNet.byedpiSelector)
             .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
             .connectTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .connectionPool(okhttp3.ConnectionPool(16, 25, java.util.concurrent.TimeUnit.SECONDS))
             .addInterceptor { chain ->
@@ -201,40 +202,10 @@ class PlaybackService : MediaSessionService() {
                 }
                 val t0 = System.currentTimeMillis()
                 try {
-                    var resp = chain.proceed(req)
+                    val resp = chain.proceed(req)
                     val dt = System.currentTimeMillis() - t0
                     if (host.contains("sndcdn") || host.contains("soundcloud")) {
                         com.melo.music.util.FileLog.d("MeloPlay", "SC chunk ${resp.code} in ${dt}ms: ${req.url.pathSegments.lastOrNull()}")
-                        val body = resp.body
-                        if (body != null) {
-                            val loggingSource = object : okio.ForwardingSource(body.source()) {
-                                var totalBytes = 0L
-                                override fun read(sink: okio.Buffer, byteCount: Long): Long {
-                                    return try {
-                                        val read = super.read(sink, byteCount)
-                                        if (read > 0) {
-                                            totalBytes += read
-                                            if (totalBytes % (256 * 1024) < read) {
-                                                com.melo.music.util.FileLog.d("MeloPlay", "SC stream: read ${totalBytes / 1024} KB")
-                                            }
-                                        } else if (read == -1L) {
-                                            com.melo.music.util.FileLog.d("MeloPlay", "SC stream: EOF (${totalBytes / 1024} KB)")
-                                        }
-                                        read
-                                    } catch (e: Exception) {
-                                        com.melo.music.util.FileLog.e("MeloPlay", "SC stream ERROR at ${totalBytes / 1024} KB: ${e.javaClass.simpleName}: ${e.message}")
-                                        throw e
-                                    }
-                                }
-                            }
-                            val bufferedSource = loggingSource.buffer()
-                            val wrappedBody = object : okhttp3.ResponseBody() {
-                                override fun contentType() = body.contentType()
-                                override fun contentLength() = body.contentLength()
-                                override fun source() = bufferedSource
-                            }
-                            resp = resp.newBuilder().body(wrappedBody).build()
-                        }
                     }
                     val tag = if (resp.code !in 200..299) req.url.toString().take(180) else host
                     if (resp.code !in 200..299) {
@@ -566,6 +537,7 @@ class PlaybackService : MediaSessionService() {
         if (advanceIndex >= 0) {
             queueIndex = advanceIndex
             currentTrackItem = queue.getOrNull(advanceIndex)
+            EqualizerManager.setBassBoostEnabled(currentTrackItem?.bassBoost ?: false)
             onCrossfadeAdvance?.invoke(advanceIndex)
         }
 

@@ -1,4 +1,4 @@
-﻿package com.melo.music.util
+package com.melo.music.util
 
 import androidx.compose.runtime.mutableStateListOf
 import java.text.SimpleDateFormat
@@ -17,6 +17,7 @@ object MeloLog {
         val time = timeFormat.format(Date())
         val line = "[$time] [$tag] $msg"
         android.util.Log.d(tag, msg)
+        FileLog.d(tag, msg)
         addEntry(line)
     }
 
@@ -25,6 +26,7 @@ object MeloLog {
         val err = if (tr != null) " -> ${tr.javaClass.simpleName}: ${tr.message}" else ""
         val line = "[$time] [ERROR/$tag] $msg$err"
         android.util.Log.e(tag, msg, tr)
+        FileLog.e(tag, msg, tr)
         addEntry(line)
     }
 

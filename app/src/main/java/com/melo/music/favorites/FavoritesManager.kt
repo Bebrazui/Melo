@@ -50,6 +50,7 @@ object FavoritesManager {
                     source = Source.valueOf(obj.optString("source", "YOUTUBE_MUSIC")),
                     kind = ItemKind.TRACK,
                     speed = obj.optDouble("speed", 1.0).toFloat(),
+                    bassBoost = obj.optBoolean("bassBoost", false),
                 )
             }.toMutableList()
         }.getOrDefault(mutableListOf())
@@ -57,13 +58,13 @@ object FavoritesManager {
 
     fun isLiked(url: String): Boolean = getAll().any { it.url == url }
 
-    /** Совпадение с учётом скорости — slowed/sped up версии хранятся отдельно. */
+    /** Совпадение с учётом скорости и басс-буста — slowed/sped up/bass версии хранятся отдельно. */
     fun isLiked(item: TrackItem): Boolean =
-        getAll().any { it.url == item.url && sameSpeed(it.speed, item.speed) }
+        getAll().any { it.url == item.url && sameSpeed(it.speed, item.speed) && it.bassBoost == item.bassBoost }
 
     fun toggle(item: TrackItem): Boolean {
         val list = getAll()
-        val idx = list.indexOfFirst { it.url == item.url && sameSpeed(it.speed, item.speed) }
+        val idx = list.indexOfFirst { it.url == item.url && sameSpeed(it.speed, item.speed) && it.bassBoost == item.bassBoost }
         return if (idx >= 0) {
             list.removeAt(idx)
             save(list)
@@ -93,6 +94,7 @@ object FavoritesManager {
                 put("thumbnail", t.thumbnailUrl ?: "")
                 put("source", t.source.name)
                 put("speed", t.speed.toDouble())
+                put("bassBoost", t.bassBoost)
             })
         }
         prefs?.edit()?.putString(KEY_TRACKS, arr.toString())?.apply()

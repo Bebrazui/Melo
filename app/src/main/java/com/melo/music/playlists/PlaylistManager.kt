@@ -90,7 +90,7 @@ object PlaylistManager {
         val idx = list.indexOfFirst { it.id == playlistId }
         if (idx < 0) return false
         val pl = list[idx]
-        if (pl.tracks.any { it.url == track.url && kotlin.math.abs(it.speed - track.speed) < 0.01f }) return false
+        if (pl.tracks.any { it.url == track.url && kotlin.math.abs(it.speed - track.speed) < 0.01f && it.bassBoost == track.bassBoost }) return false
         list[idx] = pl.copy(tracks = pl.tracks + track)
         save(list)
         com.melo.music.sync.LibrarySync.onPlaylistsChanged()
@@ -136,6 +136,7 @@ object PlaylistManager {
                     put("thumbnail", t.thumbnailUrl ?: "")
                     put("source", t.source.name)
                     put("speed", t.speed.toDouble())
+                    put("bassBoost", t.bassBoost)
                 },
             )
         }
@@ -155,6 +156,7 @@ object PlaylistManager {
                     .getOrDefault(Source.YOUTUBE_MUSIC),
                 kind = ItemKind.TRACK,
                 speed = obj.optDouble("speed", 1.0).toFloat(),
+                bassBoost = obj.optBoolean("bassBoost", false),
             )
         }
 }
