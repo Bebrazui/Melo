@@ -154,6 +154,7 @@ object DropsRepository {
                 collectionId = AppwriteService.COLLECTION_DROPS,
                 documentId = dropId,
             )
+            MapModeration.unmarkMyDrop(dropId)
             MapModeration.hide(dropId)
             invalidate()
         }
@@ -204,6 +205,7 @@ object DropsRepository {
                 Permission.delete(Role.user(uid)),
             ),
         )
+        MapModeration.markMyDrop(doc.id)
         MapDrop(
             id = doc.id, lat = lat, lng = lng, title = track.title,
             artist = track.uploader, thumbnailUrl = track.thumbnailUrl,

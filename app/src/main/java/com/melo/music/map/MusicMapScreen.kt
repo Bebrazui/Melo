@@ -55,11 +55,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.NearMe
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -174,8 +176,18 @@ fun MusicMapScreen(
         MapView(context).apply {
             setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(true)
+            zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
             controller.setZoom(4.5)
             controller.setCenter(GeoPoint(48.0, 15.0))
+            runCatching {
+                val matrix = android.graphics.ColorMatrix(floatArrayOf(
+                    -0.75f, 0f, 0f, 0f, 210f,
+                    0f, -0.75f, 0f, 0f, 210f,
+                    0f, 0f, -0.75f, 0f, 210f,
+                    0f, 0f, 0f, 1f, 0f,
+                ))
+                overlayManager.tilesOverlay.setColorFilter(android.graphics.ColorMatrixColorFilter(matrix))
+            }
         }
     }
     DisposableEffect(Unit) {
@@ -360,6 +372,18 @@ fun MusicMapScreen(
         val t = trackToDrop
         if (granted && t != null) fetchLocationThenCaption(t) else status = "Нужен доступ к геолокации"
     }
+    val speechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val spokenText = result.data
+                ?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+            if (!spokenText.isNullOrBlank()) {
+                mapQuery = spokenText
+            }
+        }
+    }
 
     fun startDrop(track: TrackItem) {
         pickerOpen = false
@@ -369,94 +393,139 @@ fun MusicMapScreen(
         if (ok) fetchLocationThenCaption(track) else permLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(MAP_BG)) {
-        AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
-
-        // Верхняя панель — заголовок + поиск песен по карте (Material 3 Expressive)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface),
+    ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(MAP_BG.copy(alpha = 0.95f), MAP_BG.copy(alpha = 0.80f), Color.Transparent)))
-                .padding(start = 14.dp, end = 14.dp, top = topInset + 12.dp, bottom = 16.dp),
+                .fillMaxSize()
+                .padding(top = topInset, bottom = bottomInset)
+                .padding(horizontal = 16.dp),
         ) {
+            // 1. Верхний ряд: Кнопка назад (56dp tonal) + Строка поиска (56dp pill)
             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                // Tonal button (56dp wide/tall)
                 Surface(
-                    color = SOLID,
                     shape = CircleShape,
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(56.dp)
                         .clip(CircleShape)
                         .clickable(onClick = onClose),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.Close, contentDescription = "Закрыть", tint = Color.White)
+                        Icon(
+                            Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = "Назад",
+                            modifier = Modifier.size(24.dp),
+                        )
                     }
                 }
-                Spacer(Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Карта музыки",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontSize = 22.sp,
-                            letterSpacing = (-0.3).sp,
-                        ),
-                        fontWeight = FontWeight.Black,
-                        color = Color.White,
-                    )
-                    Text(
-                        status ?: "${ms.drops.size} рядом · двигай карту",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.7f),
-                    )
-                }
-            }
-            Spacer(Modifier.height(14.dp))
-            TextField(
-                value = mapQuery,
-                onValueChange = { mapQuery = it },
-                placeholder = { Text("Искать песни на карте", color = Color.White.copy(alpha = 0.45f)) },
-                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                trailingIcon = {
-                    if (mapQuery.isNotEmpty()) {
-                        IconButton(onClick = { mapQuery = "" }) {
-                            Icon(Icons.Rounded.Close, contentDescription = "Очистить", tint = Color.White.copy(alpha = 0.7f))
+
+                // Search bar (56dp tall, pill, surfaceContainerHigh)
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                    ) {
+                        Icon(
+                            Icons.Rounded.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            if (mapQuery.isEmpty()) {
+                                Text(
+                                    "Поиск треков",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            androidx.compose.foundation.text.BasicTextField(
+                                value = mapQuery,
+                                onValueChange = { mapQuery = it },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                ),
+                                cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        if (mapQuery.isNotEmpty()) {
+                            IconButton(
+                                onClick = { mapQuery = "" },
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Close,
+                                    contentDescription = "Очистить",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = {
+                                val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                    putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                    putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Поиск треков на карте")
+                                }
+                                runCatching { speechLauncher.launch(intent) }
+                            },
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                Icons.Rounded.Mic,
+                                contentDescription = "Голосовой поиск",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp),
+                            )
                         }
                     }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(26.dp),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = SOLID,
-                    unfocusedContainerColor = SOLID,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    cursorColor = MaterialTheme.colorScheme.primary,
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), RoundedCornerShape(26.dp)),
-            )
+                }
+            }
+
+            // Выпадающий список результатов поиска по карте
             if (searchHits.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
                 Surface(
-                    color = GLASS,
-                    shape = RoundedCornerShape(22.dp),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
+                    shadowElevation = 8.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp)
+                        .heightIn(max = 240.dp),
                 ) {
-                    LazyColumn(modifier = Modifier.padding(8.dp)) {
+                    LazyColumn(modifier = Modifier.padding(6.dp)) {
                         items(searchHits, key = { it.id }) { d ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
+                                    .clip(RoundedCornerShape(14.dp))
                                     .clickable { flyTo(d) }
                                     .padding(horizontal = 10.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -465,142 +534,61 @@ fun MusicMapScreen(
                                     model = d.thumbnailUrl,
                                     contentDescription = null,
                                     modifier = Modifier
-                                        .size(46.dp)
+                                        .size(44.dp)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(Color.White.copy(alpha = 0.06f)),
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                                 )
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(d.title, color = Color.White, maxLines = 1, fontWeight = FontWeight.SemiBold)
-                                    d.artist?.let { Text(it, color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall, maxLines = 1) }
-                                }
-                                Icon(Icons.Rounded.Place, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Низ карты: карточка пина → мини-плеер → кнопка во всю ширину (Material 3 Expressive)
-        var lastSel by remember { mutableStateOf<MapDrop?>(null) }
-        LaunchedEffect(selected) { if (selected != null) lastSel = selected }
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(bottom = bottomInset),
-        ) {
-            AnimatedVisibility(
-                visible = selected != null,
-                enter = slideInVertically(tween(260)) { it } + fadeIn(),
-                exit = slideOutVertically(tween(220)) { it } + fadeOut(),
-            ) {
-                val d = lastSel
-                if (d != null) {
-                    Surface(
-                        color = GLASS,
-                        shape = RoundedCornerShape(28.dp),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
-                        tonalElevation = 10.dp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 6.dp),
-                    ) {
-                        Column(modifier = Modifier.padding(18.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                AsyncImage(
-                                    model = d.thumbnailUrl,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .size(64.dp)
-                                        .clip(RoundedCornerShape(18.dp)),
-                                )
-                                Spacer(Modifier.width(14.dp))
-                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         d.title,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1,
+                                        fontWeight = FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.bodyMedium,
                                     )
                                     d.artist?.let {
-                                        Spacer(Modifier.height(2.dp))
-                                        Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.65f), maxLines = 1)
+                                        Text(
+                                            it,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 1,
+                                        )
                                     }
                                 }
-                                Surface(
-                                    shape = CircleShape,
-                                    color = Color.White.copy(alpha = 0.08f),
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .clickable { selected = null },
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(Icons.Rounded.Close, contentDescription = "Закрыть", tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
-                                    }
-                                }
-                            }
-                            if (d.caption.isNotBlank()) {
-                                Spacer(Modifier.height(12.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = Color.White.copy(alpha = 0.05f),
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    Text(
-                                        "«${d.caption}»",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.White.copy(alpha = 0.85f),
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(16.dp))
-                            Button(
-                                onClick = { onPlay(d.toTrackItem()) },
-                                modifier = Modifier.fillMaxWidth().height(52.dp),
-                                shape = RoundedCornerShape(26.dp),
-                            ) {
-                                Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Слушать трек", fontWeight = FontWeight.Bold)
-                            }
-                            Spacer(Modifier.height(4.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                TextButton(onClick = { reportDrop = d }) {
-                                    Icon(Icons.Rounded.Flag, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White.copy(alpha = 0.6f))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Пожаловаться", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
-                                }
-                                if (d.ownerId == AppwriteService.userId) {
-                                    TextButton(onClick = { confirmDeleteDrop = d }) {
-                                        Icon(Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White.copy(alpha = 0.6f))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Удалить", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
-                                    }
-                                }
+                                Icon(
+                                    Icons.Rounded.Place,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp),
+                                )
                             }
                         }
                     }
                 }
             }
-            // Кнопка центрирования на себе (GPS)
-            Row(
+
+            // 2. Центр: Карта в карточке со скруглением 20dp
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.End,
+                    .weight(1f)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
             ) {
+                // OSM MapView
+                AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+
+                // Внизу справа внутри карты: крупная круглая кнопка с near_me (геолокация)
                 Surface(
-                    color = SOLID,
                     shape = CircleShape,
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                     shadowElevation = 8.dp,
                     modifier = Modifier
-                        .size(50.dp)
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp)
+                        .size(76.dp)
                         .clip(CircleShape)
                         .clickable {
                             val ok = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -618,23 +606,149 @@ fun MusicMapScreen(
                         Icon(
                             Icons.Rounded.NearMe,
                             contentDescription = "Мое местоположение",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(36.dp),
                         )
+                    }
+                }
+
+                // Карточка выбранного пина
+                var lastSel by remember { mutableStateOf<MapDrop?>(null) }
+                LaunchedEffect(selected) { if (selected != null) lastSel = selected }
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = selected != null,
+                    enter = slideInVertically(tween(260)) { it } + fadeIn(),
+                    exit = slideOutVertically(tween(220)) { it } + fadeOut(),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                ) {
+                    val d = lastSel
+                    if (d != null) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.95f),
+                            shape = RoundedCornerShape(20.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
+                            shadowElevation = 10.dp,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    AsyncImage(
+                                        model = d.thumbnailUrl,
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .size(56.dp)
+                                            .clip(RoundedCornerShape(14.dp)),
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            d.title,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                        )
+                                        d.artist?.let {
+                                            Spacer(Modifier.height(2.dp))
+                                            Text(
+                                                it,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                            )
+                                        }
+                                    }
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(CircleShape)
+                                            .clickable { selected = null },
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                Icons.Rounded.Close,
+                                                contentDescription = "Закрыть",
+                                                tint = MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                                if (d.caption.isNotBlank()) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Text(
+                                            "«${d.caption}»",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(10.dp))
+                                Button(
+                                    onClick = { onPlay(d.toTrackItem()) },
+                                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                                    shape = CircleShape,
+                                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                                    ),
+                                ) {
+                                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Слушать трек", fontWeight = FontWeight.Bold)
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    TextButton(onClick = { reportDrop = d }) {
+                                        Icon(Icons.Rounded.Flag, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Пожаловаться", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    if (MapModeration.isMyDrop(d.id, d.ownerId)) {
+                                        TextButton(
+                                            onClick = { confirmDeleteDrop = d },
+                                            colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                                                contentColor = MaterialTheme.colorScheme.error,
+                                            ),
+                                        ) {
+                                            Icon(Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Удалить свой трек", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            // Мини-плеер (если что-то играет) — над кнопкой.
+            // Мини-плеер (если что-то играет)
             nowPlayingBar()
-            // Кнопка во всю ширину.
+
+            Spacer(Modifier.height(12.dp))
+
+            // 3. Кнопка «+ Оставить Трек» (56dp tall, pill, primary container)
             DropButton(
                 onClick = { pickerOpen = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 4.dp, bottom = 16.dp),
+                modifier = Modifier.fillMaxWidth(),
             )
+
+            Spacer(Modifier.height(8.dp))
         }
 
         // Выбор трека для пина — затемнение + лист, выезжающий снизу.
@@ -739,25 +853,54 @@ fun MusicMapScreen(
         // Подтверждение удаления своего пина.
         confirmDeleteDrop?.let { d ->
             Dialog(onDismissRequest = { confirmDeleteDrop = null }) {
-                Surface(shape = RoundedCornerShape(24.dp), color = GLASS) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Text("Удалить пин?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
+                    shadowElevation = 10.dp,
+                ) {
+                    Column(modifier = Modifier.padding(22.dp)) {
+                        Text(
+                            "Удалить свой трек?",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
                         Spacer(Modifier.height(8.dp))
-                        Text("«${d.title}» исчезнет с карты.", color = Color.White.copy(alpha = 0.7f))
-                        Spacer(Modifier.height(18.dp))
+                        Text(
+                            "«${d.title}» исчезнет с карты.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(20.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            TextButton(onClick = { confirmDeleteDrop = null }) { Text("Отмена") }
+                            TextButton(onClick = { confirmDeleteDrop = null }) {
+                                Text("Отмена", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                             Spacer(Modifier.width(8.dp))
-                            Button(onClick = {
-                                confirmDeleteDrop = null
-                                selected = null
-                                status = "Удаляю…"
-                                scope.launch {
-                                    DropsRepository.delete(d.id)
-                                        .onSuccess { status = "Удалено"; reload() }
-                                        .onFailure { status = "Не удалось удалить" }
-                                }
-                            }) { Text("Удалить") }
+                            Button(
+                                onClick = {
+                                    confirmDeleteDrop = null
+                                    selected = null
+                                    status = "Удаляю…"
+                                    scope.launch {
+                                        MapModeration.unmarkMyDrop(d.id)
+                                        MapModeration.hide(d.id)
+                                        allDiscoveredDrops.remove(d.id)
+                                        ms.drops = allDiscoveredDrops.values.toList()
+                                        ms.render()
+                                        runCatching { DropsRepository.delete(d.id) }
+                                        status = "Трек удалён с карты"
+                                        reload()
+                                    }
+                                },
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError,
+                                ),
+                            ) {
+                                Text("Удалить")
+                            }
                         }
                     }
                 }
@@ -766,47 +909,35 @@ fun MusicMapScreen(
     }
 }
 
-/** Кнопка «оставить трек» во всю ширину — градиент + лёгкое покачивание иконки (M3 Expressive). */
+
+/** Кнопка «+ Оставить Трек» — pill-кнопка (Material 3 Expressive). */
 @Composable
 private fun DropButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val inf = rememberInfiniteTransition(label = "drop")
-    val bob by inf.animateFloat(
-        0f, 1f,
-        infiniteRepeatable(tween(850, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "bob",
-    )
-    val accent = MaterialTheme.colorScheme.primary
-    val accentLight = androidx.compose.ui.graphics.lerp(accent, Color.White, 0.28f)
-
-    Surface(
-        shape = RoundedCornerShape(26.dp),
-        shadowElevation = 8.dp,
+    Button(
+        onClick = onClick,
         modifier = modifier
-            .height(58.dp)
-            .clip(RoundedCornerShape(26.dp))
-            .clickable(onClick = onClick),
+            .fillMaxWidth()
+            .height(56.dp),
+        shape = CircleShape,
+        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+        ),
+        elevation = androidx.compose.material3.ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Brush.horizontalGradient(listOf(accent, accentLight))),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Rounded.Place,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(24.dp).graphicsLayer { translationY = -bob * 3f },
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                "Оставить трек здесь",
-                color = MaterialTheme.colorScheme.onPrimary,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
-        }
+        Icon(
+            Icons.Rounded.Add,
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.onPrimary,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "Оставить Трек",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onPrimary,
+        )
     }
 }
 
