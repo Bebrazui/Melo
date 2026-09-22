@@ -1,10 +1,15 @@
 package com.melo.music.update
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import java.io.File
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -123,6 +128,26 @@ fun UpdateScreen(
         animationSpec = infiniteRepeatable(tween(1400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "scale",
     )
+
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val apk = File(context.cacheDir, "melo_update.apk")
+                if (apk.exists() && apk.length() > 0L && UpdateManager.canInstallApk(context)) {
+                    if (UpdateManager.installApk(context, apk)) {
+                        isDone = true
+                        hasError = false
+                        statusText = "Установщик запущен!"
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (updateInfo == null) {
@@ -340,18 +365,59 @@ fun UpdateScreen(
                     ) {
                         Text("Закрыть", color = Color.White)
                     }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !UpdateManager.canInstallApk(context)) {
+                        Button(
+                            onClick = {
+                                UpdateManager.openInstallPermissionSettings(context)
+                            },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = cs.primary),
+                        ) {
+                            Text("Разрешить в настройках", color = cs.onPrimary)
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                val apk = File(context.cacheDir, "melo_update.apk")
+                                if (apk.exists() && apk.length() > 0L) {
+                                    if (UpdateManager.installApk(context, apk)) {
+                                        isDone = true
+                                        hasError = false
+                                        statusText = "Установщик запущен!"
+                                    }
+                                } else {
+                                    hasError = false
+                                    progress = 0f
+                                }
+                            },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = cs.primary),
+                        ) {
+                            Text("Установить", color = cs.onPrimary)
+                        }
+                    }
+                }
+            } else if (isDone) {
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    OutlinedButton(
+                        onClick = onCancel,
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                    ) {
+                        Text("Закрыть", color = Color.White)
+                    }
                     Button(
                         onClick = {
-                            hasError = false
-                            progress = 0f
+                            val apk = File(context.cacheDir, "melo_update.apk")
+                            UpdateManager.installApk(context, apk)
                         },
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = cs.primary),
                     ) {
-                        Text("Повторить", color = cs.onPrimary)
+                        Text("Открыть установщик", color = cs.onPrimary)
                     }
                 }
-            } else if (!isDone) {
+            } else {
                 OutlinedButton(
                     onClick = onCancel,
                     shape = RoundedCornerShape(16.dp),

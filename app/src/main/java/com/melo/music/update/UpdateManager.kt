@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -282,14 +283,20 @@ object UpdateManager {
 
             downloadStatusText = "Запуск установки..."
             onProgress("Запуск установки...", 1f)
-            MeloLog.d(TAG, "APK скачан (${apkFile.length()} байт), передача в PackageInstaller...")
-
-            withContext(Dispatchers.Main) {
+            val installed = withContext(Dispatchers.Main) {
                 installApk(context, apkFile)
             }
 
+            if (!installed) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !canInstallApk(context)) {
+                    downloadStatusText = "Требуется разрешение на установку приложений"
+                } else {
+                    downloadStatusText = "Не удалось запустить установщик"
+                }
+            }
+
             isDownloading = false
-            true
+            installed
         } catch (e: Exception) {
             MeloLog.e(TAG, "Ошибка скачивания APK: ${e.message}", e)
             downloadStatusText = "Ошибка скачивания: ${e.message}"
@@ -299,8 +306,43 @@ object UpdateManager {
         }
     }
 
-    private fun installApk(context: Context, apkFile: File) {
-        try {
+    fun canInstallApk(context: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.packageManager.canRequestPackageInstalls()
+        } else {
+            true
+        }
+    }
+
+    fun openInstallPermissionSettings(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:${context.packageName}")
+                ).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                MeloLog.e(TAG, "Не удалось открыть настройки неизвестных источников: ${e.message}", e)
+            }
+        }
+    }
+
+    fun installApk(context: Context, apkFile: File = File(context.cacheDir, "melo_update.apk")): Boolean {
+        if (!apkFile.exists() || apkFile.length() == 0L) {
+            MeloLog.e(TAG, "Файл APK не найден или пуст")
+            return false
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !canInstallApk(context)) {
+            MeloLog.d(TAG, "Нет разрешения REQUEST_INSTALL_PACKAGES, открытие настроек...")
+            openInstallPermissionSettings(context)
+            return false
+        }
+
+        return try {
             val uri = FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.provider",
@@ -311,8 +353,10 @@ object UpdateManager {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
             }
             context.startActivity(intent)
+            true
         } catch (e: Exception) {
             MeloLog.e(TAG, "Не удалось запустить установщик APK: ${e.message}", e)
+            false
         }
     }
 
