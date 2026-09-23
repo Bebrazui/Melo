@@ -1,7 +1,7 @@
 {
   "versionCode": 6,
   "versionName": "0.5-beta",
-  "apkUrl": "https://github.com/Bebrazui/Melo-Releases/raw/v0.5-beta/app-ruStore-release.apk",
+  "apkUrl": "https://github.com/Bebrazui/Melo-Releases/raw/v0.5-beta/app-release.apk",
   "changelog": "• Карта музыки в Material 3 Expressive дизайне\n• Поиск треков на карте с голосовым вводом\n• Возможность удалять свои оставленные треки на карте\n• Адаптивный плеер для экранов 9:16 и компактных режимов\n• Исправлено двойное переключение треков из шторки\n• Оптимизация и повышение стабильности",
-  "sha256": "24f2a7ce50c7f0cd988ccd262fe802ce04b9bbb5f491d0601a1617822b55def2"
+  "sha256": "cc6340fe729e91f43c3bd14890e8842bcdc8af395343aa54ea7acbcb4f2e7cab"
 }
