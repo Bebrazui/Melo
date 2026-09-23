@@ -6584,6 +6584,7 @@ private fun FullPlayer(
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val isWide = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+            val isCompact = !isWide && maxHeight < 750.dp
 
             val isVinylMode = com.melo.music.settings.AppSettings.vinylRecord
             val art3dModifier = Modifier
@@ -6867,7 +6868,7 @@ private fun FullPlayer(
                 }
 
                 if (!isLandscape) {
-                    Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(if (isCompact) 8.dp else 18.dp))
                 }
 
                 // 4. Wavy/Squiggly Прогресс-бар с 3D-параллаксом
@@ -6947,7 +6948,7 @@ private fun FullPlayer(
                 }
 
                 if (!isLandscape) {
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(if (isCompact) 10.dp else 20.dp))
                 }
 
                 // 5. Главный блок воспроизведения: асимметричный Expressive Shape Trio в цвет обложки с 3D
@@ -6969,8 +6970,8 @@ private fun FullPlayer(
                         shape = RoundedCornerShape(prevCornerRadius),
                         color = sideBtnColor,
                         modifier = Modifier
-                            .width((if (isLandscape) 56.dp else 66.dp) * prevScaleX)
-                            .height(if (isLandscape) 56.dp else 66.dp)
+                            .width((if (isLandscape || isCompact) 56.dp else 66.dp) * prevScaleX)
+                            .height(if (isLandscape || isCompact) 56.dp else 66.dp)
                             .clip(RoundedCornerShape(prevCornerRadius))
                             .clickable(
                                 interactionSource = prevInteractionSource,
@@ -6996,7 +6997,7 @@ private fun FullPlayer(
                                 Icons.Rounded.SkipPrevious,
                                 contentDescription = "Назад",
                                 tint = iconTint,
-                                modifier = Modifier.size(if (isLandscape) 28.dp else 32.dp),
+                                modifier = Modifier.size(if (isLandscape || isCompact) 28.dp else 32.dp),
                             )
                         }
                     }
@@ -7009,8 +7010,8 @@ private fun FullPlayer(
                         color = playBtnColor,
                         shadowElevation = 8.dp,
                         modifier = Modifier
-                            .width((if (isLandscape) 84.dp else 96.dp) * playScaleX)
-                            .height(if (isLandscape) 64.dp else 74.dp)
+                            .width((if (isLandscape) 84.dp else if (isCompact) 88.dp else 96.dp) * playScaleX)
+                            .height(if (isLandscape || isCompact) 62.dp else 74.dp)
                             .clip(RoundedCornerShape(playCornerRadius))
                             .clickable(
                                 interactionSource = playInteractionSource,
@@ -7041,7 +7042,7 @@ private fun FullPlayer(
                                 exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.65f),
                             ) {
                                 LoadingIndicator(
-                                    modifier = Modifier.size(if (isLandscape) 26.dp else 30.dp),
+                                    modifier = Modifier.size(if (isLandscape || isCompact) 26.dp else 30.dp),
                                     color = iconTint,
                                 )
                             }
@@ -7055,7 +7056,7 @@ private fun FullPlayer(
                                         imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                                         contentDescription = if (playing) "Пауза" else "Играть",
                                         tint = iconTint,
-                                        modifier = Modifier.size(if (isLandscape) 34.dp else 40.dp),
+                                        modifier = Modifier.size(if (isLandscape || isCompact) 34.dp else 40.dp),
                                     )
                                 }
                             }
@@ -7069,8 +7070,8 @@ private fun FullPlayer(
                         shape = RoundedCornerShape(nextCornerRadius),
                         color = sideBtnColor,
                         modifier = Modifier
-                            .width((if (isLandscape) 56.dp else 66.dp) * nextScaleX)
-                            .height(if (isLandscape) 56.dp else 66.dp)
+                            .width((if (isLandscape || isCompact) 56.dp else 66.dp) * nextScaleX)
+                            .height(if (isLandscape || isCompact) 56.dp else 66.dp)
                             .clip(RoundedCornerShape(nextCornerRadius))
                             .clickable(
                                 interactionSource = nextInteractionSource,
@@ -7096,14 +7097,14 @@ private fun FullPlayer(
                                 Icons.Rounded.SkipNext,
                                 contentDescription = "Вперёд",
                                 tint = iconTint,
-                                modifier = Modifier.size(if (isLandscape) 28.dp else 32.dp),
+                                modifier = Modifier.size(if (isLandscape || isCompact) 28.dp else 32.dp),
                             )
                         }
                     }
                 }
 
                 if (!isLandscape) {
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(if (isCompact) 10.dp else 20.dp))
                 }
 
                 // 6. Нижний сегментированный остров действий с 3D-параллаксом
@@ -7113,7 +7114,7 @@ private fun FullPlayer(
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
                     modifier = Modifier
                         .fillMaxWidth(if (isLandscape) 0.95f else 0.88f)
-                        .height(if (isLandscape) 52.dp else 60.dp)
+                        .height(if (isLandscape) 52.dp else if (isCompact) 50.dp else 60.dp)
                         .clip(RoundedCornerShape(32.dp))
                         .graphicsLayer {
                             rotationY = tiltRoll * 2.5f
@@ -7133,7 +7134,7 @@ private fun FullPlayer(
                                 Icons.Rounded.Shuffle,
                                 contentDescription = "Перемешать",
                                 tint = if (shuffle) accent else whiteDim,
-                                modifier = Modifier.size(if (isLandscape) 20.dp else 24.dp),
+                                modifier = Modifier.size(if (isLandscape || isCompact) 20.dp else 24.dp),
                             )
                         }
 
@@ -7149,7 +7150,7 @@ private fun FullPlayer(
                                 imageVector = if (repeatOne) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
                                 contentDescription = "Повтор",
                                 tint = if (repeatOne) accent else whiteDim,
-                                modifier = Modifier.size(if (isLandscape) 20.dp else 24.dp),
+                                modifier = Modifier.size(if (isLandscape || isCompact) 20.dp else 24.dp),
                             )
                         }
 
@@ -7162,7 +7163,7 @@ private fun FullPlayer(
 
                         IconButton(
                             onClick = onToggleLike,
-                            modifier = Modifier.size(if (isLandscape) 46.dp else 56.dp),
+                            modifier = Modifier.size(if (isLandscape || isCompact) 44.dp else 56.dp),
                         ) {
                             if (isLiked) {
                                 LottieAnimation(
@@ -7432,17 +7433,18 @@ private fun FullPlayer(
                 }
             } else {
                 // ── РАСКЛАДКА: Вертикальный режим (Portrait) ──
-                val speedSpacerWeight by animateFloatAsState(
-                    targetValue = if (showSpeed) 0.35f else 1f,
-                    animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f),
-                    label = "speedSpacerWeight",
-                )
+                val topSpacerHeight = if (isCompact) 14.dp else 36.dp
 
                 Column(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 12.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            horizontal = if (isCompact) 18.dp else 24.dp,
+                            vertical = if (isCompact) 4.dp else 12.dp,
+                        ),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Spacer(Modifier.height(40.dp))
+                    Spacer(Modifier.height(topSpacerHeight))
                     RenderTopBar(isLandscape = false)
 
                     if (showLyrics) {
@@ -7457,18 +7459,37 @@ private fun FullPlayer(
                             RenderLyrics(Modifier.fillMaxSize())
                         }
                     } else {
-                        // Режим обложки: центрируем обложку между шапкой и кнопками
-                        Spacer(Modifier.weight(1f))
+                        // Режим обложки: адаптивный размер по доступной высоте
+                        val targetArtFraction = when {
+                            isCompact && showSpeed -> 0.55f
+                            isCompact -> 0.74f
+                            showSpeed -> 0.68f
+                            else -> 0.88f
+                        }
+                        val animatedArtFraction by animateFloatAsState(
+                            targetValue = targetArtFraction,
+                            animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f),
+                            label = "artFraction",
+                        )
+
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(0.88f)
-                                .aspectRatio(1f)
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(vertical = if (isCompact) 2.dp else 8.dp)
                                 .offset { IntOffset(swipeX.value.roundToInt(), 0) },
                             contentAlignment = Alignment.Center,
                         ) {
-                            RenderArtwork(Modifier.fillMaxSize())
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(animatedArtFraction)
+                                    .aspectRatio(1f, matchHeightConstraintsFirst = true),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                RenderArtwork(Modifier.fillMaxSize())
+                            }
                         }
-                        Spacer(Modifier.weight(speedSpacerWeight))
                     }
 
                     // ── M3 Expressive ButtonGroup: ПОД ОБЛОЖКОЙ, НАД НАДПИСЬЮ ──
@@ -7481,7 +7502,7 @@ private fun FullPlayer(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 8.dp, bottom = 12.dp),
+                                .padding(top = 2.dp, bottom = if (isCompact) 6.dp else 12.dp),
                         ) {
                             ExpressiveSpeedButtonGroup(
                                 speed = speed,
@@ -7495,11 +7516,11 @@ private fun FullPlayer(
 
                     RenderControls(isLandscape = false)
 
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(if (isCompact) 4.dp else 8.dp))
                     SleepTimerControl(white = white, accent = accent)
 
                     error?.let {
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(4.dp))
                         Text(
                             text = "Плеер: $it",
                             style = MaterialTheme.typography.bodySmall,
@@ -7509,7 +7530,7 @@ private fun FullPlayer(
                     }
 
                     // Комфортный отступ снизу без лишней пустоты
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(if (isCompact) 4.dp else 14.dp))
                 }
             }
 

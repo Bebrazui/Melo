@@ -3,6 +3,7 @@ package com.melo.music.playback
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
 import androidx.media3.common.AuxEffectInfo
@@ -152,7 +153,20 @@ class PlaybackService : MediaSessionService() {
     // Подсчёт нажатий на кнопку гарнитуры: 1 = play/pause, 2 = next, 3+ = prev.
     private var tapCount = 0
     private var tapRunnable: Runnable? = null
-    private val tapWindowMs = 320L
+    // Защита от дребезга / двойного переключения (debounce 350ms)
+    private var lastSkipTimeMs = 0L
+    private fun safeSkipNext() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastSkipTimeMs < 350L) return
+        lastSkipTimeMs = now
+        onSkipNext?.invoke()
+    }
+    private fun safeSkipPrev() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastSkipTimeMs < 350L) return
+        lastSkipTimeMs = now
+        onSkipPrev?.invoke()
+    }
 
     private inner class MeloForwardingPlayer(player: Player) : androidx.media3.common.ForwardingPlayer(player) {
         override fun getAvailableCommands(): Player.Commands {
@@ -167,10 +181,10 @@ class PlaybackService : MediaSessionService() {
             return super.isCommandAvailable(command)
         }
         override fun seekToNext() {
-            handler.post { onSkipNext?.invoke() }
+            handler.post { safeSkipNext() }
         }
         override fun seekToPrevious() {
-            handler.post { onSkipPrev?.invoke() }
+            handler.post { safeSkipPrev() }
         }
     }
 
@@ -340,12 +354,10 @@ class PlaybackService : MediaSessionService() {
             playerCommand: Int,
         ): Int {
             when (playerCommand) {
-                Player.COMMAND_SEEK_TO_NEXT -> {
-                    handler.post { onSkipNext?.invoke() }
-                    return androidx.media3.session.SessionResult.RESULT_SUCCESS
-                }
+                Player.COMMAND_SEEK_TO_NEXT,
                 Player.COMMAND_SEEK_TO_PREVIOUS -> {
-                    handler.post { onSkipPrev?.invoke() }
+                    // Разрешаем команду. Media3 автоматически выполнит её через
+                    // MeloForwardingPlayer (seekToNext/seekToPrevious) без дублирования.
                     return androidx.media3.session.SessionResult.RESULT_SUCCESS
                 }
             }
@@ -382,8 +394,8 @@ class PlaybackService : MediaSessionService() {
                 return true
             }
             when (key.keyCode) {
-                KeyEvent.KEYCODE_MEDIA_NEXT -> handler.post { onSkipNext?.invoke() }
-                KeyEvent.KEYCODE_MEDIA_PREVIOUS -> handler.post { onSkipPrev?.invoke() }
+                KeyEvent.KEYCODE_MEDIA_NEXT -> handler.post { safeSkipNext() }
+                KeyEvent.KEYCODE_MEDIA_PREVIOUS -> handler.post { safeSkipPrev() }
                 KeyEvent.KEYCODE_MEDIA_PLAY -> handler.post { active.play() }
                 KeyEvent.KEYCODE_MEDIA_PAUSE -> handler.post { active.pause() }
                 KeyEvent.KEYCODE_MEDIA_STOP -> handler.post { active.pause() }
@@ -396,20 +408,20 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    /** Накопление тапов в окне [tapWindowMs] и реакция по их числу. */
+    /** Накопление тапов в окне tapWindowMs и реакция по их числу. */
     private fun onHeadsetTap() {
         tapCount++
         tapRunnable?.let { handler.removeCallbacks(it) }
         val r = Runnable {
             when (tapCount) {
                 1 -> if (active.isPlaying) active.pause() else active.play()
-                2 -> onSkipNext?.invoke()
-                else -> onSkipPrev?.invoke()
+                2 -> safeSkipNext()
+                else -> safeSkipPrev()
             }
             tapCount = 0
         }
         tapRunnable = r
-        handler.postDelayed(r, tapWindowMs)
+        handler.postDelayed(r, 320L)
     }
 
     /** Посыл звука плеера в глобальный aux-реверб (или отключение). */
