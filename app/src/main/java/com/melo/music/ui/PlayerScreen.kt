@@ -407,6 +407,7 @@ fun PlayerScreen(
     var playingList by rememberSaveable(stateSaver = TrackSaver.listOfSaver()) { mutableStateOf<List<TrackItem>>(emptyList()) }
     var playingIndex by rememberSaveable { mutableIntStateOf(-1) }
     var shuffle by rememberSaveable { mutableStateOf(false) }
+    val shuffleRecentHistory = remember { ArrayDeque<Int>() }
     var repeatOne by rememberSaveable { mutableStateOf(false) }
     // «Sea» — бесконечная персональная волна (радио YouTube Music + наш реранк).
     var seaActive by rememberSaveable { mutableStateOf(false) }
@@ -687,6 +688,26 @@ fun PlayerScreen(
     }
 
     // Заранее резолвит следующий трек и отдаёт сервису для кроссфейда.
+    fun pickNextShuffleIndex(listSize: Int, currentIdx: Int): Int {
+        if (listSize <= 1) return 0
+        if (listSize == 2) return if (currentIdx == 0) 1 else 0
+
+        // Не повторять последние N сыгранных треков (половина очереди, но не менее 2 и не более 10)
+        val maxHistorySize = (listSize / 2).coerceIn(2, 10).coerceAtMost(listSize - 1)
+        val pool = (0 until listSize).filter { it != currentIdx && it !in shuffleRecentHistory }
+        val candidate = if (pool.isNotEmpty()) {
+            pool.random()
+        } else {
+            // Если все в истории, берем любой кроме текущего
+            (0 until listSize).filter { it != currentIdx }.randomOrNull() ?: 0
+        }
+        shuffleRecentHistory.addLast(currentIdx)
+        while (shuffleRecentHistory.size > maxHistorySize) {
+            shuffleRecentHistory.removeFirst()
+        }
+        return candidate
+    }
+
     fun pushNextResolved(fromIndex: Int) {
         val list = playingList
         if (repeatOne || list.isEmpty()) {
@@ -694,8 +715,7 @@ fun PlayerScreen(
             return
         }
         val nextIdx = if (shuffle) {
-            if (list.size > 1) ((fromIndex + 1 + (0 until list.size - 1).random()) % list.size)
-            else fromIndex
+            pickNextShuffleIndex(list.size, fromIndex)
         } else {
             (fromIndex + 1) % list.size
         }
@@ -794,7 +814,7 @@ fun PlayerScreen(
     }
     fun playNext() {
         if (playingList.isEmpty()) return
-        val next = if (shuffle) playingList.indices.random() else (playingIndex + 1) % playingList.size
+        val next = if (shuffle) pickNextShuffleIndex(playingList.size, playingIndex) else (playingIndex + 1) % playingList.size
         playAt(playingList, next, keepSea = seaActive)
     }
     fun playPrev() {
@@ -6743,6 +6763,8 @@ private fun FullPlayer(
     var speedWasOpenAtDragStart by remember { mutableStateOf(false) }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val fullScreenWidthDp = maxWidth
+        val fullScreenHeightDp = maxHeight
         val screenWidthPx = with(localDensity) { maxWidth.toPx() }
         val screenHeightPx = with(localDensity) { maxHeight.toPx() }
 
@@ -6765,10 +6787,10 @@ private fun FullPlayer(
         // Мягкий эффект глубины (3D lift): карточка слегка отдаляется в перспективе во время движения
         val depthScale = 1f - (kotlin.math.sin(p * Math.PI.toFloat()) * 0.035f)
 
-        // Полноэкранный плеер плавно растворяется до середины свайпа вниз (~48% хода)
-        val fullAlpha = (1f - (p / 0.48f)).coerceIn(0f, 1f)
-        // Мини-плеер начинает проявляться ТОЛЬКО после полного исчезновения полноэкранного (с 54% до 100%)
-        val miniAlpha = ((p - 0.54f) / 0.46f).coerceIn(0f, 1f)
+        // Полноэкранный плеер плавно растворяется до середины свайпа вниз (~40% хода)
+        val fullAlpha = (1f - (p / 0.40f)).coerceIn(0f, 1f)
+        // Мини-плеер начинает проявляться с 30% до 100% с мягким наложением
+        val miniAlpha = ((p - 0.30f) / 0.70f).coerceIn(0f, 1f)
 
         // Без затемнения фона под карточкой: чистая трансформация без мерцаний и резких перепадов яркости
         Box(
@@ -6913,12 +6935,13 @@ private fun FullPlayer(
                         )
                     },
             ) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer { alpha = fullAlpha },
-                    ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                    if (fullAlpha > 0.01f) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = fullScreenWidthDp, height = fullScreenHeightDp)
+                                .graphicsLayer { alpha = fullAlpha },
+                        ) {
         FlowingBackground(
             thumbnailUrl = hiRes,
             audioSessionId = audioSessionId,
@@ -7905,6 +7928,7 @@ private fun FullPlayer(
             )
         }
     }
+}
 
         // 2. Мини-плеер (проявляется при сворачивании и идеально встает на свое место)
         if (miniAlpha > 0.01f) {
