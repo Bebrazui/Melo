@@ -5867,11 +5867,13 @@ private fun AudioFxBottomSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
+        val scrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(scrollState)
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp),
+                .padding(bottom = 48.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -5937,7 +5939,7 @@ private fun AudioFxBottomSheet(
 
             Spacer(Modifier.height(14.dp))
 
-            // 2. Искусственное ухудшение качества (Lo-Fi / Bitcrush)
+            // 2. Искусственное ухудшение качества (Дешёвый микрофон / Lo-Fi запись)
             Surface(
                 shape = RoundedCornerShape(20.dp),
                 color = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow,
@@ -5947,7 +5949,7 @@ private fun AudioFxBottomSheet(
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "Ухудшение качества (Lo-Fi / Crush)",
+                            "Дешёвый микрофон (Lo-Fi)",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = titleColor,
@@ -5962,7 +5964,7 @@ private fun AudioFxBottomSheet(
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Понижение битности и частоты дискретизации до эффекта старого телефона или сломанного радио",
+                        "Эффект древней записи на дешёвый микрофон, диктофон или кассетник с узким диапазоном и тёплым перегрузом",
                         style = MaterialTheme.typography.bodySmall,
                         color = subColor,
                     )

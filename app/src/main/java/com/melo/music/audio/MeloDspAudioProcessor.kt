@@ -51,20 +51,68 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
     @Volatile
     var bassBoostStrength: Float = 0.85f // 0.1f .. 1.0f
 
-    // ── Искусственное ухудшение качества (Bitcrush & Lo-Fi Degrader) ──
+    // ── Искусственное ухудшение качества (Vintage / Cheap Mic / Low Bitrate Degrader) ──
     @Volatile
     var crushAmount: Float = 0f // 0.0f .. 1.0f (0 = выкл)
-    private var crushSampleHoldL = 0f
-    private var crushSampleHoldR = 0f
-    private var crushCounter = 0
+    private val badMicBandL = BiquadPeakFilter()
+    private val badMicBandR = BiquadPeakFilter()
+    private val badMicLpL = BiquadLowPassFilter()
+    private val badMicLpR = BiquadLowPassFilter()
+    private val badMicHpL = BiquadHighPassFilter()
+    private val badMicHpR = BiquadHighPassFilter()
+    private var badMicNoiseRandom = java.util.Random()
+    private var badMicLastSr = 44100
+    private var badMicLastCrush = -1f
 
-    // ── Случайное смещение нот (Random Note Shift / Ring-Mod Pitch Wobble) ──
+    // ── Случайная микротональная перенастройка нот (Microtonal Retuning / Scale Mutation) ──
     @Volatile
     var noteShiftSeed: Long = 0L // 0 = выкл
-    private var noteShiftPhase = 0.0
-    private var noteShiftStep = 0.0
-    private var noteShiftTimer = 0
-    private var noteShiftRandom = java.util.Random()
+        set(value) {
+            field = value
+            rebuildNoteShiftFilters(value, sampleRate)
+        }
+
+    // 12 хроматических нотных полос для изменения лада/тонального строя трека
+    private val noteShiftFiltersL = Array(12) { BiquadPeakFilter() }
+    private val noteShiftFiltersR = Array(12) { BiquadPeakFilter() }
+    private var noteShiftFiltersConfigured = false
+
+    private fun rebuildNoteShiftFilters(seed: Long, sr: Int) {
+        if (sr <= 0) return
+        val srF = sr.toFloat()
+        if (seed == 0L) {
+            for (i in 0 until 12) {
+                noteShiftFiltersL[i].reset()
+                noteShiftFiltersR[i].reset()
+                // Нейтральное усиление
+                noteShiftFiltersL[i].set(440f, 2f, 0f, srF)
+                noteShiftFiltersR[i].set(440f, 2f, 0f, srF)
+            }
+            noteShiftFiltersConfigured = false
+            return
+        }
+
+        val rng = java.util.Random(seed)
+        // 12 нот равномерно темперированного строя (базовая октава 440 Гц: A, A#, B, C, C#, D, D#, E, F, F#, G, G#)
+        // Сдвигаем частоты каждой конкретной ноты на индивидуальный микротон (от -65 до +65 центов)
+        // и создаём уникальную окраску лада (аккордовую гармонию)
+        for (i in 0 until 12) {
+            val semitoneOffset = i - 9 // 0 = C4, 9 = A4 (440 Hz)
+            val basePitchHz = (440.0 * 2.0.pow(semitoneOffset / 12.0)).toFloat()
+            // Смещение конкретной ноты на уникальный микро-интервал для этого трека
+            val centShift = (rng.nextFloat() * 130f - 65f) // -65..+65 центов (четвертьтона/микролад)
+            val shiftedFreq = (basePitchHz * 2.0.pow(centShift / 1200.0)).toFloat().coerceIn(80f, srF * 0.45f)
+            // Усиление гармоники смещённой ноты для изменения строя аккордов
+            val gainDb = 5.0f + rng.nextFloat() * 4.5f // +5.0 .. +9.5 dB акцент на изменённой ноте
+            val q = 3.5f + rng.nextFloat() * 2.0f // точный резонансный пик по ноте
+
+            noteShiftFiltersL[i].reset()
+            noteShiftFiltersR[i].reset()
+            noteShiftFiltersL[i].set(shiftedFreq, q, gainDb, srF)
+            noteShiftFiltersR[i].set(shiftedFreq, q, gainDb, srF)
+        }
+        noteShiftFiltersConfigured = true
+    }
     private val bassBoostShelfL = BiquadLowShelfFilter()
     private val bassBoostShelfR = BiquadLowShelfFilter()
     private val bassBoostSubL = BiquadPeakFilter()
@@ -138,6 +186,7 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         initEqFilters(sampleRate)
         initCrystalFilters(sampleRate)
         initBassBoostFilters(sampleRate)
+        rebuildNoteShiftFilters(noteShiftSeed, sampleRate)
         return inputAudioFormat
     }
 
@@ -438,56 +487,64 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 right *= gain
             }
 
-            // 5.5 Искусственное ухудшение качества (Lo-Fi / Bitcrush / Telephone Degrader)
+            // 5.5 Искусственное ухудшение качества (Дешёвый микрофон / Древняя запись / Кассетный рекордер)
             if (crushAmount > 0.005f) {
-                // Уменьшение частоты дискретизации (downsampling / sample rate reduction)
-                val downsampleFactor = (1 + (crushAmount * 28f).toInt()).coerceIn(1, 32)
-                crushCounter++
-                if (crushCounter >= downsampleFactor) {
-                    crushCounter = 0
-                    crushSampleHoldL = left
-                    crushSampleHoldR = right
-                } else {
-                    left = crushSampleHoldL
-                    right = crushSampleHoldR
+                if (badMicLastCrush != crushAmount || badMicLastSr != sampleRate) {
+                    badMicLastCrush = crushAmount
+                    badMicLastSr = sampleRate
+                    val srF = sampleRate.toFloat()
+                    // Срезаем глухие басы (дешёвый капсюль микрофона не ловит < 300-600 Гц)
+                    val hpFreq = (150f + crushAmount * 550f).coerceAtMost(srF * 0.4f)
+                    // Срезаем кристальный верх (дешёвый микрофон / 32-64 kbps mp3 срезает всё выше 3-6 кГц)
+                    val lpFreq = (8000f - crushAmount * 5200f).coerceIn(1200f, srF * 0.45f)
+                    // Резонансный металлический горб в области 1.8-2.6 кГц («эффект консервной банки / нокийского диктофона»)
+                    val peakFreq = 2200f.coerceAtMost(srF * 0.4f)
+                    val peakGain = crushAmount * 11f // до +11 dB в средних частотах
+
+                    badMicHpL.set(hpFreq, 0.707f, srF)
+                    badMicHpR.set(hpFreq, 0.707f, srF)
+                    badMicLpL.set(lpFreq, 0.707f, srF)
+                    badMicLpR.set(lpFreq, 0.707f, srF)
+                    badMicBandL.set(peakFreq, 1.4f, peakGain, srF)
+                    badMicBandR.set(peakFreq, 1.4f, peakGain, srF)
                 }
 
-                // Уменьшение битовой глубины (Bit reduction): от 16 бит до 2-4 бит
-                val bitDepth = (16f - crushAmount * 13.5f).coerceIn(2.5f, 16f)
-                val levels = 2.0.pow(bitDepth.toDouble()).toFloat()
-                val step = 65536f / levels
-                left = (round(left / step) * step).coerceIn(-32768f, 32767f)
-                right = (round(right / step) * step).coerceIn(-32768f, 32767f)
+                // 1) Полоса пропускания дешёвого микрофона: срезаем низ и верх, задираем звонкую серединку
+                var procL = badMicBandL.process(badMicLpL.process(badMicHpL.process(left)))
+                var procR = badMicBandR.process(badMicLpR.process(badMicHpR.process(right)))
 
-                // Дополнительный хрустящий клиппинг / аналоговый шум на максималках
-                if (crushAmount > 0.5f) {
-                    val harshClip = 32767f * (1.1f - crushAmount * 0.6f)
-                    left = left.coerceIn(-harshClip, harshClip)
-                    right = right.coerceIn(-harshClip, harshClip)
+                // 2) Сужение стереобазы к моно (дешёвый микрофон всегда монофонический)
+                val mono = (procL + procR) * 0.5f
+                val monoBlend = (crushAmount * 1.3f).coerceIn(0f, 1f)
+                procL = procL * (1f - monoBlend) + mono * monoBlend
+                procR = procR * (1f - monoBlend) + mono * monoBlend
+
+                // 3) Перегруз микрофонного преампа (тёплый софт-клиппинг дешёвой мембраны)
+                val micDrive = 1.0f + crushAmount * 2.8f
+                procL = tanh((procL * micDrive) / 22000f) * 22000f
+                procR = tanh((procR * micDrive) / 22000f) * 22000f
+
+                // 4) Лёгкое шипение фонового шума дешёвого тракта на больших значениях
+                if (crushAmount > 0.35f) {
+                    val hissAmp = (crushAmount - 0.35f) * 220f
+                    val hiss = (badMicNoiseRandom.nextFloat() * 2f - 1f) * hissAmp
+                    procL += hiss
+                    procR += hiss
                 }
+
+                // Мягко смешиваем с исходником в зависимости от слайдера
+                left = left * (1f - crushAmount) + procL * crushAmount
+                right = right * (1f - crushAmount) + procR * crushAmount
             }
 
-            // 5.8 Случайное смещение нот (Random Note Shift)
-            if (noteShiftSeed != 0L) {
-                noteShiftTimer++
-                // Каждые ~0.25 - 0.6 секунды выбираем новую случайную микро-тональность для нот
-                if (noteShiftTimer > (sampleRate * 0.35f)) {
-                    noteShiftTimer = 0
-                    val semitones = (noteShiftRandom.nextFloat() * 4.0f - 2.0f) // от -2 до +2 полутонов
-                    val freqMod = 440.0 * 2.0.pow(semitones / 12.0) - 440.0
-                    noteShiftStep = 2.0 * Math.PI * freqMod / sampleRate.toDouble()
+            // 5.8 Индивидуальное статическое смещение нот трека (Кастомный аккордовый строй)
+            if (noteShiftSeed != 0L && noteShiftFiltersConfigured) {
+                // Пропускаем аудиопоток через цепочку перенастроенных нотных полос
+                // Каждая нота смещена на свой фиксированный микроинтервал, сохраняя полную стабильность трека без дёрганий
+                for (i in 0 until 12) {
+                    left = noteShiftFiltersL[i].process(left)
+                    right = noteShiftFiltersR[i].process(right)
                 }
-
-                noteShiftPhase += noteShiftStep
-                if (noteShiftPhase > 2.0 * Math.PI) noteShiftPhase -= 2.0 * Math.PI
-                if (noteShiftPhase < -2.0 * Math.PI) noteShiftPhase += 2.0 * Math.PI
-
-                val carrier = kotlin.math.cos(noteShiftPhase).toFloat()
-                // Мягко модулируем часть спектра (sideband modulation), давая эффект «пьяных» нестройных нот
-                val wetL = left * carrier
-                val wetR = right * carrier
-                left = left * 0.45f + wetL * 0.55f
-                right = right * 0.45f + wetR * 0.55f
             }
 
             // 6. Мастеринговый адаптивный лимитер и защита от клиппинга
@@ -565,13 +622,11 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         bassSampleCount = 0
         smoothedBass = 0f
         currentBassLevel = 0f
-        crushSampleHoldL = 0f
-        crushSampleHoldR = 0f
-        crushCounter = 0
-        noteShiftPhase = 0.0
-        noteShiftStep = 0.0
-        noteShiftTimer = 0
-        if (noteShiftSeed != 0L) noteShiftRandom = java.util.Random(noteShiftSeed)
+        badMicHpL.reset(); badMicHpR.reset()
+        badMicLpL.reset(); badMicLpR.reset()
+        badMicBandL.reset(); badMicBandR.reset()
+        badMicLastCrush = -1f
+        rebuildNoteShiftFilters(noteShiftSeed, sampleRate)
     }
 
     override fun onReset() {
