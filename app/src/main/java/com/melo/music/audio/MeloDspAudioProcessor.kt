@@ -64,54 +64,40 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
     private var badMicLastSr = 44100
     private var badMicLastCrush = -1f
 
-    // ── Случайная микротональная перенастройка нот (Microtonal Retuning / Scale Mutation) ──
+    // ── Случайная микротональная перенастройка строя нот (Harmonic Retuning / Pitch Mutation) ──
     @Volatile
     var noteShiftSeed: Long = 0L // 0 = выкл
         set(value) {
             field = value
-            rebuildNoteShiftFilters(value, sampleRate)
+            rebuildPitchWarp(value)
         }
 
-    // 12 хроматических нотных полос для изменения лада/тонального строя трека
-    private val noteShiftFiltersL = Array(12) { BiquadPeakFilter() }
-    private val noteShiftFiltersR = Array(12) { BiquadPeakFilter() }
-    private var noteShiftFiltersConfigured = false
+    // Буферы задержки для чистого двухголосного микро-питч шифтера (Dual-voice Granular Pitch Delay)
+    // Изменяет высоту звучащих нот плавно, чисто, без фазовых искажений и «бочки» эквалайзера
+    private val pitchGrainBufL = FloatArray(4096)
+    private val pitchGrainBufR = FloatArray(4096)
+    private var pitchGrainWriteIdx = 0
+    private var pitchGrainPhase1 = 0f
+    private var pitchGrainPhase2 = 0.5f
+    private var pitchGrainRate = 1.0f // Коэффициент смещения питча нот
+    private val PITCH_GRAIN_SIZE = 2048f
 
-    private fun rebuildNoteShiftFilters(seed: Long, sr: Int) {
-        if (sr <= 0) return
-        val srF = sr.toFloat()
+    private fun rebuildPitchWarp(seed: Long) {
         if (seed == 0L) {
-            for (i in 0 until 12) {
-                noteShiftFiltersL[i].reset()
-                noteShiftFiltersR[i].reset()
-                // Нейтральное усиление
-                noteShiftFiltersL[i].set(440f, 2f, 0f, srF)
-                noteShiftFiltersR[i].set(440f, 2f, 0f, srF)
-            }
-            noteShiftFiltersConfigured = false
+            pitchGrainRate = 1.0f
             return
         }
-
         val rng = java.util.Random(seed)
-        // 12 нот равномерно темперированного строя (базовая октава 440 Гц: A, A#, B, C, C#, D, D#, E, F, F#, G, G#)
-        // Сдвигаем частоты каждой конкретной ноты на индивидуальный микротон (от -65 до +65 центов)
-        // и создаём уникальную окраску лада (аккордовую гармонию)
-        for (i in 0 until 12) {
-            val semitoneOffset = i - 9 // 0 = C4, 9 = A4 (440 Hz)
-            val basePitchHz = (440.0 * 2.0.pow(semitoneOffset / 12.0)).toFloat()
-            // Смещение конкретной ноты на уникальный микро-интервал для этого трека
-            val centShift = (rng.nextFloat() * 130f - 65f) // -65..+65 центов (четвертьтона/микролад)
-            val shiftedFreq = (basePitchHz * 2.0.pow(centShift / 1200.0)).toFloat().coerceIn(80f, srF * 0.45f)
-            // Усиление гармоники смещённой ноты для изменения строя аккордов
-            val gainDb = 5.0f + rng.nextFloat() * 4.5f // +5.0 .. +9.5 dB акцент на изменённой ноте
-            val q = 3.5f + rng.nextFloat() * 2.0f // точный резонансный пик по ноте
-
-            noteShiftFiltersL[i].reset()
-            noteShiftFiltersR[i].reset()
-            noteShiftFiltersL[i].set(shiftedFreq, q, gainDb, srF)
-            noteShiftFiltersR[i].set(shiftedFreq, q, gainDb, srF)
-        }
-        noteShiftFiltersConfigured = true
+        // Каждому сиду — уникальное ладовое смещение (от четверти тона до полутора полутонов, вверх или вниз)
+        // Ноты смещаются на уникальный музыкальный интервал для этого трека
+        val semitonesList = floatArrayOf(-1.5f, -1.0f, -0.6f, -0.35f, 0.35f, 0.6f, 1.0f, 1.5f)
+        val chosenSemi = semitonesList[rng.nextInt(semitonesList.size)] + (rng.nextFloat() * 0.2f - 0.1f)
+        pitchGrainRate = 2.0.pow(chosenSemi / 12.0).toFloat()
+        pitchGrainPhase1 = 0f
+        pitchGrainPhase2 = 0.5f
+        pitchGrainBufL.fill(0f)
+        pitchGrainBufR.fill(0f)
+        pitchGrainWriteIdx = 0
     }
     private val bassBoostShelfL = BiquadLowShelfFilter()
     private val bassBoostShelfR = BiquadLowShelfFilter()
@@ -186,7 +172,7 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         initEqFilters(sampleRate)
         initCrystalFilters(sampleRate)
         initBassBoostFilters(sampleRate)
-        rebuildNoteShiftFilters(noteShiftSeed, sampleRate)
+        rebuildPitchWarp(noteShiftSeed)
         return inputAudioFormat
     }
 
@@ -448,15 +434,17 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 }
 
                 // Психоакустическое обогащение глубины фундаментального баса:
-                // Мягкое гармоническое уплотнение нижнего суб-регистра (30-62 Гц) без гула в мид-басе
+                // Объём звука (crystalSpace) также раскрывает бархатную глубину и плотность саб-баса,
+                // делая его массивным, объёмным и кинематографичным, но без гула и грязи
                 val normSub = subMono / 8500f
                 val deepDensity = tanh(normSub) * 8500f
-                val effectiveBassGain = crystalIntensity * 0.82f * bassTamer
+                val spaceBassBonus = 1.0f + crystalSpace * 0.45f
+                val effectiveBassGain = crystalIntensity * 0.82f * bassTamer * spaceBassBonus
 
-                val rawBassPunch = (subMono * 0.50f + deepDensity * 0.50f) * effectiveBassGain
+                val rawBassPunch = (subMono * 0.45f + deepDensity * 0.55f) * effectiveBassGain
 
-                // Мягкий лимитер добавки баса: физически не может превысить 4500 пиков -> ноль пердежа
-                val bassPunch = rawBassPunch / (1.0f + abs(rawBassPunch) / 4500f)
+                // Мягкий лимитер добавки баса: физически не может превысить 5200 пиков -> ноль пердежа
+                val bassPunch = rawBassPunch / (1.0f + abs(rawBassPunch) / 5200f)
                 left += bassPunch
                 right += bassPunch
             }
@@ -537,14 +525,56 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 right = right * (1f - crushAmount) + procR * crushAmount
             }
 
-            // 5.8 Индивидуальное статическое смещение нот трека (Кастомный аккордовый строй)
-            if (noteShiftSeed != 0L && noteShiftFiltersConfigured) {
-                // Пропускаем аудиопоток через цепочку перенастроенных нотных полос
-                // Каждая нота смещена на свой фиксированный микроинтервал, сохраняя полную стабильность трека без дёрганий
-                for (i in 0 until 12) {
-                    left = noteShiftFiltersL[i].process(left)
-                    right = noteShiftFiltersR[i].process(right)
-                }
+            // 5.8 Индивидуальное статическое смещение нот трека (Чистый pitch-shifter)
+            if (noteShiftSeed != 0L && abs(pitchGrainRate - 1.0f) > 0.001f) {
+                val bufMask = pitchGrainBufL.size - 1
+
+                // Запись сэмпла в буфер
+                pitchGrainBufL[pitchGrainWriteIdx] = left
+                pitchGrainBufR[pitchGrainWriteIdx] = right
+
+                // Скорость движения головок чтения
+                val rateDiff = pitchGrainRate - 1.0f
+                pitchGrainPhase1 += rateDiff / PITCH_GRAIN_SIZE
+                pitchGrainPhase2 += rateDiff / PITCH_GRAIN_SIZE
+
+                while (pitchGrainPhase1 >= 1f) pitchGrainPhase1 -= 1f
+                while (pitchGrainPhase1 < 0f) pitchGrainPhase1 += 1f
+                while (pitchGrainPhase2 >= 1f) pitchGrainPhase2 -= 1f
+                while (pitchGrainPhase2 < 0f) pitchGrainPhase2 += 1f
+
+                val delay1 = pitchGrainPhase1 * PITCH_GRAIN_SIZE
+                val delay2 = pitchGrainPhase2 * PITCH_GRAIN_SIZE
+
+                // Окно Ханна для кристально бесшовного кроссфейда без щелчков и без искажения тембра
+                val w1 = 0.5f * (1f - cos((2.0 * Math.PI * pitchGrainPhase1).toDouble()).toFloat())
+                val w2 = 0.5f * (1f - cos((2.0 * Math.PI * pitchGrainPhase2).toDouble()).toFloat())
+
+                // Интерполяция голоса 1
+                val r1 = (pitchGrainWriteIdx - delay1 + pitchGrainBufL.size) % pitchGrainBufL.size
+                val idx1A = r1.toInt()
+                val idx1B = (idx1A + 1) and bufMask
+                val f1 = r1 - idx1A
+                val g1L = pitchGrainBufL[idx1A] * (1f - f1) + pitchGrainBufL[idx1B] * f1
+                val g1R = pitchGrainBufR[idx1A] * (1f - f1) + pitchGrainBufR[idx1B] * f1
+
+                // Интерполяция голоса 2
+                val r2 = (pitchGrainWriteIdx - delay2 + pitchGrainBufL.size) % pitchGrainBufL.size
+                val idx2A = r2.toInt()
+                val idx2B = (idx2A + 1) and bufMask
+                val f2 = r2 - idx2A
+                val g2L = pitchGrainBufL[idx2A] * (1f - f2) + pitchGrainBufL[idx2B] * f2
+                val g2R = pitchGrainBufR[idx2A] * (1f - f2) + pitchGrainBufR[idx2B] * f2
+
+                val shiftedL = g1L * w1 + g2L * w2
+                val shiftedR = g1R * w1 + g2R * w2
+
+                pitchGrainWriteIdx = (pitchGrainWriteIdx + 1) and bufMask
+
+                // Полная замена исходника на питч-сдвинутую версию:
+                // Ноты звучат чисто и натурально, без фазового размазывания и без бочечного фильтра!
+                left = shiftedL
+                right = shiftedR
             }
 
             // 6. Мастеринговый адаптивный лимитер и защита от клиппинга
@@ -626,7 +656,7 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         badMicLpL.reset(); badMicLpR.reset()
         badMicBandL.reset(); badMicBandR.reset()
         badMicLastCrush = -1f
-        rebuildNoteShiftFilters(noteShiftSeed, sampleRate)
+        rebuildPitchWarp(noteShiftSeed)
     }
 
     override fun onReset() {
