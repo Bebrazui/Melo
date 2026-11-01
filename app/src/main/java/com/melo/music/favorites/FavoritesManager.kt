@@ -51,6 +51,9 @@ object FavoritesManager {
                     kind = ItemKind.TRACK,
                     speed = obj.optDouble("speed", 1.0).toFloat(),
                     bassBoost = obj.optBoolean("bassBoost", false),
+                    crush = obj.optDouble("crush", 0.0).toFloat(),
+                    pitchSemi = obj.optDouble("pitchSemi", 0.0).toFloat(),
+                    noteShiftSeed = obj.optLong("noteShiftSeed", 0L),
                 )
             }.toMutableList()
         }.getOrDefault(mutableListOf())
@@ -58,13 +61,13 @@ object FavoritesManager {
 
     fun isLiked(url: String): Boolean = getAll().any { it.url == url }
 
-    /** Совпадение с учётом скорости и басс-буста — slowed/sped up/bass версии хранятся отдельно. */
+    /** Совпадение с учётом скорости, басс-буста и эффектов. */
     fun isLiked(item: TrackItem): Boolean =
-        getAll().any { it.url == item.url && sameSpeed(it.speed, item.speed) && it.bassBoost == item.bassBoost }
+        getAll().any { matches(it, item) }
 
     fun toggle(item: TrackItem): Boolean {
         val list = getAll()
-        val idx = list.indexOfFirst { it.url == item.url && sameSpeed(it.speed, item.speed) && it.bassBoost == item.bassBoost }
+        val idx = list.indexOfFirst { matches(it, item) }
         return if (idx >= 0) {
             list.removeAt(idx)
             save(list)
@@ -95,10 +98,21 @@ object FavoritesManager {
                 put("source", t.source.name)
                 put("speed", t.speed.toDouble())
                 put("bassBoost", t.bassBoost)
+                put("crush", t.crush.toDouble())
+                put("pitchSemi", t.pitchSemi.toDouble())
+                put("noteShiftSeed", t.noteShiftSeed)
             })
         }
         prefs?.edit()?.putString(KEY_TRACKS, arr.toString())?.apply()
     }
 
     private fun sameSpeed(a: Float, b: Float) = kotlin.math.abs(a - b) < 0.01f
+
+    private fun matches(a: TrackItem, b: TrackItem): Boolean =
+        a.url == b.url &&
+            sameSpeed(a.speed, b.speed) &&
+            a.bassBoost == b.bassBoost &&
+            kotlin.math.abs(a.crush - b.crush) < 0.01f &&
+            kotlin.math.abs(a.pitchSemi - b.pitchSemi) < 0.01f &&
+            a.noteShiftSeed == b.noteShiftSeed
 }

@@ -136,6 +136,8 @@ import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.Casino
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.viewinterop.AndroidView
 import com.melo.music.extractor.NewPipeResolver
@@ -422,8 +424,8 @@ fun PlayerScreen(
     }
 
     var contextMenuTrack by remember { mutableStateOf<TrackItem?>(null) }
-    // Цель сохранения slowed/sped up/bass версии: (исходный трек, скорость, басс-буст).
-    var speedVariantTarget by remember { mutableStateOf<Triple<TrackItem, Float, Boolean>?>(null) }
+    // Цель сохранения кастомной/slowed/sped up/bass/fx версии.
+    var speedVariantTarget by remember { mutableStateOf<TrackItem?>(null) }
     // Поиск людей + открытый чужой профиль.
     var userResults by remember { mutableStateOf<List<com.melo.music.profile.MeloProfile>>(emptyList()) }
     var profileOpen by remember { mutableStateOf<com.melo.music.profile.MeloProfile?>(null) }
@@ -447,29 +449,87 @@ fun PlayerScreen(
         )
     }
 
-    // Скорость + тон воспроизведения (slowed / original / sped up). pitch = speed → меняется тон.
     var speed by rememberSaveable { mutableFloatStateOf(1f) }
-    fun setSpeed(value: Float) {
-        speed = value
-        playerProvider()?.playbackParameters = PlaybackParameters(value, value)
-        com.melo.music.playback.PlaybackService.playbackSpeed = value
-        nowPlaying = nowPlaying?.copy(speed = value)
-    }
-
-    // Басс-буст для текущего трека
     var isBassBoost by rememberSaveable { mutableStateOf(false) }
-    fun setBassBoost(value: Boolean) {
-        isBassBoost = value
-        EqualizerManager.setBassBoostEnabled(value)
-        nowPlaying = nowPlaying?.copy(bassBoost = value)
+    var crushAmount by rememberSaveable { mutableFloatStateOf(0f) }
+    var pitchSemi by rememberSaveable { mutableFloatStateOf(0f) }
+    var noteShiftSeed by rememberSaveable { mutableLongStateOf(0L) }
+
+    fun applyAudioParameters(
+        sp: Float = speed,
+        bb: Boolean = isBassBoost,
+        cr: Float = crushAmount,
+        ps: Float = pitchSemi,
+        ns: Long = noteShiftSeed,
+    ) {
+        speed = sp
+        isBassBoost = bb
+        crushAmount = cr
+        pitchSemi = ps
+        noteShiftSeed = ns
+
+        val pitchFactor = Math.pow(2.0, (ps / 12.0).toDouble()).toFloat()
+        val totalPitch = sp * pitchFactor
+        playerProvider()?.playbackParameters = PlaybackParameters(sp, totalPitch)
+        com.melo.music.playback.PlaybackService.playbackSpeed = sp
+
+        EqualizerManager.setBassBoostEnabled(bb)
+        EqualizerManager.setCrushAmount(cr)
+        EqualizerManager.setNoteShiftSeed(ns)
+
+        nowPlaying = nowPlaying?.copy(
+            speed = sp,
+            bassBoost = bb,
+            crush = cr,
+            pitchSemi = ps,
+            noteShiftSeed = ns,
+        )
     }
 
-    // Применяем скорость/тон и басс-буст САМОГО трека при смене трека или переподключении плеера.
-    LaunchedEffect(nowPlaying?.url, nowPlaying?.speed, nowPlaying?.bassBoost, controller) {
-        if (controller != null) setSpeed(nowPlaying?.speed ?: 1f)
-        val trackBass = nowPlaying?.bassBoost ?: false
-        isBassBoost = trackBass
-        EqualizerManager.setBassBoostEnabled(trackBass)
+    fun setSpeed(value: Float) {
+        applyAudioParameters(sp = value)
+    }
+
+    fun setBassBoost(value: Boolean) {
+        applyAudioParameters(bb = value)
+    }
+
+    fun setCrush(value: Float) {
+        applyAudioParameters(cr = value)
+    }
+
+    fun setPitchSemi(value: Float) {
+        applyAudioParameters(ps = value)
+    }
+
+    fun randomizeNotes() {
+        val newSeed = System.currentTimeMillis()
+        applyAudioParameters(ns = newSeed)
+    }
+
+    fun resetAudioFx() {
+        applyAudioParameters(bb = false, cr = 0f, ps = 0f, ns = 0L)
+    }
+
+    // Применяем скорость/тон, басс-буст и эффекты САМОГО трека при смене трека или переподключении плеера.
+    LaunchedEffect(
+        nowPlaying?.url,
+        nowPlaying?.speed,
+        nowPlaying?.bassBoost,
+        nowPlaying?.crush,
+        nowPlaying?.pitchSemi,
+        nowPlaying?.noteShiftSeed,
+        controller,
+    ) {
+        if (controller != null) {
+            applyAudioParameters(
+                sp = nowPlaying?.speed ?: 1f,
+                bb = nowPlaying?.bassBoost ?: false,
+                cr = nowPlaying?.crush ?: 0f,
+                ps = nowPlaying?.pitchSemi ?: 0f,
+                ns = nowPlaying?.noteShiftSeed ?: 0L,
+            )
+        }
     }
 
     // Восстановление состояния при перезапуске/возвращении в приложение из фона:
@@ -1140,14 +1200,17 @@ fun PlayerScreen(
                                     },
                                 )
                             }
-                            itemsIndexed(likedList, key = { _, it -> "${it.url}@${it.speed}@${it.bassBoost}" }) { index, item ->
+                            itemsIndexed(likedList, key = { _, it -> "${it.url}@${it.speed}@${it.bassBoost}@${it.crush}@${it.pitchSemi}@${it.noteShiftSeed}" }) { index, item ->
                                 Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) {
                                     TrackCard(
                                         item = item,
                                         resolving = resolvingUrl == item.url,
                                         playing = nowPlaying?.url == item.url &&
                                             kotlin.math.abs((nowPlaying?.speed ?: 1f) - item.speed) < 0.01f &&
-                                            (nowPlaying?.bassBoost ?: false) == item.bassBoost && isPlaying,
+                                            (nowPlaying?.bassBoost ?: false) == item.bassBoost &&
+                                            kotlin.math.abs((nowPlaying?.crush ?: 0f) - item.crush) < 0.01f &&
+                                            kotlin.math.abs((nowPlaying?.pitchSemi ?: 0f) - item.pitchSemi) < 0.01f &&
+                                            (nowPlaying?.noteShiftSeed ?: 0L) == item.noteShiftSeed && isPlaying,
                                         onClick = { playAt(likedList, index) },
                                         onLongClick = { contextMenuTrack = item },
                                     )
@@ -1306,7 +1369,23 @@ fun PlayerScreen(
                     onSetSpeed = { setSpeed(it) },
                     bassBoost = isBassBoost,
                     onSetBassBoost = { setBassBoost(it) },
-                    onAddSpeedVariant = { sp -> speedVariantTarget = Triple(item, sp, isBassBoost) },
+                    crushAmount = crushAmount,
+                    onSetCrush = { setCrush(it) },
+                    pitchSemi = pitchSemi,
+                    onSetPitchSemi = { setPitchSemi(it) },
+                    noteShiftSeed = noteShiftSeed,
+                    onRandomizeNotes = { randomizeNotes() },
+                    onResetAudioFx = { resetAudioFx() },
+                    onAddSpeedVariant = { sp ->
+                        speedVariantTarget = speedVariant(
+                            base = item,
+                            speed = sp,
+                            bassBoost = isBassBoost,
+                            crush = crushAmount,
+                            pitchSemi = pitchSemi,
+                            noteShiftSeed = noteShiftSeed,
+                        )
+                    },
                     onSeek = { ms -> controller?.seekTo(ms) },
                     onTogglePlayPause = onTogglePlayPause,
                     onNext = { playNext() },
@@ -1407,18 +1486,16 @@ fun PlayerScreen(
         onDismiss = { contextMenuTrack = null },
     )
 
-    speedVariantTarget?.let { (base, sp, bb) ->
+    speedVariantTarget?.let { variant ->
         SpeedVariantSheet(
-            base = base,
-            speed = sp,
-            bassBoost = bb,
+            variant = variant,
             onFavorite = {
-                FavoritesManager.toggle(speedVariant(base, sp, bb))
+                FavoritesManager.toggle(variant)
                 likedVersion++
                 speedVariantTarget = null
             },
             onAddToPlaylist = { playlist ->
-                PlaylistManager.addTrack(playlist.id, speedVariant(base, sp, bb))
+                PlaylistManager.addTrack(playlist.id, variant)
                 speedVariantTarget = null
             },
             onDismiss = { speedVariantTarget = null },
@@ -1533,8 +1610,15 @@ fun PlayerScreen(
     }
 }
 
-/** Делает «slowed»/«sped up»/«bass» копию трека: тот же URL, свои параметры и пометка в названии. */
-private fun speedVariant(base: TrackItem, speed: Float, bassBoost: Boolean = false): TrackItem {
+/** Делает «slowed»/«sped up»/«bass»/«fx» копию трека: тот же URL, свои параметры и пометка в названии. */
+private fun speedVariant(
+    base: TrackItem,
+    speed: Float,
+    bassBoost: Boolean = false,
+    crush: Float = 0f,
+    pitchSemi: Float = 0f,
+    noteShiftSeed: Long = 0L,
+): TrackItem {
     val tags = mutableListOf<String>()
     if (kotlin.math.abs(speed - 1f) > 0.01f) {
         tags.add(if (speed < 1f) "slowed" else "sped up")
@@ -1542,34 +1626,54 @@ private fun speedVariant(base: TrackItem, speed: Float, bassBoost: Boolean = fal
     if (bassBoost) {
         tags.add("bass")
     }
+    if (crush > 0.01f) {
+        tags.add("lo-fi")
+    }
+    if (kotlin.math.abs(pitchSemi) > 0.01f) {
+        val sign = if (pitchSemi > 0) "+" else ""
+        tags.add("${sign}${pitchSemi.toInt()}st")
+    }
+    if (noteShiftSeed != 0L) {
+        tags.add("random notes")
+    }
     val suffix = if (tags.isNotEmpty()) " (" + tags.joinToString(" + ") + ")" else ""
     val cleanTitle = base.title
-        .replace(Regex("""\s*\((slowed|sped up|bass|\+)+\)""", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("""\s*\((slowed|sped up|bass|lo-fi|\d+st|random notes|\+)+\)""", RegexOption.IGNORE_CASE), "")
     return base.copy(
         title = cleanTitle + suffix,
         speed = speed,
         bassBoost = bassBoost,
+        crush = crush,
+        pitchSemi = pitchSemi,
+        noteShiftSeed = noteShiftSeed,
     )
 }
 
-/** Лист сохранения slowed/sped up/bass версии: в избранное или в плейлист. */
+/** Лист сохранения slowed/sped up/bass/FX версии: в избранное или в плейлист. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SpeedVariantSheet(
-    base: TrackItem,
-    speed: Float,
-    bassBoost: Boolean,
+    variant: TrackItem,
     onFavorite: () -> Unit,
     onAddToPlaylist: (Playlist) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val playlists = remember { PlaylistManager.getAll() }
+    val speed = variant.speed
+    val bassBoost = variant.bassBoost
+    val crush = variant.crush
+    val pitchSemi = variant.pitchSemi
+    val noteShiftSeed = variant.noteShiftSeed
+
     val versionName = when {
+        noteShiftSeed != 0L -> "рандомизированную"
+        crush > 0.01f -> "lo-fi"
+        kotlin.math.abs(pitchSemi) > 0.01f -> "pitch"
         speed < 1f && bassBoost -> "замедленную + bass"
         speed > 1f && bassBoost -> "ускоренную + bass"
         bassBoost -> "bass"
         speed < 1f -> "замедленную"
-        else -> "ускоренную"
+        else -> "кастомную"
     }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1588,7 +1692,7 @@ private fun SpeedVariantSheet(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                base.title,
+                variant.title,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -5623,8 +5727,8 @@ private fun NowPlayingBar(
 private fun ExpressiveSpeedButtonGroup(
     speed: Float,
     onSetSpeed: (Float) -> Unit,
-    bassBoost: Boolean,
-    onSetBassBoost: (Boolean) -> Unit,
+    hasActiveFx: Boolean,
+    onOpenFxPanel: () -> Unit,
     accent: Color,
     modifier: Modifier = Modifier,
 ) {
@@ -5712,14 +5816,14 @@ private fun ExpressiveSpeedButtonGroup(
                     }
                 }
 
-                // ── Басс буст — независимый переключатель ──
+                // ── Троеточие (...) — кнопка вызова расширенной панели FX ──
                 ToggleButton(
-                    checked = bassBoost,
-                    onCheckedChange = { checked ->
+                    checked = hasActiveFx,
+                    onCheckedChange = {
                         ClickFeedback.play()
-                        onSetBassBoost(checked)
+                        onOpenFxPanel()
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(0.72f),
                     contentPadding = PaddingValues(horizontal = 2.dp, vertical = 6.dp),
                 ) {
                     Row(
@@ -5727,17 +5831,258 @@ private fun ExpressiveSpeedButtonGroup(
                         horizontalArrangement = Arrangement.Center,
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.GraphicEq,
-                            contentDescription = "Bass",
-                            modifier = Modifier.size(13.dp),
+                            imageVector = Icons.Rounded.MoreHoriz,
+                            contentDescription = "FX",
+                            modifier = Modifier.size(16.dp),
                         )
-                        Spacer(Modifier.width(3.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AudioFxBottomSheet(
+    bassBoost: Boolean,
+    onSetBassBoost: (Boolean) -> Unit,
+    crushAmount: Float,
+    onSetCrush: (Float) -> Unit,
+    pitchSemi: Float,
+    onSetPitchSemi: (Float) -> Unit,
+    noteShiftSeed: Long,
+    onRandomizeNotes: () -> Unit,
+    onResetAll: () -> Unit,
+    accent: Color,
+    onDismiss: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val titleColor = cs.onSurface
+    val subColor = cs.onSurfaceVariant
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "Звуковые эффекты",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = titleColor,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = {
+                    ClickFeedback.play()
+                    onResetAll()
+                }) {
+                    Text("Сброс", color = cs.primary)
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // 1. Басс-буст (Monster Bass Boost)
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow,
+                border = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f)),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.GraphicEq,
+                        contentDescription = null,
+                        tint = if (bassBoost) cs.primary else subColor,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    Spacer(Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Bass",
-                            maxLines = 1,
-                            softWrap = false,
-                            style = compactStyle,
+                            "Басс буст (Bass Boost)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = titleColor,
                         )
+                        Text(
+                            "Глубокий суб-бас и плотный аналоговый панч",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = subColor,
+                        )
+                    }
+                    Switch(
+                        checked = bassBoost,
+                        onCheckedChange = {
+                            ClickFeedback.play()
+                            onSetBassBoost(it)
+                        },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            // 2. Искусственное ухудшение качества (Lo-Fi / Bitcrush)
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow,
+                border = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f)),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Ухудшение качества (Lo-Fi / Crush)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = titleColor,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            "${(crushAmount * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = cs.primary,
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Понижение битности и частоты дискретизации до эффекта старого телефона или сломанного радио",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = subColor,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Slider(
+                        value = crushAmount,
+                        onValueChange = onSetCrush,
+                        valueRange = 0f..1f,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            // 3. Изменение тональности (Pitch Shift)
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow,
+                border = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f)),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Смещение тональности (Pitch)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = titleColor,
+                            modifier = Modifier.weight(1f),
+                        )
+                        val sign = if (pitchSemi > 0) "+" else ""
+                        Text(
+                            "${sign}${pitchSemi.toInt()} полутонов",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = cs.primary,
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Сдвигает высоту голоса и мелодии без изменения скорости",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = subColor,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Slider(
+                        value = pitchSemi,
+                        onValueChange = onSetPitchSemi,
+                        valueRange = -6f..6f,
+                        steps = 11,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            // 4. Рандомное смещение нот (Random Note Shifter)
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow,
+                border = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f)),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.Casino,
+                            contentDescription = null,
+                            tint = if (noteShiftSeed != 0L) cs.primary else subColor,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Рандомизатор нот",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = titleColor,
+                            )
+                            Text(
+                                if (noteShiftSeed != 0L) "Уникальная версия #${noteShiftSeed % 10000}" else "Случайный сдвиг нот выключен",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (noteShiftSeed != 0L) cs.primary else subColor,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Каждый клик генерирует уникальный узор смещения частот отдельных нот и аккордов, создавая неповторимое звучание трека.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = subColor,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        FilledTonalButton(
+                            onClick = {
+                                ClickFeedback.play()
+                                onRandomizeNotes()
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(Icons.Rounded.Casino, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (noteShiftSeed == 0L) "Сгенерировать ноты" else "Новая вариация")
+                        }
+                        if (noteShiftSeed != 0L) {
+                            OutlinedButton(
+                                onClick = {
+                                    ClickFeedback.play()
+                                    onResetAll()
+                                },
+                            ) {
+                                Text("Выкл")
+                            }
+                        }
                     }
                 }
             }
@@ -6125,6 +6470,13 @@ private fun FullPlayer(
     onSetSpeed: (Float) -> Unit,
     bassBoost: Boolean,
     onSetBassBoost: (Boolean) -> Unit,
+    crushAmount: Float,
+    onSetCrush: (Float) -> Unit,
+    pitchSemi: Float,
+    onSetPitchSemi: (Float) -> Unit,
+    noteShiftSeed: Long,
+    onRandomizeNotes: () -> Unit,
+    onResetAudioFx: () -> Unit,
     onAddSpeedVariant: (Float) -> Unit,
     onSeek: (Long) -> Unit,
     onTogglePlayPause: () -> Unit,
@@ -6171,6 +6523,7 @@ private fun FullPlayer(
     val collapseProgress = remember { Animatable(1f) }
     var isCollapsing by remember { mutableStateOf(false) }
     var showSpeed by remember { mutableStateOf(false) }
+    var showFxSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         collapseProgress.animateTo(
@@ -7427,8 +7780,8 @@ private fun FullPlayer(
                                     ExpressiveSpeedButtonGroup(
                                         speed = speed,
                                         onSetSpeed = onSetSpeed,
-                                        bassBoost = bassBoost,
-                                        onSetBassBoost = onSetBassBoost,
+                                        hasActiveFx = bassBoost || crushAmount > 0.01f || kotlin.math.abs(pitchSemi) > 0.01f || noteShiftSeed != 0L,
+                                        onOpenFxPanel = { showFxSheet = true },
                                         accent = artColor,
                                     )
                                 }
@@ -7514,8 +7867,8 @@ private fun FullPlayer(
                             ExpressiveSpeedButtonGroup(
                                 speed = speed,
                                 onSetSpeed = onSetSpeed,
-                                bassBoost = bassBoost,
-                                onSetBassBoost = onSetBassBoost,
+                                hasActiveFx = bassBoost || crushAmount > 0.01f || kotlin.math.abs(pitchSemi) > 0.01f || noteShiftSeed != 0L,
+                                onOpenFxPanel = { showFxSheet = true },
                                 accent = artColor,
                             )
                         }
@@ -7585,6 +7938,21 @@ private fun FullPlayer(
                     onNext = onNext,
                 )
             }
+        }
+        if (showFxSheet) {
+            AudioFxBottomSheet(
+                bassBoost = bassBoost,
+                onSetBassBoost = onSetBassBoost,
+                crushAmount = crushAmount,
+                onSetCrush = onSetCrush,
+                pitchSemi = pitchSemi,
+                onSetPitchSemi = onSetPitchSemi,
+                noteShiftSeed = noteShiftSeed,
+                onRandomizeNotes = onRandomizeNotes,
+                onResetAll = onResetAudioFx,
+                accent = artColor,
+                onDismiss = { showFxSheet = false },
+            )
         }
     }
 }

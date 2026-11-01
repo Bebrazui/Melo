@@ -232,7 +232,8 @@ object LibrarySync {
     private fun unionTracks(tracks: List<TrackItem>): List<TrackItem> {
         val seen = LinkedHashMap<String, TrackItem>()
         for (t in tracks) {
-            val key = t.url + "@" + Math.round(t.speed * 100) + "@" + (if (t.bassBoost) "b" else "n")
+            val key = t.url + "@" + Math.round(t.speed * 100) + "@" + (if (t.bassBoost) "b" else "n") +
+                "@" + Math.round(t.crush * 100) + "@" + Math.round(t.pitchSemi * 10) + "@" + t.noteShiftSeed
             if (!seen.containsKey(key)) seen[key] = t
         }
         return seen.values.toList()
@@ -251,6 +252,9 @@ object LibrarySync {
                     put("source", t.source.name)
                     put("speed", t.speed.toDouble())
                     put("bassBoost", t.bassBoost)
+                    put("crush", t.crush.toDouble())
+                    put("pitchSemi", t.pitchSemi.toDouble())
+                    put("noteShiftSeed", t.noteShiftSeed)
                 },
             )
         }
@@ -272,6 +276,9 @@ object LibrarySync {
                 kind = ItemKind.TRACK,
                 speed = obj.optDouble("speed", 1.0).toFloat(),
                 bassBoost = obj.optBoolean("bassBoost", false),
+                crush = obj.optDouble("crush", 0.0).toFloat(),
+                pitchSemi = obj.optDouble("pitchSemi", 0.0).toFloat(),
+                noteShiftSeed = obj.optLong("noteShiftSeed", 0L),
             )
         }
     }.getOrDefault(emptyList())

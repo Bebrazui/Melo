@@ -258,6 +258,21 @@ object EqualizerManager {
         prefs?.edit()?.putInt(KEY_BASS_BOOST_STRENGTH, s)?.apply()
     }
 
+    @Synchronized
+    fun setCrushAmount(amount: Float) {
+        val clamped = amount.coerceIn(0f, 1f)
+        for (d in dspProcessors) {
+            d.crushAmount = clamped
+        }
+    }
+
+    @Synchronized
+    fun setNoteShiftSeed(seed: Long) {
+        for (d in dspProcessors) {
+            d.noteShiftSeed = seed
+        }
+    }
+
     // ── Кристальный звук (Crystal Audio™ Super-Resolution) ───────────────────
 
     fun isCrystalEnabled(): Boolean = prefs?.getBoolean(KEY_CRYSTAL, false) ?: false

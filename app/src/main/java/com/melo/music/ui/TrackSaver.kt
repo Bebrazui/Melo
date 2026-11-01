@@ -20,6 +20,9 @@ object TrackSaver {
                     putStringArrayList("sources", ArrayList(list.map { it.source.name }))
                     putFloatArray("speeds", list.map { it.speed }.toFloatArray())
                     putBooleanArray("bassBoosts", list.map { it.bassBoost }.toBooleanArray())
+                    putFloatArray("crushes", list.map { it.crush }.toFloatArray())
+                    putFloatArray("pitchSemis", list.map { it.pitchSemi }.toFloatArray())
+                    putLongArray("noteShiftSeeds", list.map { it.noteShiftSeed }.toLongArray())
                 }
             },
             restore = { bundle ->
@@ -31,6 +34,9 @@ object TrackSaver {
                 val sources = bundle.getStringArrayList("sources") ?: arrayListOf()
                 val speeds = bundle.getFloatArray("speeds") ?: floatArrayOf()
                 val bassBoosts = bundle.getBooleanArray("bassBoosts") ?: booleanArrayOf()
+                val crushes = bundle.getFloatArray("crushes") ?: floatArrayOf()
+                val pitchSemis = bundle.getFloatArray("pitchSemis") ?: floatArrayOf()
+                val noteShiftSeeds = bundle.getLongArray("noteShiftSeeds") ?: longArrayOf()
                 urls.mapIndexed { i, url ->
                     TrackItem(
                         title = titles.getOrElse(i) { "" },
@@ -43,6 +49,9 @@ object TrackSaver {
                         kind = ItemKind.TRACK,
                         speed = speeds.getOrElse(i) { 1f },
                         bassBoost = bassBoosts.getOrElse(i) { false },
+                        crush = crushes.getOrElse(i) { 0f },
+                        pitchSemi = pitchSemis.getOrElse(i) { 0f },
+                        noteShiftSeed = noteShiftSeeds.getOrElse(i) { 0L },
                     )
                 }
             },
@@ -62,6 +71,9 @@ object TrackSaver {
                         putString("source", it.source.name)
                         putFloat("speed", it.speed)
                         putBoolean("bassBoost", it.bassBoost)
+                        putFloat("crush", it.crush)
+                        putFloat("pitchSemi", it.pitchSemi)
+                        putLong("noteShiftSeed", it.noteShiftSeed)
                     }
                 }
             },
@@ -78,6 +90,9 @@ object TrackSaver {
                     kind = ItemKind.TRACK,
                     speed = bundle.getFloat("speed", 1f),
                     bassBoost = bundle.getBoolean("bassBoost", false),
+                    crush = bundle.getFloat("crush", 0f),
+                    pitchSemi = bundle.getFloat("pitchSemi", 0f),
+                    noteShiftSeed = bundle.getLong("noteShiftSeed", 0L),
                 )
             },
         )

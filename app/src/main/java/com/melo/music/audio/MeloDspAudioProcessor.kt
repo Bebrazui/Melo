@@ -50,6 +50,21 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
     var bassBoostEnabled: Boolean = false
     @Volatile
     var bassBoostStrength: Float = 0.85f // 0.1f .. 1.0f
+
+    // ── Искусственное ухудшение качества (Bitcrush & Lo-Fi Degrader) ──
+    @Volatile
+    var crushAmount: Float = 0f // 0.0f .. 1.0f (0 = выкл)
+    private var crushSampleHoldL = 0f
+    private var crushSampleHoldR = 0f
+    private var crushCounter = 0
+
+    // ── Случайное смещение нот (Random Note Shift / Ring-Mod Pitch Wobble) ──
+    @Volatile
+    var noteShiftSeed: Long = 0L // 0 = выкл
+    private var noteShiftPhase = 0.0
+    private var noteShiftStep = 0.0
+    private var noteShiftTimer = 0
+    private var noteShiftRandom = java.util.Random()
     private val bassBoostShelfL = BiquadLowShelfFilter()
     private val bassBoostShelfR = BiquadLowShelfFilter()
     private val bassBoostSubL = BiquadPeakFilter()
@@ -423,6 +438,58 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 right *= gain
             }
 
+            // 5.5 Искусственное ухудшение качества (Lo-Fi / Bitcrush / Telephone Degrader)
+            if (crushAmount > 0.005f) {
+                // Уменьшение частоты дискретизации (downsampling / sample rate reduction)
+                val downsampleFactor = (1 + (crushAmount * 28f).toInt()).coerceIn(1, 32)
+                crushCounter++
+                if (crushCounter >= downsampleFactor) {
+                    crushCounter = 0
+                    crushSampleHoldL = left
+                    crushSampleHoldR = right
+                } else {
+                    left = crushSampleHoldL
+                    right = crushSampleHoldR
+                }
+
+                // Уменьшение битовой глубины (Bit reduction): от 16 бит до 2-4 бит
+                val bitDepth = (16f - crushAmount * 13.5f).coerceIn(2.5f, 16f)
+                val levels = 2.0.pow(bitDepth.toDouble()).toFloat()
+                val step = 65536f / levels
+                left = (round(left / step) * step).coerceIn(-32768f, 32767f)
+                right = (round(right / step) * step).coerceIn(-32768f, 32767f)
+
+                // Дополнительный хрустящий клиппинг / аналоговый шум на максималках
+                if (crushAmount > 0.5f) {
+                    val harshClip = 32767f * (1.1f - crushAmount * 0.6f)
+                    left = left.coerceIn(-harshClip, harshClip)
+                    right = right.coerceIn(-harshClip, harshClip)
+                }
+            }
+
+            // 5.8 Случайное смещение нот (Random Note Shift)
+            if (noteShiftSeed != 0L) {
+                noteShiftTimer++
+                // Каждые ~0.25 - 0.6 секунды выбираем новую случайную микро-тональность для нот
+                if (noteShiftTimer > (sampleRate * 0.35f)) {
+                    noteShiftTimer = 0
+                    val semitones = (noteShiftRandom.nextFloat() * 4.0f - 2.0f) // от -2 до +2 полутонов
+                    val freqMod = 440.0 * 2.0.pow(semitones / 12.0) - 440.0
+                    noteShiftStep = 2.0 * Math.PI * freqMod / sampleRate.toDouble()
+                }
+
+                noteShiftPhase += noteShiftStep
+                if (noteShiftPhase > 2.0 * Math.PI) noteShiftPhase -= 2.0 * Math.PI
+                if (noteShiftPhase < -2.0 * Math.PI) noteShiftPhase += 2.0 * Math.PI
+
+                val carrier = kotlin.math.cos(noteShiftPhase).toFloat()
+                // Мягко модулируем часть спектра (sideband modulation), давая эффект «пьяных» нестройных нот
+                val wetL = left * carrier
+                val wetR = right * carrier
+                left = left * 0.45f + wetL * 0.55f
+                right = right * 0.45f + wetR * 0.55f
+            }
+
             // 6. Мастеринговый адаптивный лимитер и защита от клиппинга
             if (bassBoostEnabled) {
                 // Мгновенный музыкальный мягкий сатуратор без зажатия и дакинга остального микса
@@ -498,6 +565,13 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
         bassSampleCount = 0
         smoothedBass = 0f
         currentBassLevel = 0f
+        crushSampleHoldL = 0f
+        crushSampleHoldR = 0f
+        crushCounter = 0
+        noteShiftPhase = 0.0
+        noteShiftStep = 0.0
+        noteShiftTimer = 0
+        if (noteShiftSeed != 0L) noteShiftRandom = java.util.Random(noteShiftSeed)
     }
 
     override fun onReset() {

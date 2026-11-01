@@ -60,6 +60,12 @@ data class TrackItem(
     val viewCount: Long = 0,
     /** Басс-буст для трека. */
     val bassBoost: Boolean = false,
+    /** Ухудшение качества (Bitcrush/Degrader) 0.0f .. 1.0f (0 = выкл). */
+    val crush: Float = 0f,
+    /** Сдвиг тональности в полутонах (например -12 .. +12 semitones; 0 = оригинал). */
+    val pitchSemi: Float = 0f,
+    /** Сид рандомизации нот / тональности (0 = выкл, >0 = уникальный рандомный сдвиг нот). */
+    val noteShiftSeed: Long = 0L,
 )
 
 class TrackCopyrightException(
