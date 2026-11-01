@@ -64,6 +64,8 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
     var crystalEnabled: Boolean = false
     @Volatile
     var crystalIntensity: Float = 0.65f // 0.0f .. 1.0f
+    @Volatile
+    var crystalSpace: Float = 0.50f // 0.0f .. 1.0f (Объём и глубина звука)
 
     // Фильтры полосового захвата (7.5 - 14.5 кГц) и High-Pass (14 кГц) для гармоник
     private val crystalBandL = BiquadBandPassFilter()
@@ -348,10 +350,17 @@ class MeloDspAudioProcessor : BaseAudioProcessor() {
                 left += (crystalL * 1.15f + srcL * 0.28f) * effectiveAirGain
                 right += (crystalR * 1.15f + srcR * 0.28f) * effectiveAirGain
 
-                // 4b. Стерео-воздух (расширение сцены без фазовых искажений)
-                val sideAir = (srcL - srcR) * 0.24f * effectiveAirGain
-                left += sideAir
-                right -= sideAir
+                // 4b. Объём и глубина звука (Acoustic Immersion & Stereo Space)
+                // Разностный боковой сигнал средних и высоких частот расширяет пространство без фазовых искажений
+                val sideSignal = (left - right) * 0.5f
+                val midSignal = (left + right) * 0.5f
+
+                // Плавное адаптивное расширение пространства: от естественного до широкого концертного объёма
+                val spaceExpansion = crystalSpace * 0.75f
+                val ambientAir = (srcL - srcR) * (0.24f + crystalSpace * 0.36f) * effectiveAirGain
+
+                left = midSignal + sideSignal * (1.0f + spaceExpansion) + ambientAir
+                right = midSignal - sideSignal * (1.0f + spaceExpansion) - ambientAir
 
                 // 4c. Глубокий бархатный саб-бас (30-62 Гц) с защитой динамиков от пердежа
                 val subL = crystalSubBassLpL.process(left)

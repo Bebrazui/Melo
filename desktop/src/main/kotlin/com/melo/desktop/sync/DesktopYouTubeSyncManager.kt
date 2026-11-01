@@ -86,28 +86,7 @@ object DesktopYouTubeSyncManager {
 
     private fun fetchLikedMusic(): List<TrackItem> {
         val tracks = mutableListOf<TrackItem>()
-        // 1. NewPipe LM
-        val viaNewPipe = runCatching {
-            DesktopExtractor.ensureInit()
-            val info = PlaylistInfo.getInfo("https://music.youtube.com/playlist?list=LM")
-            info.relatedItems.mapNotNull { item ->
-                if (item is org.schabi.newpipe.extractor.stream.StreamInfoItem) {
-                    TrackItem(
-                        url = item.url,
-                        title = item.name,
-                        uploader = item.uploaderName,
-                        durationSeconds = item.duration,
-                        thumbnailUrl = item.thumbnails.lastOrNull()?.url,
-                    )
-                } else null
-            }
-        }.getOrNull()
-
-        if (!viaNewPipe.isNullOrEmpty() && viaNewPipe.none { it.title == "Трек" || it.title == "Трек YouTube Music" }) {
-            return viaNewPipe
-        }
-
-        // 2. InnerTube browse: пробуем FEmusic_liked_videos, затем VLLM
+        // InnerTube browse: пробуем FEmusic_liked_videos, затем VLLM с авторизационными куками
         val browseIds = listOf("FEmusic_liked_videos", "VLLM")
         for (bId in browseIds) {
             val bodyJson = createInnerTubeContext().apply {

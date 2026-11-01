@@ -102,20 +102,7 @@ object YouTubeSyncManager {
 
     private fun fetchLikedMusic(context: Context): List<TrackItem> {
         val tracks = mutableListOf<TrackItem>()
-        // 1. Сначала пробуем NewPipe LM
-        val viaNewPipe = runCatching {
-            val res = kotlinx.coroutines.runBlocking {
-                NewPipeResolver.importPlaylist(context, "https://music.youtube.com/playlist?list=LM")
-            }
-            res.second
-        }.getOrNull()
-
-        if (!viaNewPipe.isNullOrEmpty() && viaNewPipe.none { it.title == "Трек" || it.title == "Трек YouTube Music" }) {
-            MeloLog.d("YouTubeSync", "Liked Music успешно получены через NewPipe: ${viaNewPipe.size}")
-            return viaNewPipe
-        }
-
-        // 2. Запрос через InnerTube browse (VLLM или FEmusic_liked_videos)
+        // Запрос через официальный InnerTube browse (VLLM или FEmusic_liked_videos) с авторизационными куками
         for (browseId in listOf("VLLM", "FEmusic_liked_videos")) {
             val bodyJson = createInnerTubeContext().apply {
                 put("browseId", browseId)
@@ -315,31 +302,6 @@ object YouTubeSyncManager {
                         thumbnailUrl = resolvedMeta.thumbnailUrl ?: item.thumbnailUrl
                     )
                 }
-            }
-        }
-
-        if (out.isEmpty()) {
-            val videoIdRegex = Regex(""""videoId":"([a-zA-Z0-9_-]{11})"""")
-            val ids = videoIdRegex.findAll(rootStr).map { it.groupValues[1] }.distinct().toList()
-            ids.take(50).forEach { vid ->
-                val trackUrl = "https://music.youtube.com/watch?v=$vid"
-                val meta = runCatching {
-                    kotlinx.coroutines.runBlocking {
-                        NewPipeResolver.resolveSingleTrack(context, trackUrl)
-                    }
-                }.getOrNull()
-
-                out.add(
-                    TrackItem(
-                        title = meta?.title ?: "Трек YouTube Music",
-                        uploader = meta?.uploader,
-                        url = trackUrl,
-                        durationSeconds = meta?.durationSeconds ?: 0,
-                        thumbnailUrl = meta?.thumbnailUrl ?: "https://i.ytimg.com/vi/$vid/hqdefault.jpg",
-                        source = Source.YOUTUBE_MUSIC,
-                        kind = ItemKind.TRACK
-                    )
-                )
             }
         }
     }

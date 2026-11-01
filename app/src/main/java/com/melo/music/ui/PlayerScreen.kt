@@ -1019,30 +1019,36 @@ fun PlayerScreen(
                                 topInset = searchInset,
                             )
 
-                            else -> SearchResultsScreen(
-                                rawItems = items,
-                                users = userResults,
-                                query = query,
-                                loadingMore = listLoading,
-                                nowPlayingUrl = nowPlaying?.url,
-                                isPlaying = isPlaying,
-                                resolvingUrl = resolvingUrl,
-                                state = searchListState,
-                                topInset = searchInset,
-                                bottomInset = playerInset,
-                                onPlayFrom = { list, i -> playAt(list, i) },
-                                onShuffleAll = {
-                                    val t = items.filter { it.kind == ItemKind.TRACK }
-                                    if (t.isNotEmpty()) {
-                                        shuffle = true
-                                        playAt(t, t.indices.random())
-                                    }
-                                },
-                                onOpenArtist = { artistOpen = it },
-                                onOpenUser = { profileOpen = it },
-                                onTrackLongClick = { contextMenuTrack = it },
-                                onLoadAlbumTracks = { onLoadAlbumTracks(it) },
-                            )
+                            else -> androidx.compose.animation.AnimatedVisibility(
+                                visible = items.isNotEmpty(),
+                                enter = fadeIn(tween(350)) + slideInVertically(tween(350)) { it / 12 },
+                                exit = fadeOut(tween(200)),
+                            ) {
+                                SearchResultsScreen(
+                                    rawItems = items,
+                                    users = userResults,
+                                    query = query,
+                                    loadingMore = listLoading,
+                                    nowPlayingUrl = nowPlaying?.url,
+                                    isPlaying = isPlaying,
+                                    resolvingUrl = resolvingUrl,
+                                    state = searchListState,
+                                    topInset = searchInset,
+                                    bottomInset = playerInset,
+                                    onPlayFrom = { list, i -> playAt(list, i) },
+                                    onShuffleAll = {
+                                        val t = items.filter { it.kind == ItemKind.TRACK }
+                                        if (t.isNotEmpty()) {
+                                            shuffle = true
+                                            playAt(t, t.indices.random())
+                                        }
+                                    },
+                                    onOpenArtist = { artistOpen = it },
+                                    onOpenUser = { profileOpen = it },
+                                    onTrackLongClick = { contextMenuTrack = it },
+                                    onLoadAlbumTracks = { onLoadAlbumTracks(it) },
+                                )
+                            }
                         }
                     } else {
                         HomeFeed(
@@ -5146,7 +5152,8 @@ fun Artwork(url: String?, modifier: Modifier = Modifier) {
                 .diskCacheKey(upscaled)
                 .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
                 .diskCachePolicy(coil.request.CachePolicy.ENABLED)
-                .crossfade(false)
+                .crossfade(true)
+                .crossfade(300)
                 .build()
         }
         AsyncImage(

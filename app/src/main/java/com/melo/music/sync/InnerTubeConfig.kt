@@ -112,6 +112,9 @@ object InnerTubeConfig {
     fun getBrowseUrl(): String =
         "https://music.youtube.com/youtubei/v1/browse?key=$cachedApiKey&prettyPrint=false"
 
+    fun getSearchUrl(): String =
+        "https://music.youtube.com/youtubei/v1/search?key=$cachedApiKey&prettyPrint=false"
+
     fun resetToDefault() {
         cachedApiKey = DEFAULT_API_KEY
         cachedClientVersion = DEFAULT_CLIENT_VERSION

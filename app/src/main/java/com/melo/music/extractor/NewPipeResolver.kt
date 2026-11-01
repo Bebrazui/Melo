@@ -229,83 +229,101 @@ object NewPipeResolver {
         val mutex = Mutex()
         val allItems = mutableListOf<TrackItem>()
 
-        suspend fun emitAll(tag: String, source: Source, block: suspend () -> List<TrackItem>) {
-            val part = runCatching { block() }
-                .onFailure {
-                    android.util.Log.e("MeloSearch", "$tag failed: $it", it)
-                    com.melo.music.util.MeloLog.e("MeloSearch", "$tag search failed: ${it.message}", it)
+        // 1. YouTube Music — главный источник. Его порядок Google ранжирует сам по популярности/ML,
+        // поэтому результаты YouTube выводим первыми и сохраняем их исходный порядок.
+        launch(Dispatchers.IO) {
+            val ytItems = searchYouTube(query)
+            if (ytItems.isNotEmpty()) {
+                mutex.withLock {
+                    allItems.addAll(0, ytItems)
+                    send(allItems.toList())
                 }
-                .getOrDefault(emptyList())
-                .take(15)
-            android.util.Log.i("MeloSearch", "$tag -> ${part.size} items")
-            com.melo.music.util.MeloLog.d("MeloSearch", "$tag -> ${part.size} items")
-            if (part.isEmpty()) return
-            mutex.withLock {
-                allItems.addAll(part)
-                // Сортируем ВСЕ результаты по релевантности, невзирая на источник.
-                send(RelevanceScorer.rank(query, allItems))
             }
         }
 
+        // 2. SoundCloud — дополнительный источник (подмешивается в конец)
         launch(Dispatchers.IO) {
-            emitAll("YouTube", Source.YOUTUBE_MUSIC) { searchYouTube(query) }
-        }
-        launch(Dispatchers.IO) {
-            emitAll("SoundCloud", Source.SOUNDCLOUD) {
+            val scItems = runCatching {
                 SoundCloudFix.ensure(context)
                 try {
                     searchService(ServiceList.SoundCloud, query, Source.SOUNDCLOUD, listOf("tracks"))
                 } catch (e: Exception) {
-                    android.util.Log.w("MeloSearch", "SoundCloud search error: ${e.message}, сбрасываем client_id и пробуем снова")
                     SoundCloudFix.invalidate(context)
                     SoundCloudFix.ensure(context)
                     searchService(ServiceList.SoundCloud, query, Source.SOUNDCLOUD, listOf("tracks"))
                 }
+            }.getOrDefault(emptyList()).take(10)
+
+            if (scItems.isNotEmpty()) {
+                mutex.withLock {
+                    allItems.addAll(scItems)
+                    send(allItems.toList())
+                }
             }
         }
+
+        // 3. Bandcamp — дополнительный источник (в конец)
         launch(Dispatchers.IO) {
-            emitAll("Bandcamp", Source.BANDCAMP) { BandcampSearcher.search(query) }
+            val bcItems = runCatching {
+                BandcampSearcher.search(query)
+            }.getOrDefault(emptyList()).take(10)
+
+            if (bcItems.isNotEmpty()) {
+                mutex.withLock {
+                    allItems.addAll(bcItems)
+                    send(allItems.toList())
+                }
+            }
         }
     }
 
-    /** YouTube Music: параллельный поиск песен (music_songs) + исполнителей (music_artists) + альбомов (music_albums). */
-    private suspend fun searchYouTube(query: String): List<TrackItem> = coroutineScope {
-        val service = ServiceList.YouTube
-        val songsDeferred = async {
-            runCatching {
-                SearchInfo.getInfo(
-                    service,
-                    service.searchQHFactory.fromQuery(query, listOf("music_songs"), ""),
-                ).relatedItems.filterIsInstance<StreamInfoItem>().map { it.toTrackItem(Source.YOUTUBE_MUSIC) }
-            }.getOrDefault(emptyList())
+    /** Нативный поиск YouTube Music (InnerTube) с фолбэком на NewPipe. */
+    private suspend fun searchYouTube(query: String): List<TrackItem> {
+        // 1. Пробуем нативный InnerTube API (тот же поиск, что в официальном YouTube Music с ML-ранжированием)
+        val fromInnerTube = runCatching {
+            YouTubeMusicSearcher.search(query)
+        }.getOrNull()
+
+        if (!fromInnerTube.isNullOrEmpty()) {
+            return fromInnerTube
         }
 
-        // Отдельный запрос за исполнителями — music_songs их не отдаёт.
-        val artistsDeferred = async {
-            runCatching {
-                SearchInfo.getInfo(
-                    service,
-                    service.searchQHFactory.fromQuery(query, listOf("music_artists"), ""),
-                ).relatedItems.filterIsInstance<ChannelInfoItem>().map { it.toArtistItem(Source.YOUTUBE_MUSIC) }
-            }.getOrDefault(emptyList())
+        // 2. Фолбэк на NewPipe, если сеть/InnerTube временно недоступен
+        return coroutineScope {
+            val service = ServiceList.YouTube
+            val songsDeferred = async {
+                runCatching {
+                    SearchInfo.getInfo(
+                        service,
+                        service.searchQHFactory.fromQuery(query, listOf("music_songs"), ""),
+                    ).relatedItems.filterIsInstance<StreamInfoItem>().map { it.toTrackItem(Source.YOUTUBE_MUSIC) }
+                }.getOrDefault(emptyList())
+            }
+
+            val artistsDeferred = async {
+                runCatching {
+                    SearchInfo.getInfo(
+                        service,
+                        service.searchQHFactory.fromQuery(query, listOf("music_artists"), ""),
+                    ).relatedItems.filterIsInstance<ChannelInfoItem>().map { it.toArtistItem(Source.YOUTUBE_MUSIC) }
+                }.getOrDefault(emptyList())
+            }
+
+            val albumsDeferred = async {
+                runCatching {
+                    SearchInfo.getInfo(
+                        service,
+                        service.searchQHFactory.fromQuery(query, listOf("music_albums"), ""),
+                    ).relatedItems.filterIsInstance<PlaylistInfoItem>().map { it.toAlbumItem(Source.YOUTUBE_MUSIC) }
+                }.getOrDefault(emptyList())
+            }
+
+            val artists = artistsDeferred.await()
+            val albums = albumsDeferred.await()
+            val songs = songsDeferred.await()
+
+            artists.take(2) + albums.take(2) + songs
         }
-
-        // Альбомы/релизы — тоже отдельный фильтр выдачи YouTube Music.
-        val albumsDeferred = async {
-            runCatching {
-                SearchInfo.getInfo(
-                    service,
-                    service.searchQHFactory.fromQuery(query, listOf("music_albums"), ""),
-                ).relatedItems.filterIsInstance<PlaylistInfoItem>().map { it.toAlbumItem(Source.YOUTUBE_MUSIC) }
-            }.getOrDefault(emptyList())
-        }
-
-        val artists = artistsDeferred.await()
-        val albums = albumsDeferred.await()
-        val songs = songsDeferred.await()
-
-        // Исполнителей и альбомов вперёд (и немного), чтобы пережили обрезку списка.
-        artists.take(3) + albums.take(3) + songs
     }
 
     /**

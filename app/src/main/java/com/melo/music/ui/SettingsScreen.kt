@@ -1112,6 +1112,7 @@ private fun SpatialAudioSection() {
 private fun CrystalAudioSection() {
     var enabled by remember { mutableStateOf(EqualizerManager.isCrystalEnabled()) }
     var intensity by remember { mutableIntStateOf(EqualizerManager.getCrystalIntensity()) }
+    var space by remember { mutableIntStateOf(EqualizerManager.getCrystalSpace()) }
     val cs = MaterialTheme.colorScheme
     val isDark = cs.background.luminance() < 0.5f
     val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
@@ -1241,9 +1242,52 @@ private fun CrystalAudioSection() {
                         modifier = Modifier.fillMaxWidth(),
                     )
 
+                    Spacer(Modifier.height(14.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            "Объём и акустическое пространство",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = titleColor,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Surface(
+                            shape = CircleShape,
+                            color = cs.primaryContainer.copy(alpha = 0.7f),
+                        ) {
+                            Text(
+                                "$space%",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = cs.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Slider(
+                        value = space.toFloat(),
+                        onValueChange = {
+                            space = it.toInt()
+                            EqualizerManager.setCrystalSpace(space)
+                        },
+                        valueRange = 0f..100f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = cs.primary,
+                            activeTrackColor = cs.primary,
+                            inactiveTrackColor = trackInactive,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Психоакустический алгоритм генерирует ультра-высокие гармоники (14–22+ кГц), срезанные сжатием MP3/AAC, возвращая чистоту тарелкам, дыханию и струнам.",
+                        "Регулирует глубину сцены и ширину стерео-пространства без фазовых вычитаний и плоского звучания.",
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                         color = subtitleColor,
                         lineHeight = 16.sp,

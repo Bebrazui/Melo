@@ -118,13 +118,6 @@ class MainActivity : ComponentActivity() {
             this,
             com.melo.music.settings.AppSettings.highRefreshRate,
         )
-        if (com.melo.music.auth.YouTubeAccountManager.isLoggedIn) {
-            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                runCatching {
-                    com.melo.music.sync.YouTubeSyncManager.syncLibrary(this@MainActivity)
-                }
-            }
-        }
     }
 
     override fun onDestroy() {

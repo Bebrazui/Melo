@@ -25,6 +25,7 @@ object EqualizerManager {
     private const val KEY_SPATIAL_STRENGTH = "spatial_strength"
     private const val KEY_CRYSTAL = "crystal_audio"
     private const val KEY_CRYSTAL_INTENSITY = "crystal_intensity"
+    private const val KEY_CRYSTAL_SPACE = "crystal_space"
     private const val KEY_BASS_BOOST = "bass_boost_enabled"
     private const val KEY_BASS_BOOST_STRENGTH = "bass_boost_strength"
 
@@ -206,6 +207,7 @@ object EqualizerManager {
         dsp.eqEnabled = isEnabled()
         dsp.crystalEnabled = isCrystalEnabled()
         dsp.crystalIntensity = (getCrystalIntensity() / 100f).coerceIn(0f, 1f)
+        dsp.crystalSpace = (getCrystalSpace() / 100f).coerceIn(0f, 1f)
         dsp.bassBoostEnabled = isBassBoostEnabled()
         dsp.bassBoostStrength = (getBassBoostStrength() / 100f).coerceIn(0.1f, 1.0f)
         val levels = loadBandLevels()
@@ -262,6 +264,8 @@ object EqualizerManager {
 
     fun getCrystalIntensity(): Int = prefs?.getInt(KEY_CRYSTAL_INTENSITY, 65) ?: 65
 
+    fun getCrystalSpace(): Int = prefs?.getInt(KEY_CRYSTAL_SPACE, 50) ?: 50
+
     @Synchronized
     fun setCrystalEnabled(enabled: Boolean) {
         for (d in dspProcessors) d.crystalEnabled = enabled
@@ -273,6 +277,13 @@ object EqualizerManager {
         val i = intensity.coerceIn(0, 100)
         for (d in dspProcessors) d.crystalIntensity = (i / 100f).coerceIn(0f, 1f)
         prefs?.edit()?.putInt(KEY_CRYSTAL_INTENSITY, i)?.apply()
+    }
+
+    @Synchronized
+    fun setCrystalSpace(space: Int) {
+        val s = space.coerceIn(0, 100)
+        for (d in dspProcessors) d.crystalSpace = (s / 100f).coerceIn(0f, 1f)
+        prefs?.edit()?.putInt(KEY_CRYSTAL_SPACE, s)?.apply()
     }
 
     // ── Пространственный звук 3D (Spatial Audio) ──────────────────────────────
