@@ -18,6 +18,7 @@ import com.melo.music.history.HistoryManager
 import com.melo.music.lyrics.LyricsRepository
 import com.melo.music.playlists.PlaylistManager
 import com.melo.music.recommend.Recommender
+import kotlinx.coroutines.launch
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -60,25 +61,24 @@ class MeloApp : Application(), ImageLoaderFactory {
         com.melo.music.map.AppwriteService.init(this)
         com.melo.music.map.MapModeration.init(this)
         org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
-        Thread {
-            kotlinx.coroutines.runBlocking {
-                runCatching { com.melo.music.map.AppwriteService.ensureSession() }
-                runCatching { com.melo.music.auth.AuthManager.refresh() }
-            }
-        }.start()
+        val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        appScope.launch {
+            runCatching { com.melo.music.map.AppwriteService.ensureSession() }
+            runCatching { com.melo.music.auth.AuthManager.refresh() }
+        }
         ByeDpiProxy.init(this)
         if (ByeDpiProxy.isEnabled() && ByeDpiProxy.getCommandLine().isNotBlank()) {
-            Thread { ByeDpiProxy.start() }.start()
+            appScope.launch { ByeDpiProxy.start() }
         }
-        Thread {
-            runCatching { Extractor.ensureInit(this) }
-            runCatching { NewPipeResolver.ensureInit(this) }
+        appScope.launch {
+            runCatching { Extractor.ensureInit(this@MeloApp) }
+            runCatching { NewPipeResolver.ensureInit(this@MeloApp) }
             // Добываем SoundCloud client_id с рабочих хостов (минуя soundcloud.com).
-            runCatching { SoundCloudFix.ensure(this) }
+            runCatching { SoundCloudFix.ensure(this@MeloApp) }
             // Прогреваем SC-медиахосты: ByeDPI заранее подберёт стратегию, иначе
             // первый трек ~15с ловит source error пока подбор идёт на лету.
             runCatching { SoundCloudFix.warmUp() }
-        }.start()
+        }
     }
 
     /**

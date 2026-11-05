@@ -923,14 +923,6 @@ fun PlayerScreen(
             }
         }
     }
-    LaunchedEffect(Unit) {
-        com.melo.music.playback.PlaybackService.onTrackEnded = { autoAdvanceRef.value?.invoke() }
-        // Управление с наушников / виджетов:
-        com.melo.music.playback.PlaybackService.onSkipNext = { playNext() }
-        com.melo.music.playback.PlaybackService.onSkipPrev = { playPrev() }
-        com.melo.music.playback.PlaybackService.onToggleFavorite = { nowPlaying?.let { toggleLike(it) } }
-    }
-
     // Кроссфейд переключил трек: сервис уже играет следующий — синхронизируем UI.
     val crossfadeAdvanceRef = remember { mutableStateOf<((Int) -> Unit)?>(null) }
     LaunchedEffect(playingList, repeatOne, shuffle) {
@@ -945,9 +937,22 @@ fun PlayerScreen(
             pushNextResolved(idx)
         }
     }
-    LaunchedEffect(Unit) {
+
+    DisposableEffect(Unit) {
+        com.melo.music.playback.PlaybackService.onTrackEnded = { autoAdvanceRef.value?.invoke() }
+        // Управление с наушников / виджетов:
+        com.melo.music.playback.PlaybackService.onSkipNext = { playNext() }
+        com.melo.music.playback.PlaybackService.onSkipPrev = { playPrev() }
+        com.melo.music.playback.PlaybackService.onToggleFavorite = { nowPlaying?.let { toggleLike(it) } }
         com.melo.music.playback.PlaybackService.onCrossfadeAdvance = { idx ->
             crossfadeAdvanceRef.value?.invoke(idx)
+        }
+        onDispose {
+            com.melo.music.playback.PlaybackService.onTrackEnded = null
+            com.melo.music.playback.PlaybackService.onSkipNext = null
+            com.melo.music.playback.PlaybackService.onSkipPrev = null
+            com.melo.music.playback.PlaybackService.onToggleFavorite = null
+            com.melo.music.playback.PlaybackService.onCrossfadeAdvance = null
         }
     }
 

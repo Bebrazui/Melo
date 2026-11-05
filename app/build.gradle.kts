@@ -29,10 +29,8 @@ android {
         }
 
         // youtubedl-android поставляет нативный Python/yt-dlp по ABI.
-        // Для тестового билда ограничиваемся arm64-v8a (телефон V2405A).
-        // Для релиза — ABI splits со всеми архитектурами.
         ndk {
-            abiFilters += listOf("arm64-v8a")
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
     }
 
