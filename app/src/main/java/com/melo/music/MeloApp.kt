@@ -52,7 +52,6 @@ class MeloApp : Application(), ImageLoaderFactory {
         HistoryManager.init(this)
         EqualizerManager.init(this)
         LyricsRepository.init(this)
-        StreamCacheStore.init(this)
         com.melo.music.offline.OfflineManager.init(this)
         com.melo.music.settings.AppSettings.init(this)
         com.melo.music.ui.sound.ClickFeedback.init(this)

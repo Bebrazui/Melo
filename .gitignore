@@ -22,3 +22,6 @@ screenshots/
 .kotlin/
 **/build/
 *.dex
+sc_log.txt
+functions/*.tar.gz
+
