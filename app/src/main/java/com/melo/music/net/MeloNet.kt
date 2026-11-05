@@ -88,11 +88,7 @@ object MeloNet {
             return try {
                 Dns.SYSTEM.lookup(hostname)
             } catch (_: Exception) {
-                try {
-                    doh.lookup(hostname)
-                } catch (e: Exception) {
-                    throw e
-                }
+                doh.lookup(hostname)
             }
         }
     }

@@ -138,7 +138,7 @@ object LyricsRepository {
                 val obj = arr.getJSONObject(i)
                 val k = obj.getString("k")
                 val synced = if (obj.has("s")) parseLrc(obj.getString("s")) else null
-                val plain = obj.optString("p", null)
+                val plain = obj.optString("p", "").ifBlank { null }
                 val lyrics = if (synced == null && plain.isNullOrBlank()) null else Lyrics(synced, plain)
                 memCache.put(k, lyrics ?: EMPTY)
             }
@@ -153,7 +153,7 @@ object LyricsRepository {
                 val obj = arr.getJSONObject(i)
                 if (obj.getString("k") == key) {
                     val synced = if (obj.has("s")) parseLrc(obj.getString("s")) else null
-                    val plain = obj.optString("p", null)
+                    val plain = obj.optString("p", "").ifBlank { null }
                     return@runCatching if (synced == null && plain.isNullOrBlank()) null else Lyrics(synced, plain)
                 }
             }

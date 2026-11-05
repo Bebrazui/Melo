@@ -203,35 +203,6 @@ object SoundCloudFix {
             .execute().use { it.code.toString() }
     }.getOrElse { it.javaClass.simpleName }
 
-    /**
-     * ВРЕМЕННО: перебор стратегий ByeDPI против проблемных хостов SoundCloud.
-     * Любой числовой код = хост достижим (DPI пробит). RST/timeout/unreachable = нет.
-     * Логи в теге MeloTune. VPN должен быть ВЫКЛЮЧЕН.
-     */
-    fun tuneHosts() {
-        val hosts = listOf("i1.sndcdn.com", "cf-media.sndcdn.com", "a-v2.sndcdn.com", "api-v2.soundcloud.com")
-        val bases = listOf("-Kt", "-Kt,h", "-Kth")
-        val descs = listOf(
-            "-s1+s", "-d1+s", "-o1+s", "-r1+s",
-            "-s1+h", "-o1+h", "-r1+h",
-            "-s2+s", "-d2+s", "-o2+s", "-r2+s",
-            "-o1+s -r1+s", "-s1+s -d1+s", "-o1+s -d1+s", "-r1+s -o1+s",
-            "-f1+s -t3", "-f1+s -t5 -o1+s", "-f1+s -t2 -r1+s",
-        )
-        val strategies = bases.flatMap { b -> descs.map { d -> "$b $d -An" } }
-        // android.util.Log.e("MeloTune", "=== START host tuning: ${strategies.size} стратегий (VPN OFF!) ===")
-        // android.util.Log.e("MeloTune", "hosts: i1 / cf-media / a-v2 / api-v2  (число=ok, иначе ошибка)")
-        for ((i, args) in strategies.withIndex()) {
-            val ok = runCatching { ByeDpiProxy.restart(args) }.getOrDefault(false)
-            Thread.sleep(500)
-            if (!ok) { /* android.util.Log.e("MeloTune", "[$i] START FAILED: $args") */ continue }
-            val res = hosts.joinToString("  ") { probeCode("https://$it/") }
-            val hit = res.split("  ").take(2).all { it.toIntOrNull() != null } // i1 и cf-media оба числовые
-            // android.util.Log.e("MeloTune", "[$i]${if (hit) " ★" else ""} $args -> $res")
-        }
-        runCatching { ByeDpiProxy.restart(ByeDpiProxy.DEFAULT_CMD) }
-        // android.util.Log.e("MeloTune", "=== DONE (★ = i1 и cf-media пробились) ===")
-    }
 
     fun diagnose() {
         val mode = when {

@@ -21,10 +21,12 @@ object FavoritesManager {
 
     private var prefs: SharedPreferences? = null
     private var appContext: Context? = null
+    private var inMemoryCache: MutableList<TrackItem>? = null
 
     fun init(context: Context) {
         appContext = context.applicationContext
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        loadFromPrefs()
     }
 
     /** Открыты ли лайкнутые песни для других. По умолчанию открыты. */
@@ -35,18 +37,21 @@ object FavoritesManager {
         com.melo.music.sync.LibrarySync.onFavoritesChanged()
     }
 
-    fun getAll(): MutableList<TrackItem> {
-        val json = prefs?.getString(KEY_TRACKS, null) ?: return mutableListOf()
-        return runCatching {
+    @Synchronized
+    private fun loadFromPrefs(): MutableList<TrackItem> {
+        val cached = inMemoryCache
+        if (cached != null) return cached
+        val json = prefs?.getString(KEY_TRACKS, null) ?: return mutableListOf<TrackItem>().also { inMemoryCache = it }
+        val list = runCatching {
             val arr = JSONArray(json)
             (0 until arr.length()).map { i ->
                 val obj = arr.getJSONObject(i)
                 TrackItem(
                     title = obj.getString("title"),
-                    uploader = obj.optString("uploader", null),
+                    uploader = obj.optString("uploader", "").ifBlank { null },
                     url = obj.getString("url"),
                     durationSeconds = obj.optLong("duration", 0),
-                    thumbnailUrl = obj.optString("thumbnail", null),
+                    thumbnailUrl = obj.optString("thumbnail", "").ifBlank { null },
                     source = Source.valueOf(obj.optString("source", "YOUTUBE_MUSIC")),
                     kind = ItemKind.TRACK,
                     speed = obj.optDouble("speed", 1.0).toFloat(),
@@ -57,16 +62,24 @@ object FavoritesManager {
                 )
             }.toMutableList()
         }.getOrDefault(mutableListOf())
+        inMemoryCache = list
+        return list
     }
 
-    fun isLiked(url: String): Boolean = getAll().any { it.url == url }
+    @Synchronized
+    fun getAll(): MutableList<TrackItem> = ArrayList(inMemoryCache ?: loadFromPrefs())
+
+    @Synchronized
+    fun isLiked(url: String): Boolean = (inMemoryCache ?: loadFromPrefs()).any { it.url == url }
 
     /** Совпадение с учётом скорости, басс-буста и эффектов. */
+    @Synchronized
     fun isLiked(item: TrackItem): Boolean =
-        getAll().any { matches(it, item) }
+        (inMemoryCache ?: loadFromPrefs()).any { matches(it, item) }
 
+    @Synchronized
     fun toggle(item: TrackItem): Boolean {
-        val list = getAll()
+        val list = inMemoryCache ?: loadFromPrefs()
         val idx = list.indexOfFirst { matches(it, item) }
         return if (idx >= 0) {
             list.removeAt(idx)
@@ -84,9 +97,12 @@ object FavoritesManager {
     }
 
     /** Полная замена локального списка (используется облачным синком — без обратной выгрузки). */
+    @Synchronized
     fun replaceAll(list: List<TrackItem>) = save(list)
 
+    @Synchronized
     private fun save(list: List<TrackItem>) {
+        inMemoryCache = list.toMutableList()
         val arr = JSONArray()
         for (t in list) {
             arr.put(JSONObject().apply {

@@ -138,7 +138,8 @@ object Recommender {
         val seed = validUserTracks.shuffled().firstOrNull()
         if (seed != null) {
             val rel = runCatching { related(seed) }.getOrDefault(emptyList())
-            val fresh = rel.filter { it.kind == ItemKind.TRACK && it.url !in bannedUrls && it.url !in validUserTracks.map { u -> u.url } }
+            val userUrls = validUserTracks.map { it.url }.toSet()
+            val fresh = rel.filter { it.kind == ItemKind.TRACK && it.url !in bannedUrls && it.url !in userUrls }
             pool.addAll(fresh.take(4))
         }
 
