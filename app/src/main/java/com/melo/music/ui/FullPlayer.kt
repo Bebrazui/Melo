@@ -579,23 +579,21 @@ internal fun FullPlayer(
         val targetH = miniPlayerBounds?.height ?: with(localDensity) { 72.dp.toPx() }
 
         val p = collapseProgress.value.coerceIn(0f, 1f)
-        val easeOut = androidx.compose.animation.core.CubicBezierEasing(0.12f, 0f, 0.2f, 1f)
-        val motionP = easeOut.transform(p)
 
-        val currentX = androidx.compose.ui.util.lerp(0f, targetX, motionP)
-        val currentY = androidx.compose.ui.util.lerp(0f, targetY, motionP)
-        val currentW = androidx.compose.ui.util.lerp(screenWidthPx, targetW, motionP)
-        val currentH = androidx.compose.ui.util.lerp(screenHeightPx, targetH, motionP)
-        val currentCorner = androidx.compose.ui.unit.lerp(0.dp, 42.dp, motionP)
-        val currentElevation = androidx.compose.ui.unit.lerp(0.dp, 22.dp, motionP)
+        val currentX = androidx.compose.ui.util.lerp(0f, targetX, p)
+        val currentY = androidx.compose.ui.util.lerp(0f, targetY, p)
+        val currentW = androidx.compose.ui.util.lerp(screenWidthPx, targetW, p)
+        val currentH = androidx.compose.ui.util.lerp(screenHeightPx, targetH, p)
+        val currentCorner = androidx.compose.ui.unit.lerp(0.dp, 42.dp, p)
+        val currentElevation = androidx.compose.ui.unit.lerp(0.dp, 22.dp, p)
 
         // Мягкий эффект глубины (3D lift): карточка слегка отдаляется в перспективе во время движения
         val depthScale = 1f - (kotlin.math.sin(p * Math.PI.toFloat()) * 0.035f)
 
-        // Полноэкранный плеер плавно растворяется до середины свайпа вниз (~40% хода)
-        val fullAlpha = (1f - (p / 0.40f)).coerceIn(0f, 1f)
-        // Мини-плеер начинает проявляться с 30% до 100% с мягким наложением
-        val miniAlpha = ((p - 0.30f) / 0.70f).coerceIn(0f, 1f)
+        // Полноэкранный плеер плавно растворяется по мере сворачивания
+        val fullAlpha = (1f - (p / 0.65f)).coerceIn(0f, 1f)
+        // Мини-плеер мягко проявляется со второй половины хода с перекрытием
+        val miniAlpha = ((p - 0.35f) / 0.65f).coerceIn(0f, 1f)
 
         // Без затемнения фона под карточкой: чистая трансформация без мерцаний и резких перепадов яркости
         Box(
@@ -651,7 +649,7 @@ internal fun FullPlayer(
                                     } else {
                                         val dragDistance = (targetY - 0f).coerceAtLeast(100f)
                                         val progress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
-                                        if (progress > 0.08f || swipeAccum > 60f || collapseProgress.value > 0.12f) {
+                                        if (progress > 0.25f || swipeAccum > 240f || collapseProgress.value > 0.28f) {
                                             requestCollapse()
                                         } else {
                                             gestureScope.launch {
@@ -693,7 +691,7 @@ internal fun FullPlayer(
                                     } else {
                                         val dragDistance = (targetY - 0f).coerceAtLeast(100f)
                                         val progress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
-                                        if (progress > 0.08f || swipeAccum > 60f || collapseProgress.value > 0.12f) {
+                                        if (progress > 0.25f || swipeAccum > 240f || collapseProgress.value > 0.28f) {
                                             requestCollapse()
                                         } else {
                                             gestureScope.launch {
@@ -742,10 +740,16 @@ internal fun FullPlayer(
             ) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                     if (fullAlpha > 0.01f) {
+                        val contentScale = (currentH / screenHeightPx).coerceIn(0.20f, 1f)
                         Box(
                             modifier = Modifier
                                 .size(width = fullScreenWidthDp, height = fullScreenHeightDp)
-                                .graphicsLayer { alpha = fullAlpha },
+                                .graphicsLayer {
+                                    scaleX = contentScale
+                                    scaleY = contentScale
+                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.28f)
+                                    alpha = fullAlpha
+                                },
                         ) {
         FlowingBackground(
             thumbnailUrl = hiRes,

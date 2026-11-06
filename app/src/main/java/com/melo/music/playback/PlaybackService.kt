@@ -6,7 +6,9 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.AuxEffectInfo
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -279,7 +281,14 @@ class PlaybackService : MediaSessionService() {
                 }
             }
 
+            val audioAttributes = AudioAttributes.Builder()
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .setUsage(C.USAGE_MEDIA)
+                .build()
+
             return ExoPlayer.Builder(this, renderersFactory)
+                .setAudioAttributes(audioAttributes, true)
+                .setHandleAudioBecomingNoisy(true)
                 .setMediaSourceFactory(
                     DefaultMediaSourceFactory(dsFactory).setLoadErrorHandlingPolicy(loadErrorPolicy),
                 )

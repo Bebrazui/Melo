@@ -89,16 +89,6 @@ object SkipTracker {
             .toSet()
     }
 
-    /**
-     * Получить набор артистов с высоким skip-rate.
-     * Определяется по трекам из skipCounts.
-     */
-    fun getBannedArtists(): Set<String> {
-        // Нужен доступ к TrackItem чтобы достать uploader —
-        // поэтому возвращаем пустой набор, а фильтрацию делаем
-        // через skipRate() в Recommender.
-        return emptySet()
-    }
 
     fun getSkipCount(url: String): Int = skipCounts[url] ?: 0
 
