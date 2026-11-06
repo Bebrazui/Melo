@@ -22,7 +22,7 @@ data class Playlist(
 }
 
 /**
- * Плейлисты в SharedPreferences (переживают перезапуск).
+ * Плейлисты в SharedPreferences с in-memory кэшем (переживают перезапуск).
  */
 object PlaylistManager {
 
@@ -31,65 +31,101 @@ object PlaylistManager {
 
     private var prefs: SharedPreferences? = null
     private var appContext: Context? = null
+    private val inMemoryPlaylists = mutableListOf<Playlist>()
+    private var initialized = false
 
     fun init(context: Context) {
         appContext = context.applicationContext
-        prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val p = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs = p
+        loadAll(p)
     }
 
+    @Synchronized
+    private fun loadAll(p: SharedPreferences) {
+        if (initialized) return
+        inMemoryPlaylists.clear()
+        val json = p.getString(KEY, null)
+        if (!json.isNullOrBlank()) {
+            runCatching {
+                val arr = JSONArray(json)
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    inMemoryPlaylists.add(
+                        Playlist(
+                            id = obj.getString("id"),
+                            name = obj.getString("name"),
+                            tracks = parseTracks(obj.getJSONArray("tracks")),
+                            isPublic = obj.optBoolean("isPublic", true),
+                        ),
+                    )
+                }
+            }
+        }
+        initialized = true
+    }
+
+    private fun ensureLoaded() {
+        if (!initialized) {
+            prefs?.let { loadAll(it) }
+        }
+    }
+
+    @Synchronized
     fun getAll(): MutableList<Playlist> {
-        val json = prefs?.getString(KEY, null) ?: return mutableListOf()
-        return runCatching {
-            val arr = JSONArray(json)
-            (0 until arr.length()).map { i ->
-                val obj = arr.getJSONObject(i)
-                Playlist(
-                    id = obj.getString("id"),
-                    name = obj.getString("name"),
-                    tracks = parseTracks(obj.getJSONArray("tracks")),
-                    isPublic = obj.optBoolean("isPublic", true),
-                )
-            }.toMutableList()
-        }.getOrDefault(mutableListOf())
+        ensureLoaded()
+        return inMemoryPlaylists.map { it.copy() }.toMutableList()
     }
 
+    @Synchronized
     fun create(name: String): Playlist {
-        val list = getAll()
+        ensureLoaded()
         val playlist = Playlist(
             id = System.currentTimeMillis().toString(),
             name = name.trim().ifBlank { "Без названия" },
             tracks = emptyList(),
         )
-        list.add(playlist)
-        save(list)
+        inMemoryPlaylists.add(playlist)
+        save(inMemoryPlaylists)
         com.melo.music.sync.LibrarySync.onPlaylistsChanged()
         return playlist
     }
 
+    @Synchronized
     fun delete(id: String) {
-        save(getAll().filterNot { it.id == id })
+        ensureLoaded()
+        inMemoryPlaylists.removeAll { it.id == id }
+        save(inMemoryPlaylists)
         com.melo.music.sync.LibrarySync.onPlaylistsChanged()
     }
 
     /** Полная замена локального списка (используется облачным синком — без обратной выгрузки). */
-    fun replaceAll(list: List<Playlist>) = save(list)
+    @Synchronized
+    fun replaceAll(list: List<Playlist>) {
+        ensureLoaded()
+        inMemoryPlaylists.clear()
+        inMemoryPlaylists.addAll(list)
+        save(inMemoryPlaylists)
+    }
 
     /** Открыть/закрыть плейлист для других пользователей. */
+    @Synchronized
     fun setPublic(id: String, value: Boolean) {
-        val list = getAll()
-        val idx = list.indexOfFirst { it.id == id }
+        ensureLoaded()
+        val idx = inMemoryPlaylists.indexOfFirst { it.id == id }
         if (idx < 0) return
-        list[idx] = list[idx].copy(isPublic = value)
-        save(list)
+        inMemoryPlaylists[idx] = inMemoryPlaylists[idx].copy(isPublic = value)
+        save(inMemoryPlaylists)
         com.melo.music.sync.LibrarySync.onPlaylistsChanged()
     }
 
     /** Добавляет трек в плейлист (без дублей). Возвращает true, если добавлен. */
+    @Synchronized
     fun addTrack(playlistId: String, track: TrackItem): Boolean {
-        val list = getAll()
-        val idx = list.indexOfFirst { it.id == playlistId }
+        ensureLoaded()
+        val idx = inMemoryPlaylists.indexOfFirst { it.id == playlistId }
         if (idx < 0) return false
-        val pl = list[idx]
+        val pl = inMemoryPlaylists[idx]
         if (pl.tracks.any {
             it.url == track.url &&
                 kotlin.math.abs(it.speed - track.speed) < 0.01f &&
@@ -98,21 +134,22 @@ object PlaylistManager {
                 kotlin.math.abs(it.pitchSemi - track.pitchSemi) < 0.01f &&
                 it.noteShiftSeed == track.noteShiftSeed
         }) return false
-        list[idx] = pl.copy(tracks = pl.tracks + track)
-        save(list)
+        inMemoryPlaylists[idx] = pl.copy(tracks = pl.tracks + track)
+        save(inMemoryPlaylists)
         com.melo.music.sync.LibrarySync.onPlaylistsChanged()
         // Заранее резолвим прямую ссылку → воспроизведение из плейлиста мгновенное.
         appContext?.let { ctx -> Extractor.prefetch(ctx, track.url) }
         return true
     }
 
+    @Synchronized
     fun removeTrack(playlistId: String, trackUrl: String) {
-        val list = getAll()
-        val idx = list.indexOfFirst { it.id == playlistId }
+        ensureLoaded()
+        val idx = inMemoryPlaylists.indexOfFirst { it.id == playlistId }
         if (idx < 0) return
-        val pl = list[idx]
-        list[idx] = pl.copy(tracks = pl.tracks.filterNot { it.url == trackUrl })
-        save(list)
+        val pl = inMemoryPlaylists[idx]
+        inMemoryPlaylists[idx] = pl.copy(tracks = pl.tracks.filterNot { it.url == trackUrl })
+        save(inMemoryPlaylists)
         com.melo.music.sync.LibrarySync.onPlaylistsChanged()
     }
 

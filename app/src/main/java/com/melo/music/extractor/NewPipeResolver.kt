@@ -558,10 +558,13 @@ object NewPipeResolver {
     suspend fun relatedTracks(context: Context, seed: TrackItem): List<TrackItem> =
         withContext(Dispatchers.IO) {
             ensureInit(context)
-            // YouTube → радио YouTube Music.
+            // YouTube → нативное радио YouTube Music (InnerTube)
             if (!isSoundCloud(seed.url) && !isBandcamp(seed.url)) {
                 val vid = videoId(seed.url)
                 if (vid != null) {
+                    val nativeRadio = runCatching { YouTubeMusicSearcher.getRadio(vid) }.getOrDefault(emptyList())
+                    if (nativeRadio.isNotEmpty()) return@withContext nativeRadio
+
                     val mix = runCatching {
                         albumTracks(context, "https://music.youtube.com/playlist?list=RDAMVM$vid")
                     }.getOrDefault(emptyList()).filter { videoId(it.url) != vid }
@@ -579,7 +582,11 @@ object NewPipeResolver {
                 StreamInfo.getInfo(serviceFor(seed.url), seed.url).relatedItems
                     .filterIsInstance<StreamInfoItem>()
                     .map { it.toTrackItem(source) }
-                    .filter { it.url != seed.url }
+                    .filter {
+                        it.url != seed.url &&
+                            (it.durationSeconds == 0L || it.durationSeconds in 30..900) &&
+                            !YouTubeMusicSearcher.isLikelyNonMusic(it.title)
+                    }
             }.getOrDefault(emptyList())
         }
 

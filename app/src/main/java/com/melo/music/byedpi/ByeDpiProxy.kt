@@ -5,6 +5,11 @@ import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.net.InetSocketAddress
 import java.net.Proxy
 
@@ -28,6 +33,7 @@ object ByeDpiProxy {
     private var prefs: SharedPreferences? = null
     private var appContext: Context? = null
     private var running = false
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     init {
         System.loadLibrary("byedpi")
@@ -49,12 +55,10 @@ object ByeDpiProxy {
                 override fun onAvailable(network: android.net.Network) {
                     if (lastNetwork != null && lastNetwork != network) {
                         if (isEnabled() && running) {
-                            Thread {
-                                runCatching {
-                                    Thread.sleep(400)
-                                    restart()
-                                }
-                            }.start()
+                            scope.launch {
+                                delay(400)
+                                restart()
+                            }
                         }
                     }
                     lastNetwork = network

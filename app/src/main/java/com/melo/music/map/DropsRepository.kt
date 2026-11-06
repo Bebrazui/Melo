@@ -7,7 +7,9 @@ import io.appwrite.ID
 import io.appwrite.Permission
 import io.appwrite.Query
 import io.appwrite.Role
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -37,6 +39,8 @@ data class MapDrop(
 }
 
 object DropsRepository {
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // Короткий кэш ответов карты в памяти: пины меняются нечасто, а карту открывают/
     // двигают часто → не дёргаем сервер на каждое движение. По истечении TTL — обновляем.
@@ -72,7 +76,7 @@ object DropsRepository {
         } else {
             // В фоне обновляем кэш свежих дропов без блокировки
             if (recentCache == null || !fresh(recentCache?.second ?: 0L)) {
-                kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                scope.launch {
                     runCatching { recent(500) }
                 }
             }

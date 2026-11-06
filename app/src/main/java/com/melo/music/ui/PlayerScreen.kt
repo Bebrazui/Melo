@@ -389,7 +389,10 @@ fun PlayerScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var ghostSuggestions by remember { mutableStateOf<List<String>>(emptyList()) }
     var ghostIndex by remember { mutableIntStateOf(0) }
-    var items by rememberSaveable(stateSaver = TrackSaver.listOfSaver()) { mutableStateOf<List<TrackItem>>(emptyList()) }
+    var recommendations by rememberSaveable(stateSaver = TrackSaver.listOfSaver()) { mutableStateOf<List<TrackItem>>(emptyList()) }
+    var searchResults by rememberSaveable(stateSaver = TrackSaver.listOfSaver()) { mutableStateOf<List<TrackItem>>(emptyList()) }
+    var searchLoading by rememberSaveable { mutableStateOf(false) }
+    var searchError by rememberSaveable { mutableStateOf<String?>(null) }
     var listTitle by rememberSaveable { mutableStateOf(recommendationsTitle) }
     var listLoading by rememberSaveable { mutableStateOf(true) }
     var listError by rememberSaveable { mutableStateOf<String?>(null) }
@@ -597,10 +600,10 @@ fun PlayerScreen(
         }
             .onSuccess { result ->
                 // distinctBy: YouTube иногда отдаёт один трек дважды → дубль ключа в LazyColumn.
-                items = result.distinctBy { it.url }
+                recommendations = result.distinctBy { it.url }
                 listError = null
                 // Фоновая предзагрузка первых рекомендаций
-                items.take(2).forEach { onPrefetch(it.url) }
+                recommendations.take(2).forEach { onPrefetch(it.url) }
             }
             .onFailure { listError = it.message }
         listLoading = false
@@ -615,11 +618,11 @@ fun PlayerScreen(
     }
 
     // Авто-скролл наверх при новых результатах, если пользователь не листал.
-    LaunchedEffect(items.size, searchMode) {
-        if (searchMode && items.size > lastItemCount && !hasScrolled && items.isNotEmpty()) {
+    LaunchedEffect(searchResults.size, searchMode) {
+        if (searchMode && searchResults.size > lastItemCount && !hasScrolled && searchResults.isNotEmpty()) {
             searchListState.animateScrollToItem(0)
         }
-        lastItemCount = items.size
+        lastItemCount = searchResults.size
     }
 
     // Сброс флага скролла при новом поисковом запросе.
@@ -659,6 +662,7 @@ fun PlayerScreen(
         searchJob?.cancel()
         userSearchJob?.cancel()
         searchMode = true
+        searchResults = emptyList()
         ghostSuggestions = emptyList()
         ghostIndex = 0
         // Параллельно ищем людей.
@@ -666,18 +670,18 @@ fun PlayerScreen(
         userSearchJob = scope.launch { userResults = runCatching { onSearchUsers(q) }.getOrDefault(emptyList()) }
         searchJob = scope.launch {
             listTitle = "Результаты: $q"
-            listLoading = true
-            listError = null
+            searchLoading = true
+            searchError = null
             // Потоковая выдача: YouTube прилетает первым, SoundCloud дописывается позже.
             onSearch(q)
-                .catch { listError = it.message }
+                .catch { searchError = it.message }
                 .collect { partial ->
-                    items = partial.distinctBy { it.url }
+                    searchResults = partial.distinctBy { it.url }
                 }
             // Префетчим первые треки только один раз после завершения сбора выдачи,
             // чтобы не забивать сокеты и сеть во время поиска и отрисовки списка.
-            items.filter { it.kind == ItemKind.TRACK }.take(2).forEach { onPrefetch(it.url) }
-            listLoading = false
+            searchResults.filter { it.kind == ItemKind.TRACK }.take(2).forEach { onPrefetch(it.url) }
+            searchLoading = false
         }
     }
 
@@ -866,7 +870,13 @@ fun PlayerScreen(
         val raw = runCatching { onRelatedTracks(seed) }.getOrDefault(emptyList())
         val banned = SkipTracker.getBannedUrls()
         val filtered = raw
-            .filter { it.kind == ItemKind.TRACK && it.url !in exclude && it.url !in banned }
+            .filter {
+                it.kind == ItemKind.TRACK &&
+                    it.url !in exclude &&
+                    it.url !in banned &&
+                    (it.durationSeconds == 0L || it.durationSeconds in 30..900) &&
+                    !com.melo.music.extractor.YouTubeMusicSearcher.isLikelyNonMusic(it.title)
+            }
             .distinctBy { it.url }
         return TasteProfile.rankByTaste(filtered).take(20)
     }
@@ -875,7 +885,7 @@ fun PlayerScreen(
         val seedTrack = seed
             ?: nowPlaying
             ?: FavoritesManager.getAll().randomOrNull()
-            ?: items.firstOrNull { it.kind == ItemKind.TRACK }
+            ?: (if (searchMode) searchResults else recommendations).firstOrNull { it.kind == ItemKind.TRACK }
             ?: return
         if (seaLoading) return
         seaLoading = true
@@ -967,6 +977,9 @@ fun PlayerScreen(
                 userSearchJob?.cancel()
                 searchMode = false
                 query = ""
+                searchResults = emptyList()
+                searchLoading = false
+                searchError = null
                 ghostSuggestions = emptyList()
                 ghostIndex = 0
             }
@@ -1081,7 +1094,7 @@ fun PlayerScreen(
                 MeloTab.Home -> Box(modifier = Modifier.fillMaxSize()) {
                     if (searchMode) {
                         when {
-                            listLoading && items.isEmpty() -> Box(
+                            searchLoading && searchResults.isEmpty() -> Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -1094,27 +1107,27 @@ fun PlayerScreen(
                                 }
                             }
 
-                            listError != null && items.isEmpty() -> Text(
-                                text = "Ошибка: $listError",
+                            searchError != null && searchResults.isEmpty() -> Text(
+                                text = "Ошибка: $searchError",
                                 color = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.padding(top = searchInset + 12.dp, start = 20.dp, end = 20.dp),
                             )
 
-                            items.isEmpty() -> SearchEmptyState(
+                            searchResults.isEmpty() && !searchLoading -> SearchEmptyState(
                                 query = query,
                                 topInset = searchInset,
                             )
 
                             else -> androidx.compose.animation.AnimatedVisibility(
-                                visible = items.isNotEmpty(),
+                                visible = searchResults.isNotEmpty(),
                                 enter = fadeIn(tween(350)) + slideInVertically(tween(350)) { it / 12 },
                                 exit = fadeOut(tween(200)),
                             ) {
                                 SearchResultsScreen(
-                                    rawItems = items,
+                                    rawItems = searchResults,
                                     users = userResults,
                                     query = query,
-                                    loadingMore = listLoading,
+                                    loadingMore = searchLoading,
                                     nowPlayingUrl = nowPlaying?.url,
                                     isPlaying = isPlaying,
                                     resolvingUrl = resolvingUrl,
@@ -1123,7 +1136,7 @@ fun PlayerScreen(
                                     bottomInset = playerInset,
                                     onPlayFrom = { list, i -> playAt(list, i) },
                                     onShuffleAll = {
-                                        val t = items.filter { it.kind == ItemKind.TRACK }
+                                        val t = searchResults.filter { it.kind == ItemKind.TRACK }
                                         if (t.isNotEmpty()) {
                                             shuffle = true
                                             playAt(t, t.indices.random())
@@ -1138,9 +1151,9 @@ fun PlayerScreen(
                         }
                     } else {
                         HomeFeed(
-                            recommendations = items,
+                            recommendations = recommendations,
                             history = history,
-                            loading = listLoading && items.isEmpty(),
+                            loading = listLoading && recommendations.isEmpty(),
                             onLoadShelf = onLoadShelf,
                             nowPlayingUrl = nowPlaying?.url,
                             isPlaying = isPlaying,
@@ -1179,6 +1192,9 @@ fun PlayerScreen(
                             userSearchJob?.cancel()
                             query = ""
                             searchMode = false
+                            searchResults = emptyList()
+                            searchLoading = false
+                            searchError = null
                             ghostSuggestions = emptyList()
                             ghostIndex = 0
                         },

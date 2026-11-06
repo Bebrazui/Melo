@@ -50,6 +50,7 @@ import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.runtime.rememberCoroutineScope
 import com.melo.music.update.UpdateActivity
 import com.melo.music.update.UpdateManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.melo.music.byedpi.ByeDpiProxy
 import com.melo.music.ui.sound.ClickFeedback
@@ -849,7 +850,7 @@ fun SettingsScreen(
                             byedpiActive = it
                             ByeDpiProxy.setEnabled(it)
                             if (it) {
-                                Thread { ByeDpiProxy.start() }.start()
+                                coroutineScope.launch(Dispatchers.IO) { ByeDpiProxy.start() }
                             } else {
                                 ByeDpiProxy.stop()
                             }
