@@ -198,6 +198,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
@@ -568,8 +569,35 @@ internal fun FullPlayer(
     val swipeX = remember { Animatable(0f) }
     // 0 = ось ещё не выбрана, 1 = вертикаль, 2 = горизонталь.
     var axis by remember { mutableIntStateOf(0) }
+    var trackSwitchDirection by remember { mutableIntStateOf(1) }
 
     var speedWasOpenAtDragStart by remember { mutableStateOf(false) }
+
+    // Анимация волн и свечения мини-плеера при сворачивании
+    val miniInfinite = rememberInfiniteTransition(label = "miniPlayerFluidDrift")
+    val miniPhase1 by miniInfinite.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 4800, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "miniPhase1",
+    )
+    val miniPhase2 by miniInfinite.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3300, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "miniPhase2",
+    )
+    val miniPlayIntensity by animateFloatAsState(
+        targetValue = if (isPlaying) 1f else 0f,
+        animationSpec = tween(700, easing = FastOutSlowInEasing),
+        label = "miniPlayIntensity",
+    )
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val fullScreenWidthDp = maxWidth
@@ -655,11 +683,12 @@ internal fun FullPlayer(
                 androidx.compose.animation.AnimatedContent(
                     targetState = Triple(item.url, hiRes, com.melo.music.settings.AppSettings.vinylRecord),
                     transitionSpec = {
-                        (slideInHorizontally(tween(360, easing = FastOutSlowInEasing)) { width -> (width * 0.28f).toInt() } + fadeIn(tween(280)))
-                            .togetherWith(slideOutHorizontally(tween(300, easing = FastOutSlowInEasing)) { width -> (-width * 0.28f).toInt() } + fadeOut(tween(220)))
+                        val dir = trackSwitchDirection
+                        (slideInHorizontally(tween(340, easing = FastOutSlowInEasing)) { width -> (width * 0.35f * dir).toInt() } + fadeIn(tween(260)))
+                            .togetherWith(slideOutHorizontally(tween(280, easing = FastOutSlowInEasing)) { width -> (-width * 0.35f * dir).toInt() } + fadeOut(tween(200)))
                     },
                     label = "artTrackTransition",
-                    modifier = boxModifier.then(art3dModifier),
+                    modifier = boxModifier.then(art3dModifier).clipToBounds(),
                 ) { (_, art, isVinyl) ->
                     if (isVinyl) {
                         VinylRecordView(
@@ -680,8 +709,16 @@ internal fun FullPlayer(
                                 .clip(shape),
                         ) {
                             Box(modifier = Modifier.fillMaxSize()) {
+                                val context = LocalContext.current
+                                val request = remember(art) {
+                                    coil.request.ImageRequest.Builder(context)
+                                        .data(art)
+                                        .crossfade(true)
+                                        .crossfade(250)
+                                        .build()
+                                }
                                 AsyncImage(
-                                    model = art,
+                                    model = request,
                                     contentDescription = null,
                                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize(),
@@ -833,8 +870,18 @@ internal fun FullPlayer(
                                     val w = size.width.toFloat()
                                     gestureScope.launch {
                                         when {
-                                            v > w * 0.20f -> { onPrev(); swipeX.animateTo(0f, tween(260)) }
-                                            v < -w * 0.20f -> { onNext(); swipeX.animateTo(0f, tween(260)) }
+                                            v > w * 0.20f -> {
+                                                trackSwitchDirection = -1
+                                                swipeX.animateTo(w * 0.45f, tween(120))
+                                                swipeX.snapTo(0f)
+                                                onPrev()
+                                            }
+                                            v < -w * 0.20f -> {
+                                                trackSwitchDirection = 1
+                                                swipeX.animateTo(-w * 0.45f, tween(120))
+                                                swipeX.snapTo(0f)
+                                                onNext()
+                                            }
                                             else -> swipeX.animateTo(0f, tween(200))
                                         }
                                     }
@@ -998,8 +1045,9 @@ internal fun FullPlayer(
                     androidx.compose.animation.AnimatedContent(
                         targetState = Pair(item.title, item.uploader),
                         transitionSpec = {
-                            (slideInHorizontally(tween(340, easing = FastOutSlowInEasing)) { width -> (width * 0.25f).toInt() } + fadeIn(tween(260)))
-                                .togetherWith(slideOutHorizontally(tween(280, easing = FastOutSlowInEasing)) { width -> (-width * 0.25f).toInt() } + fadeOut(tween(200)))
+                            val dir = trackSwitchDirection
+                            (slideInHorizontally(tween(340, easing = FastOutSlowInEasing)) { width -> (width * 0.25f * dir).toInt() } + fadeIn(tween(260)))
+                                .togetherWith(slideOutHorizontally(tween(280, easing = FastOutSlowInEasing)) { width -> (-width * 0.25f * dir).toInt() } + fadeOut(tween(200)))
                         },
                         label = "titleTrackTransition",
                         modifier = Modifier.weight(1f).padding(end = 10.dp),
@@ -1214,6 +1262,7 @@ internal fun FullPlayer(
                                         )
                                     }
                                     ClickFeedback.play()
+                                    trackSwitchDirection = -1
                                     onPrev()
                                 },
                             ),
@@ -1314,6 +1363,7 @@ internal fun FullPlayer(
                                         )
                                     }
                                     ClickFeedback.play()
+                                    trackSwitchDirection = 1
                                     onNext()
                                 },
                             ),
@@ -1693,22 +1743,28 @@ internal fun FullPlayer(
                                 .padding(vertical = if (isCompactScreen) 2.dp else 8.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Spacer(
-                                modifier = Modifier
-                                    .size(with(localDensity) { fullArtSizePx.toDp() })
-                                    .onGloballyPositioned { spacerCoords ->
-                                        val parentCoords = fullControlsCoordinates
-                                        if (parentCoords != null && parentCoords.isAttached) {
-                                            val pos = parentCoords.localPositionOf(spacerCoords, Offset.Zero)
-                                            fullArtBounds = Rect(
-                                                pos.x,
-                                                pos.y,
-                                                pos.x + spacerCoords.size.width,
-                                                pos.y + spacerCoords.size.height,
-                                            )
+                            BoxWithConstraints(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                val targetArtDp = minOf(fullScreenWidthDp * animatedArtFraction, maxHeight)
+                                Spacer(
+                                    modifier = Modifier
+                                        .size(targetArtDp)
+                                        .onGloballyPositioned { spacerCoords ->
+                                            val parentCoords = fullControlsCoordinates
+                                            if (parentCoords != null && parentCoords.isAttached) {
+                                                val pos = parentCoords.localPositionOf(spacerCoords, Offset.Zero)
+                                                fullArtBounds = Rect(
+                                                    pos.x,
+                                                    pos.y,
+                                                    pos.x + spacerCoords.size.width,
+                                                    pos.y + spacerCoords.size.height,
+                                                )
+                                            }
                                         }
-                                    }
-                            )
+                                )
+                            }
                         }
                     }
 
@@ -1767,15 +1823,10 @@ internal fun FullPlayer(
 
         // 2. Морфирующаяся независимая обложка трека (shared element)
         if (!isWide && !showLyrics) {
-            val morphShape: Shape = when {
-                isVinylMode -> CircleShape
-                p > 0.65f -> scallopedArt
-                else -> RoundedCornerShape(artCorner)
-            }
-            val artBorder = when {
-                p > 0.65f -> BorderStroke(1.8.dp, lerp(fullCs.outlineVariant.copy(alpha = 0.2f), artColor, ((p - 0.65f) / 0.35f).coerceIn(0f, 1f)))
-                else -> BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f * (1f - (p / 0.65f).coerceIn(0f, 1f))))
-            }
+            val morphProgress = ((p - 0.45f) / 0.35f).coerceIn(0f, 1f)
+            val artAlphaA = 1f - morphProgress
+            val artAlphaB = morphProgress
+
             val artElevation = androidx.compose.ui.unit.lerp(12.dp, 3.dp, p)
             Box(
                 modifier = Modifier
@@ -1785,12 +1836,41 @@ internal fun FullPlayer(
                     }
                     .size(with(localDensity) { artSizePx.toDp() }),
             ) {
-                RenderArtwork(
-                    boxModifier = Modifier.fillMaxSize(),
-                    shape = morphShape,
-                    border = artBorder,
-                    elevation = artElevation,
-                )
+                // Слой A: полноразмерная обложка (скругленный квадрат или виниловая пластинка)
+                if (artAlphaA > 0.01f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = artAlphaA },
+                    ) {
+                        RenderArtwork(
+                            boxModifier = Modifier.fillMaxSize(),
+                            shape = if (isVinylMode) CircleShape else RoundedCornerShape(artCorner),
+                            border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f * (1f - (p / 0.65f).coerceIn(0f, 1f)))),
+                            elevation = artElevation,
+                        )
+                    }
+                }
+
+                // Слой B: мини-обложка (печенье scallopedArt с рамкой)
+                if (artAlphaB > 0.01f) {
+                    Surface(
+                        shape = scallopedArt,
+                        color = if (fullIsDark) Color(0xFF1E1A16) else fullCs.surfaceContainerHighest,
+                        border = BorderStroke(1.8.dp, lerp(fullCs.outlineVariant.copy(alpha = 0.2f), artColor, morphProgress)),
+                        shadowElevation = artElevation,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = artAlphaB },
+                    ) {
+                        Artwork(
+                            url = item.thumbnailUrl,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(scallopedArt),
+                        )
+                    }
+                }
             }
         }
 
@@ -1799,7 +1879,16 @@ internal fun FullPlayer(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { alpha = miniControlsAlpha },
+                    .graphicsLayer { alpha = miniControlsAlpha }
+                    .drawMiniPlayerBackdrop(
+                        isDark = fullIsDark,
+                        dotColorBase = if (fullIsDark) Color(0xFFF5E6CC) else fullCs.onSurfaceVariant.copy(alpha = 0.6f),
+                        bgColor = collapseBg,
+                        accentColor = artColor,
+                        playIntensity = miniPlayIntensity,
+                        phase1 = miniPhase1,
+                        phase2 = miniPhase2,
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 NowPlayingBarInner(

@@ -577,6 +577,65 @@ internal fun NowPlayingBarInner(
     }
 }
 
+internal fun Modifier.drawMiniPlayerBackdrop(
+    isDark: Boolean,
+    dotColorBase: Color,
+    bgColor: Color,
+    accentColor: Color,
+    playIntensity: Float,
+    phase1: Float,
+    phase2: Float,
+): Modifier = this.drawBehind {
+    val w = size.width
+    val h = size.height
+
+    // 1. Базовый фон карточки
+    drawRect(color = bgColor)
+
+    // 2. Живой плавающий волновой градиент с плавным затуханием при паузе
+    val waveShift = kotlin.math.sin(phase1.toDouble() * 1.5).toFloat() * (h * 0.15f) * playIntensity
+    val startY = androidx.compose.ui.util.lerp(h * 0.42f, (h * 0.10f + waveShift).coerceIn(0f, h * 0.40f), playIntensity)
+    val dynamicGlow = (0.62f + kotlin.math.sin(phase2.toDouble() * 2.0).toFloat() * 0.18f).coerceIn(0.30f, 0.88f)
+    val glowAlpha = androidx.compose.ui.util.lerp(0.08f, dynamicGlow, playIntensity)
+
+    drawRect(
+        brush = Brush.verticalGradient(
+            colors = listOf(
+                Color.Transparent,
+                accentColor.copy(alpha = androidx.compose.ui.util.lerp(0.02f, glowAlpha * (if (isDark) 0.35f else 0.18f), playIntensity)),
+                accentColor.copy(alpha = glowAlpha * (if (isDark) 1f else 0.40f)),
+            ),
+            startY = startY,
+            endY = h,
+        ),
+    )
+
+    // 3. Точки матрицы: сверху ПОЛНОСТЬЮ исчезают (alpha = 0), плавно нарастают книзу
+    val dotSpacing = 16.dp.toPx()
+    val dotRadius = 1.6.dp.toPx()
+    val cols = (w / dotSpacing).toInt() + 1
+    val rows = (h / dotSpacing).toInt() + 1
+    for (r in 0..rows) {
+        val yFactor = (r.toFloat() / rows.coerceAtLeast(1)).coerceIn(0f, 1f)
+        if (yFactor > 0.40f) {
+            val progress = ((yFactor - 0.40f) / 0.60f).coerceIn(0f, 1f)
+            val verticalAlpha = (progress * progress * progress * 0.88f) * androidx.compose.ui.util.lerp(0.35f, 1.0f, playIntensity)
+            if (verticalAlpha > 0.005f) {
+                for (c in 0..cols) {
+                    drawCircle(
+                        color = lerp(dotColorBase, accentColor, 0.75f).copy(alpha = verticalAlpha),
+                        radius = dotRadius,
+                        center = Offset(
+                            x = c * dotSpacing + (dotSpacing / 2),
+                            y = r * dotSpacing + (dotSpacing / 2),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 internal fun NowPlayingBar(
     item: TrackItem?,
@@ -687,59 +746,15 @@ internal fun NowPlayingBar(
     ) {
         Box(
             modifier = Modifier
-                // Мягкий плавный фоновый градиент и матрица точек
-                .drawBehind {
-                    val w = size.width
-                    val h = size.height
-
-                    // 1. Базовый фон карточки
-                    drawRect(color = miniBarBg)
-
-                    // 2. Живой плавающий волновой градиент с плавным затуханием при паузе
-                    val waveShift = kotlin.math.sin(phase1.toDouble() * 1.5).toFloat() * (h * 0.15f) * playIntensity
-                    val startY = androidx.compose.ui.util.lerp(h * 0.42f, (h * 0.10f + waveShift).coerceIn(0f, h * 0.40f), playIntensity)
-                    val dynamicGlow = (0.62f + kotlin.math.sin(phase2.toDouble() * 2.0).toFloat() * 0.18f).coerceIn(0.30f, 0.88f)
-                    val glowAlpha = androidx.compose.ui.util.lerp(0.08f, dynamicGlow, playIntensity)
-
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                animatedTrackColor.copy(alpha = androidx.compose.ui.util.lerp(0.02f, glowAlpha * (if (isDark) 0.35f else 0.18f), playIntensity)),
-                                animatedTrackColor.copy(alpha = glowAlpha * (if (isDark) 1f else 0.40f)),
-                            ),
-                            startY = startY,
-                            endY = h,
-                        ),
-                    )
-
-                    // 3. Точки матрицы: сверху ПОЛНОСТЬЮ исчезают (alpha = 0), плавно нарастают книзу
-                    val dotSpacing = 16.dp.toPx()
-                    val dotRadius = 1.6.dp.toPx()
-                    val cols = (w / dotSpacing).toInt() + 1
-                    val rows = (h / dotSpacing).toInt() + 1
-                    val dotColorBase = if (isDark) Color(0xFFF5E6CC) else cs.onSurfaceVariant.copy(alpha = 0.6f)
-                    for (r in 0..rows) {
-                        val yFactor = (r.toFloat() / rows.coerceAtLeast(1)).coerceIn(0f, 1f)
-                        // Сверху (первые 40% высоты) точки полностью отсутствуют
-                        if (yFactor > 0.40f) {
-                            val progress = ((yFactor - 0.40f) / 0.60f).coerceIn(0f, 1f)
-                            val verticalAlpha = (progress * progress * progress * 0.88f) * androidx.compose.ui.util.lerp(0.35f, 1.0f, playIntensity)
-                            if (verticalAlpha > 0.005f) {
-                                for (c in 0..cols) {
-                                    drawCircle(
-                                        color = lerp(dotColorBase, animatedTrackColor, 0.75f).copy(alpha = verticalAlpha),
-                                        radius = dotRadius,
-                                        center = Offset(
-                                            x = c * dotSpacing + (dotSpacing / 2),
-                                            y = r * dotSpacing + (dotSpacing / 2),
-                                        ),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                .drawMiniPlayerBackdrop(
+                    isDark = isDark,
+                    dotColorBase = if (isDark) Color(0xFFF5E6CC) else cs.onSurfaceVariant.copy(alpha = 0.6f),
+                    bgColor = miniBarBg,
+                    accentColor = animatedTrackColor,
+                    playIntensity = playIntensity,
+                    phase1 = phase1,
+                    phase2 = phase2,
+                )
         ) {
             NowPlayingBarInner(
                 item = item,
