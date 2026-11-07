@@ -388,6 +388,7 @@ internal fun NowPlayingBarInner(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onClick: () -> Unit = {},
+    showArtwork: Boolean = true,
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.background.luminance() < 0.5f
@@ -411,18 +412,20 @@ internal fun NowPlayingBarInner(
                 modifier = Modifier.size(54.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Surface(
-                    shape = scallopedArt,
-                    color = if (isDark) Color(0xFF1E1A16) else cs.surfaceContainerHighest,
-                    border = BorderStroke(1.8.dp, animatedTrackColor),
-                    modifier = Modifier.size(52.dp),
-                ) {
-                    Artwork(
-                        url = item.thumbnailUrl,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(scallopedArt),
-                    )
+                if (showArtwork) {
+                    Surface(
+                        shape = scallopedArt,
+                        color = if (isDark) Color(0xFF1E1A16) else cs.surfaceContainerHighest,
+                        border = BorderStroke(1.8.dp, animatedTrackColor),
+                        modifier = Modifier.size(52.dp),
+                    ) {
+                        Artwork(
+                            url = item.thumbnailUrl,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(scallopedArt),
+                        )
+                    }
                 }
                 // Круглый бейдж ноты снизу справа в цвет обложки
                 Surface(

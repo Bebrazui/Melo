@@ -81,6 +81,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
@@ -232,6 +233,7 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.PlaybackException
@@ -351,6 +353,8 @@ internal fun FullPlayer(
     var isCollapsing by remember { mutableStateOf(false) }
     var showSpeed by remember { mutableStateOf(false) }
     var showFxSheet by remember { mutableStateOf(false) }
+    var fullArtBounds by remember { mutableStateOf<Rect?>(null) }
+    var fullControlsCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     LaunchedEffect(Unit) {
         collapseProgress.animateTo(
@@ -369,8 +373,8 @@ internal fun FullPlayer(
                 collapseProgress.animateTo(
                     targetValue = 1f,
                     animationSpec = tween(
-                        durationMillis = 340,
-                        easing = androidx.compose.animation.core.CubicBezierEasing(0.12f, 0f, 0.2f, 1f),
+                        durationMillis = 260,
+                        easing = androidx.compose.animation.core.FastOutSlowInEasing,
                     ),
                 )
                 onCollapse()
@@ -573,31 +577,195 @@ internal fun FullPlayer(
         val screenWidthPx = with(localDensity) { maxWidth.toPx() }
         val screenHeightPx = with(localDensity) { maxHeight.toPx() }
 
+        val isWide = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val isCompactScreen = !isWide && fullScreenHeightDp < 750.dp
+        val isVinylMode = com.melo.music.settings.AppSettings.vinylRecord
+
+        val art3dModifier = Modifier
+            .graphicsLayer {
+                rotationY = tiltRoll * 5f
+                rotationX = -tiltPitch * 5f
+                translationX = tiltRoll * 4.dp.toPx()
+                translationY = tiltPitch * 4.dp.toPx()
+                cameraDistance = 20f * density
+                shadowElevation = (10f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 2f).dp.toPx()
+                shape = if (isVinylMode) CircleShape else RoundedCornerShape(32.dp)
+                clip = isVinylMode
+            }
+
+        val p = collapseProgress.value.coerceIn(0f, 1f)
+
+        // ── Компонент обложки или видеоклипа ──
+        @Composable
+        fun RenderArtwork(
+            boxModifier: Modifier,
+            shape: Shape = RoundedCornerShape(32.dp),
+            border: BorderStroke? = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f)),
+            elevation: Dp = 12.dp,
+        ) {
+            if (showVideo && videoUrl != null) {
+                Surface(
+                    shape = shape,
+                    color = Color.Black,
+                    border = border,
+                    shadowElevation = elevation,
+                    modifier = boxModifier
+                        .then(art3dModifier)
+                        .clip(shape),
+                ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AndroidView(
+                            factory = { ctx ->
+                                androidx.media3.ui.PlayerView(ctx).apply {
+                                    useController = false
+                                    resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                    player = com.melo.music.playback.PlaybackService.activePlayer
+                                }
+                            },
+                            update = { view ->
+                                if (view.player == null) {
+                                    view.player = com.melo.music.playback.PlaybackService.activePlayer
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.Black.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(12.dp)
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .clickable { isFullscreenVideo = true },
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Rounded.Fullscreen,
+                                    contentDescription = "Полный экран",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                androidx.compose.animation.AnimatedContent(
+                    targetState = Triple(item.url, hiRes, com.melo.music.settings.AppSettings.vinylRecord),
+                    transitionSpec = {
+                        (slideInHorizontally(tween(360, easing = FastOutSlowInEasing)) { width -> (width * 0.28f).toInt() } + fadeIn(tween(280)))
+                            .togetherWith(slideOutHorizontally(tween(300, easing = FastOutSlowInEasing)) { width -> (-width * 0.28f).toInt() } + fadeOut(tween(220)))
+                    },
+                    label = "artTrackTransition",
+                    modifier = boxModifier.then(art3dModifier),
+                ) { (_, art, isVinyl) ->
+                    if (isVinyl) {
+                        VinylRecordView(
+                            art = art,
+                            isPlaying = isPlaying,
+                            tiltRoll = tiltRoll,
+                            tiltPitch = tiltPitch,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Surface(
+                            shape = shape,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            border = border,
+                            shadowElevation = elevation,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(shape),
+                        ) {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                AsyncImage(
+                                    model = art,
+                                    contentDescription = null,
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+
+                                // Едва заметный, мягкий круглый блик света
+                                if (p < 0.35f) {
+                                    Canvas(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 1f - (p / 0.35f) }) {
+                                        val sheenAlpha = (0.10f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 0.04f).coerceIn(0.02f, 0.14f)
+                                        val cx = size.width * (0.45f + tiltRoll * 0.25f)
+                                        val cy = size.height * (0.40f + tiltPitch * 0.25f)
+                                        val maxDim = kotlin.math.max(size.width, size.height)
+
+                                        drawRect(
+                                            brush = Brush.radialGradient(
+                                                0.0f to Color.White.copy(alpha = sheenAlpha),
+                                                0.35f to Color.White.copy(alpha = sheenAlpha * 0.45f),
+                                                0.70f to Color.White.copy(alpha = sheenAlpha * 0.10f),
+                                                1.0f to Color.Transparent,
+                                                center = Offset(cx, cy),
+                                                radius = maxDim * 0.95f,
+                                            ),
+                                            size = size,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         val targetX = miniPlayerBounds?.left ?: with(localDensity) { 14.dp.toPx() }
         val targetY = miniPlayerBounds?.top ?: (screenHeightPx - with(localDensity) { 160.dp.toPx() })
         val targetW = miniPlayerBounds?.width ?: (screenWidthPx - with(localDensity) { 28.dp.toPx() })
         val targetH = miniPlayerBounds?.height ?: with(localDensity) { 72.dp.toPx() }
-
-        val p = collapseProgress.value.coerceIn(0f, 1f)
 
         val currentX = androidx.compose.ui.util.lerp(0f, targetX, p)
         val currentY = androidx.compose.ui.util.lerp(0f, targetY, p)
         val currentW = androidx.compose.ui.util.lerp(screenWidthPx, targetW, p)
         val currentH = androidx.compose.ui.util.lerp(screenHeightPx, targetH, p)
         val currentCorner = androidx.compose.ui.unit.lerp(0.dp, 42.dp, p)
-        val currentElevation = androidx.compose.ui.unit.lerp(0.dp, 22.dp, p)
+        val currentElevation = androidx.compose.ui.unit.lerp(0.dp, 20.dp, p)
 
-        // Мягкий эффект глубины (3D lift): карточка слегка отдаляется в перспективе во время движения
-        val depthScale = 1f - (kotlin.math.sin(p * Math.PI.toFloat()) * 0.035f)
+        val fullControlsAlpha = (1f - (p / 0.35f)).coerceIn(0f, 1f)
+        val miniControlsAlpha = ((p - 0.65f) / 0.35f).coerceIn(0f, 1f)
 
-        // Полноэкранный плеер плавно растворяется по мере сворачивания
-        val fullAlpha = (1f - (p / 0.65f)).coerceIn(0f, 1f)
-        // Мини-плеер мягко проявляется со второй половины хода с перекрытием
-        val miniAlpha = ((p - 0.35f) / 0.65f).coerceIn(0f, 1f)
+        val topSpacerHeight = if (isCompactScreen) 14.dp else 36.dp
+        val targetArtFraction = when {
+            isCompactScreen && showSpeed -> 0.55f
+            isCompactScreen -> 0.74f
+            showSpeed -> 0.68f
+            else -> 0.88f
+        }
+        val animatedArtFraction by animateFloatAsState(
+            targetValue = targetArtFraction,
+            animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f),
+            label = "artFraction",
+        )
+        val artFullWidthDp = fullScreenWidthDp * animatedArtFraction
+        val fullArtSizePx = with(localDensity) { artFullWidthDp.toPx() }
+        val fallbackX = (screenWidthPx - fullArtSizePx) / 2f
+        val fallbackY = with(localDensity) { (topSpacerHeight + 48.dp + (if (isCompactScreen) 6.dp else 20.dp)).toPx() }
 
-        // Без затемнения фона под карточкой: чистая трансформация без мерцаний и резких перепадов яркости
+        val fullArtX = fullArtBounds?.left ?: fallbackX
+        val fullArtY = fullArtBounds?.top ?: fallbackY
+        val fullArtSize = fullArtBounds?.width ?: fullArtSizePx
+
+        val miniArtSizePx = with(localDensity) { 52.dp.toPx() }
+        val miniArtX = with(localDensity) { 13.dp.toPx() }
+        val miniArtY = with(localDensity) { 10.dp.toPx() }
+
+        val artSizePx = androidx.compose.ui.util.lerp(fullArtSize, miniArtSizePx, p)
+        val artX = androidx.compose.ui.util.lerp(fullArtX, miniArtX, p)
+        val artY = androidx.compose.ui.util.lerp(fullArtY, miniArtY, p)
+        val artCorner = androidx.compose.ui.unit.lerp(32.dp, 16.dp, (p / 0.65f).coerceIn(0f, 1f))
+
+        // Мягкое затемнение фона под выдвигающейся карточкой
+        val scrimAlpha = (1f - p).coerceIn(0f, 1f) * 0.55f
         Box(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = scrimAlpha))
         ) {
             val fullCs = MaterialTheme.colorScheme
             val fullIsDark = fullCs.background.luminance() < 0.5f
@@ -606,12 +774,12 @@ internal fun FullPlayer(
                 shape = RoundedCornerShape(currentCorner),
                 color = collapseBg,
                 shadowElevation = currentElevation,
-                border = if (p > 0.08f) BorderStroke(
+                border = if (p > 0.05f) BorderStroke(
                     1.2.dp,
                     if (fullIsDark) {
-                        lerp(Color(0x33FFFFFF), artColor, 0.45f).copy(alpha = ((p - 0.08f) / 0.92f).coerceIn(0f, 1f))
+                        lerp(Color(0x33FFFFFF), artColor, 0.45f).copy(alpha = ((p - 0.05f) / 0.95f).coerceIn(0f, 1f))
                     } else {
-                        lerp(fullCs.outlineVariant.copy(alpha = 0.45f), artColor, 0.45f).copy(alpha = ((p - 0.08f) / 0.92f).coerceIn(0f, 1f))
+                        lerp(fullCs.outlineVariant.copy(alpha = 0.45f), artColor, 0.45f).copy(alpha = ((p - 0.05f) / 0.95f).coerceIn(0f, 1f))
                     }
                 ) else null,
                 modifier = Modifier
@@ -620,10 +788,6 @@ internal fun FullPlayer(
                         width = with(localDensity) { currentW.toDp() },
                         height = with(localDensity) { currentH.toDp() },
                     )
-                    .graphicsLayer {
-                        scaleX = depthScale
-                        scaleY = depthScale
-                    }
                     .clip(RoundedCornerShape(currentCorner))
                     .pointerInput(Unit) {
                         detectDragGestures(
@@ -647,13 +811,13 @@ internal fun FullPlayer(
                                         showSpeed = true
                                         ClickFeedback.play()
                                     } else {
-                                        val dragDistance = (targetY - 0f).coerceAtLeast(100f)
+                                        val dragDistance = (targetY - 0f).coerceAtLeast(200f)
                                         val progress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
-                                        if (progress > 0.25f || swipeAccum > 240f || collapseProgress.value > 0.28f) {
+                                        if (progress > 0.28f || swipeAccum > 180f) {
                                             requestCollapse()
                                         } else {
                                             gestureScope.launch {
-                                                collapseProgress.animateTo(0f, spring(0.86f, 420f))
+                                                collapseProgress.animateTo(0f, spring(0.85f, 400f))
                                                 swipeX.animateTo(0f, tween(180))
                                             }
                                         }
@@ -681,21 +845,21 @@ internal fun FullPlayer(
                                         ClickFeedback.play()
                                     }
                                     gestureScope.launch {
-                                        collapseProgress.animateTo(0f, spring(0.86f, 420f))
+                                        collapseProgress.animateTo(0f, spring(0.85f, 400f))
                                     }
                                 } else {
                                     if (swipeAccum <= -45f) {
                                         showSpeed = true
                                         ClickFeedback.play()
-                                        gestureScope.launch { collapseProgress.animateTo(0f, spring(0.86f, 420f)) }
+                                        gestureScope.launch { collapseProgress.animateTo(0f, spring(0.85f, 400f)) }
                                     } else {
-                                        val dragDistance = (targetY - 0f).coerceAtLeast(100f)
+                                        val dragDistance = (targetY - 0f).coerceAtLeast(200f)
                                         val progress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
-                                        if (progress > 0.25f || swipeAccum > 240f || collapseProgress.value > 0.28f) {
+                                        if (progress > 0.28f || swipeAccum > 180f) {
                                             requestCollapse()
                                         } else {
                                             gestureScope.launch {
-                                                collapseProgress.animateTo(0f, spring(0.86f, 420f))
+                                                collapseProgress.animateTo(0f, spring(0.85f, 400f))
                                             }
                                         }
                                     }
@@ -727,8 +891,8 @@ internal fun FullPlayer(
                                             showSpeed = true
                                             swipeAccum = 0f
                                             ClickFeedback.play()
-                                        } else {
-                                            val dragDistance = (targetY - 0f).coerceAtLeast(100f)
+                                        } else if (swipeAccum > 0f) {
+                                            val dragDistance = (targetY - 0f).coerceAtLeast(200f)
                                             val newProgress = (swipeAccum / dragDistance).coerceIn(0f, 1f)
                                             gestureScope.launch { collapseProgress.snapTo(newProgress) }
                                         }
@@ -738,18 +902,13 @@ internal fun FullPlayer(
                         )
                     },
             ) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                    if (fullAlpha > 0.01f) {
-                        val contentScale = (currentH / screenHeightPx).coerceIn(0.20f, 1f)
+                Box(modifier = Modifier.fillMaxSize()) {
+                    if (fullControlsAlpha > 0.01f) {
                         Box(
                             modifier = Modifier
                                 .size(width = fullScreenWidthDp, height = fullScreenHeightDp)
-                                .graphicsLayer {
-                                    scaleX = contentScale
-                                    scaleY = contentScale
-                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.28f)
-                                    alpha = fullAlpha
-                                },
+                                .graphicsLayer { alpha = fullControlsAlpha }
+                                .onGloballyPositioned { fullControlsCoordinates = it },
                         ) {
         FlowingBackground(
             thumbnailUrl = hiRes,
@@ -777,134 +936,7 @@ internal fun FullPlayer(
         )
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val isWide = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-            val isCompact = !isWide && maxHeight < 750.dp
-
-            val isVinylMode = com.melo.music.settings.AppSettings.vinylRecord
-            val art3dModifier = Modifier
-                .graphicsLayer {
-                    rotationY = tiltRoll * 5f
-                    rotationX = -tiltPitch * 5f
-                    translationX = tiltRoll * 4.dp.toPx()
-                    translationY = tiltPitch * 4.dp.toPx()
-                    cameraDistance = 20f * density
-                    shadowElevation = (10f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 2f).dp.toPx()
-                    shape = if (isVinylMode) CircleShape else RoundedCornerShape(32.dp)
-                    clip = isVinylMode
-                }
-
-            // ── Компонент обложки или видеоклипа ──
-            @Composable
-            fun RenderArtwork(boxModifier: Modifier) {
-                if (showVideo && videoUrl != null) {
-                    Surface(
-                        shape = RoundedCornerShape(32.dp),
-                        color = Color.Black,
-                        border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f)),
-                        shadowElevation = 12.dp,
-                        modifier = boxModifier
-                            .then(art3dModifier)
-                            .clip(RoundedCornerShape(32.dp)),
-                    ) {
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            AndroidView(
-                                factory = { ctx ->
-                                    androidx.media3.ui.PlayerView(ctx).apply {
-                                        useController = false
-                                        resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                                        player = com.melo.music.playback.PlaybackService.activePlayer
-                                    }
-                                },
-                                update = { view ->
-                                    if (view.player == null) {
-                                        view.player = com.melo.music.playback.PlaybackService.activePlayer
-                                    }
-                                },
-                                modifier = Modifier.fillMaxSize(),
-                            )
-
-                            Surface(
-                                shape = CircleShape,
-                                color = Color.Black.copy(alpha = 0.6f),
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .padding(12.dp)
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .clickable { isFullscreenVideo = true },
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Rounded.Fullscreen,
-                                        contentDescription = "Полный экран",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    androidx.compose.animation.AnimatedContent(
-                        targetState = Triple(item.url, hiRes, com.melo.music.settings.AppSettings.vinylRecord),
-                        transitionSpec = {
-                            (slideInHorizontally(tween(360, easing = FastOutSlowInEasing)) { width -> (width * 0.28f).toInt() } + fadeIn(tween(280)))
-                                .togetherWith(slideOutHorizontally(tween(300, easing = FastOutSlowInEasing)) { width -> (-width * 0.28f).toInt() } + fadeOut(tween(220)))
-                        },
-                        label = "artTrackTransition",
-                        modifier = boxModifier.then(art3dModifier),
-                    ) { (_, art, isVinyl) ->
-                        if (isVinyl) {
-                            VinylRecordView(
-                                art = art,
-                                isPlaying = isPlaying,
-                                tiltRoll = tiltRoll,
-                                tiltPitch = tiltPitch,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        } else {
-                            Surface(
-                                shape = RoundedCornerShape(32.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f)),
-                                shadowElevation = 12.dp,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(32.dp)),
-                            ) {
-                                Box(modifier = Modifier.fillMaxSize()) {
-                                    AsyncImage(
-                                        model = art,
-                                        contentDescription = null,
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize(),
-                                    )
-
-                                    // Едва заметный, мягкий круглый блик света
-                                    Canvas(modifier = Modifier.fillMaxSize()) {
-                                        val sheenAlpha = (0.10f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 0.04f).coerceIn(0.02f, 0.14f)
-                                        val cx = size.width * (0.45f + tiltRoll * 0.25f)
-                                        val cy = size.height * (0.40f + tiltPitch * 0.25f)
-                                        val maxDim = kotlin.math.max(size.width, size.height)
-
-                                        drawRect(
-                                            brush = Brush.radialGradient(
-                                                0.0f to Color.White.copy(alpha = sheenAlpha),
-                                                0.35f to Color.White.copy(alpha = sheenAlpha * 0.45f),
-                                                0.70f to Color.White.copy(alpha = sheenAlpha * 0.10f),
-                                                1.0f to Color.Transparent,
-                                                center = Offset(cx, cy),
-                                                radius = maxDim * 0.95f,
-                                            ),
-                                            size = size,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            val isCompact = isCompactScreen
 
             // ── Компонент текста песни / караоке ──
             @Composable
@@ -1653,36 +1685,30 @@ internal fun FullPlayer(
                             RenderLyrics(Modifier.fillMaxSize())
                         }
                     } else {
-                        // Режим обложки: адаптивный размер по доступной высоте
-                        val targetArtFraction = when {
-                            isCompact && showSpeed -> 0.55f
-                            isCompact -> 0.74f
-                            showSpeed -> 0.68f
-                            else -> 0.88f
-                        }
-                        val animatedArtFraction by animateFloatAsState(
-                            targetValue = targetArtFraction,
-                            animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f),
-                            label = "artFraction",
-                        )
-
+                        // Режим обложки: место под морфирующуюся обложку
                         Box(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth()
-                                .padding(vertical = if (isCompact) 2.dp else 8.dp)
-                                .offset { IntOffset(swipeX.value.roundToInt(), 0) },
+                                .padding(vertical = if (isCompactScreen) 2.dp else 8.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Box(
+                            Spacer(
                                 modifier = Modifier
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(animatedArtFraction)
-                                    .aspectRatio(1f, matchHeightConstraintsFirst = true),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                RenderArtwork(Modifier.fillMaxSize())
-                            }
+                                    .size(with(localDensity) { fullArtSizePx.toDp() })
+                                    .onGloballyPositioned { spacerCoords ->
+                                        val parentCoords = fullControlsCoordinates
+                                        if (parentCoords != null && parentCoords.isAttached) {
+                                            val pos = parentCoords.localPositionOf(spacerCoords, Offset.Zero)
+                                            fullArtBounds = Rect(
+                                                pos.x,
+                                                pos.y,
+                                                pos.x + spacerCoords.size.width,
+                                                pos.y + spacerCoords.size.height,
+                                            )
+                                        }
+                                    }
+                            )
                         }
                     }
 
@@ -1739,26 +1765,41 @@ internal fun FullPlayer(
     }
 }
 
-        // 2. Мини-плеер (проявляется при сворачивании и идеально встает на свое место)
-        if (miniAlpha > 0.01f) {
+        // 2. Морфирующаяся независимая обложка трека (shared element)
+        if (!isWide && !showLyrics) {
+            val morphShape: Shape = when {
+                isVinylMode -> CircleShape
+                p > 0.65f -> scallopedArt
+                else -> RoundedCornerShape(artCorner)
+            }
+            val artBorder = when {
+                p > 0.65f -> BorderStroke(1.8.dp, lerp(fullCs.outlineVariant.copy(alpha = 0.2f), artColor, ((p - 0.65f) / 0.35f).coerceIn(0f, 1f)))
+                else -> BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f * (1f - (p / 0.65f).coerceIn(0f, 1f))))
+            }
+            val artElevation = androidx.compose.ui.unit.lerp(12.dp, 3.dp, p)
+            Box(
+                modifier = Modifier
+                    .offset {
+                        val swipeOffset = if (p < 0.15f) swipeX.value else 0f
+                        IntOffset((artX + swipeOffset).roundToInt(), artY.roundToInt())
+                    }
+                    .size(with(localDensity) { artSizePx.toDp() }),
+            ) {
+                RenderArtwork(
+                    boxModifier = Modifier.fillMaxSize(),
+                    shape = morphShape,
+                    border = artBorder,
+                    elevation = artElevation,
+                )
+            }
+        }
+
+        // 3. Мини-плеер (проявляется при сворачивании и идеально встает на свое место)
+        if (miniControlsAlpha > 0.01f) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { alpha = miniAlpha }
-                    .drawBehind {
-                        val h = size.height
-                        drawRect(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    artColor.copy(alpha = 0.25f),
-                                    artColor.copy(alpha = 0.70f),
-                                ),
-                                startY = h * 0.15f,
-                                endY = h,
-                            ),
-                        )
-                    },
+                    .graphicsLayer { alpha = miniControlsAlpha },
                 contentAlignment = Alignment.Center,
             ) {
                 NowPlayingBarInner(
@@ -1771,9 +1812,12 @@ internal fun FullPlayer(
                     onTogglePlayPause = onTogglePlayPause,
                     onPrev = onPrev,
                     onNext = onNext,
+                    onClick = {},
+                    showArtwork = showLyrics,
                 )
             }
         }
+
         if (showFxSheet) {
             AudioFxBottomSheet(
                 bassBoost = bassBoost,
@@ -1790,6 +1834,7 @@ internal fun FullPlayer(
             )
         }
     }
+}
 }
 }
 
@@ -1844,6 +1889,5 @@ internal fun FullPlayer(
             }
         }
     }
-}
 }
 
