@@ -389,6 +389,7 @@ internal fun NowPlayingBarInner(
     onNext: () -> Unit,
     onClick: () -> Unit = {},
     showArtwork: Boolean = true,
+    onArtPositioned: (Rect) -> Unit = {},
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.background.luminance() < 0.5f
@@ -417,7 +418,11 @@ internal fun NowPlayingBarInner(
                         shape = scallopedArt,
                         color = if (isDark) Color(0xFF1E1A16) else cs.surfaceContainerHighest,
                         border = BorderStroke(1.8.dp, animatedTrackColor),
-                        modifier = Modifier.size(52.dp),
+                        modifier = Modifier
+                            .size(52.dp)
+                            .onGloballyPositioned { coords ->
+                                onArtPositioned(coords.boundsInRoot())
+                            },
                     ) {
                         Artwork(
                             url = item.thumbnailUrl,
@@ -654,6 +659,7 @@ internal fun NowPlayingBar(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     onPositioned: (Rect) -> Unit = {},
+    onArtPositioned: (Rect) -> Unit = {},
 ) {
     if (item == null) return
     val context = LocalContext.current
@@ -767,6 +773,7 @@ internal fun NowPlayingBar(
                 onPrev = onPrev,
                 onNext = onNext,
                 onClick = onClick,
+                onArtPositioned = onArtPositioned,
             )
         }
     }

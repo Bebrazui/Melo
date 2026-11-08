@@ -374,6 +374,7 @@ fun PlayerScreen(
     var previousTab by rememberSaveable { mutableStateOf(MeloTab.Home) }
     var playerExpanded by rememberSaveable { mutableStateOf(false) }
     var miniPlayerBounds by remember { mutableStateOf<Rect?>(null) }
+    var miniArtBounds by remember { mutableStateOf<Rect?>(null) }
     var artistOpen by rememberSaveable(stateSaver = TrackSaver.singleSaver()) { mutableStateOf<TrackItem?>(null) }
     var playlistOpen by remember { mutableStateOf<Playlist?>(null) }
     var searchMode by rememberSaveable { mutableStateOf(false) }
@@ -1298,6 +1299,7 @@ fun PlayerScreen(
                   .then(if (isLandscape) Modifier.widthIn(max = 560.dp).padding(bottom = 6.dp) else Modifier.fillMaxWidth())
                   .graphicsLayer { alpha = if (playerExpanded) 0f else 1f },
               onPositioned = { miniPlayerBounds = it },
+              onArtPositioned = { miniArtBounds = it },
           )
 
           // ── Плашка: Трек удалён правообладателем (на главном экране) ──
@@ -1385,6 +1387,7 @@ fun PlayerScreen(
                         onClick = { playerExpanded = true },
                         modifier = Modifier.graphicsLayer { alpha = if (playerExpanded) 0f else 1f },
                         onPositioned = { miniPlayerBounds = it },
+                        onArtPositioned = { miniArtBounds = it },
                     )
                 },
             )
@@ -1449,6 +1452,7 @@ fun PlayerScreen(
                     },
                     onCollapse = { playerExpanded = false },
                     miniPlayerBounds = miniPlayerBounds,
+                    miniArtBounds = miniArtBounds,
                     copyrightBlocked = copyrightBlockedTrack?.url == item.url,
                     onFindSimilar = {
                         copyrightBlockedTrack = null

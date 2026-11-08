@@ -320,6 +320,7 @@ internal fun FullPlayer(
     onOpenArtist: (TrackItem) -> Unit = {},
     onCollapse: () -> Unit,
     miniPlayerBounds: Rect? = null,
+    miniArtBounds: Rect? = null,
     copyrightBlocked: Boolean = false,
     onFindSimilar: () -> Unit = {},
     onDismissCopyright: () -> Unit = {},
@@ -811,9 +812,17 @@ internal fun FullPlayer(
         val fullArtY = fullArtBounds?.top ?: fallbackY
         val fullArtSize = fullArtBounds?.width ?: fullArtSizePx
 
-        val miniArtSizePx = with(localDensity) { 52.dp.toPx() }
-        val miniArtX = with(localDensity) { 13.dp.toPx() }
-        val miniArtY = with(localDensity) { 11.dp.toPx() }
+        val miniArtSizePx = miniArtBounds?.width ?: with(localDensity) { 52.dp.toPx() }
+        val miniArtX = if (miniPlayerBounds != null && miniArtBounds != null) {
+            miniArtBounds.left - miniPlayerBounds.left
+        } else {
+            with(localDensity) { 13.dp.toPx() }
+        }
+        val miniArtY = if (miniPlayerBounds != null && miniArtBounds != null) {
+            miniArtBounds.top - miniPlayerBounds.top
+        } else {
+            with(localDensity) { 10.dp.toPx() }
+        }
 
         val artSizePx = androidx.compose.ui.util.lerp(fullArtSize, miniArtSizePx, p)
         val artX = androidx.compose.ui.util.lerp(fullArtX, miniArtX, p)
@@ -1944,7 +1953,6 @@ internal fun FullPlayer(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer { alpha = miniControlsAlpha },
-                contentAlignment = Alignment.Center,
             ) {
                 NowPlayingBarInner(
                     item = item,
