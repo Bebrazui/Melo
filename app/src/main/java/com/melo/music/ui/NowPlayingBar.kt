@@ -590,7 +590,9 @@ internal fun Modifier.drawMiniPlayerBackdrop(
     val h = size.height
 
     // 1. Базовый фон карточки
-    drawRect(color = bgColor)
+    if (bgColor != Color.Transparent) {
+        drawRect(color = bgColor)
+    }
 
     if (com.melo.music.settings.AppSettings.solidBackground) {
         return@drawBehind
@@ -658,35 +660,33 @@ internal fun NowPlayingBar(
     val scallopedBtn = remember { ScallopedShape(petals = 8, depth = 0.15f) }
     val scallopedArt = remember { ScallopedShape(petals = 10, depth = 0.12f) }
 
-    // Извлечение доминантного цвета из обложки трека в реальном времени
-    var trackColor by remember(item.thumbnailUrl) { mutableStateOf(Color(0xFFD4A853)) }
-    LaunchedEffect(item.thumbnailUrl) {
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.background.luminance() < 0.5f
+    val isSolid = com.melo.music.settings.AppSettings.solidBackground
+
+    // Извлечение палитры обложки трека через общий кэш TrackColorCache
+    val trackColors = TrackColorCache.get(item.thumbnailUrl, isDark)
+    LaunchedEffect(item.thumbnailUrl, isDark) {
         val url = item.thumbnailUrl ?: return@LaunchedEffect
-        runCatching {
-            val req = coil.request.ImageRequest.Builder(context)
-                .data(url)
-                .allowHardware(false)
-                .size(128)
-                .build()
-            val drawable = coil.Coil.imageLoader(context).execute(req).drawable
-            val bmp = (drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
-            if (bmp != null) {
-                val palette = androidx.palette.graphics.Palette.from(bmp).generate()
-                val rgb = palette.vibrantSwatch?.rgb
-                    ?: palette.dominantSwatch?.rgb
-                    ?: palette.mutedSwatch?.rgb
-                    ?: palette.lightVibrantSwatch?.rgb
-                if (rgb != null) {
-                    trackColor = Color(rgb)
-                }
-            }
-        }
+        TrackColorCache.extract(context, url, isDark)
     }
 
     val animatedTrackColor by animateColorAsState(
-        targetValue = trackColor,
-        animationSpec = tween(650),
+        targetValue = trackColors.accent,
+        animationSpec = tween(500),
         label = "miniPlayerAccentColor",
+    )
+
+    val miniBarBg = if (isSolid) {
+        trackColors.solidBg
+    } else {
+        if (isDark) Color(0xEB13110E) else cs.surfaceContainerHigh.copy(alpha = 0.95f)
+    }
+
+    val animatedMiniBarBg by animateColorAsState(
+        targetValue = miniBarBg,
+        animationSpec = tween(450),
+        label = "miniBarBg",
     )
 
     // Плавный непредсказуемый органичный дрейф волн (без повторений и не в бит)
@@ -725,15 +725,6 @@ internal fun NowPlayingBar(
         label = "miniPlayerPlayIntensity",
     )
 
-    val cs = MaterialTheme.colorScheme
-    val isDark = cs.background.luminance() < 0.5f
-    val isSolid = com.melo.music.settings.AppSettings.solidBackground
-
-    val miniBarBg = if (isSolid) {
-        if (isDark) cs.surfaceContainerHigh else cs.surfaceContainer
-    } else {
-        if (isDark) Color(0xEB13110E) else cs.surfaceContainerHigh.copy(alpha = 0.95f)
-    }
     val miniBarBorder = if (isDark) {
         BorderStroke(1.2.dp, lerp(Color(0x33FFFFFF), animatedTrackColor, androidx.compose.ui.util.lerp(0.18f, 0.45f, playIntensity)))
     } else {
@@ -742,7 +733,7 @@ internal fun NowPlayingBar(
 
     Surface(
         // Матовое полупрозрачное стекло
-        color = miniBarBg,
+        color = animatedMiniBarBg,
         shape = RoundedCornerShape(42.dp),
         shadowElevation = androidx.compose.ui.unit.lerp(8.dp, 18.dp, playIntensity),
         border = miniBarBorder,
@@ -758,7 +749,7 @@ internal fun NowPlayingBar(
                 .drawMiniPlayerBackdrop(
                     isDark = isDark,
                     dotColorBase = if (isDark) Color(0xFFF5E6CC) else cs.onSurfaceVariant.copy(alpha = 0.6f),
-                    bgColor = miniBarBg,
+                    bgColor = animatedMiniBarBg,
                     accentColor = animatedTrackColor,
                     playIntensity = playIntensity,
                     phase1 = phase1,

@@ -281,6 +281,84 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 
+data class TrackColors(
+    val accent: Color,
+    val background: Color,
+    val solidBg: Color,
+)
+
+internal object TrackColorCache {
+    private val memoryCache = androidx.compose.runtime.mutableStateMapOf<String, TrackColors>()
+
+    fun get(url: String?, isDark: Boolean): TrackColors {
+        if (url == null) return fallback(isDark)
+        return memoryCache[url] ?: fallback(isDark)
+    }
+
+    fun fallback(isDark: Boolean): TrackColors {
+        val accent = Color(0xFFD4A853)
+        val bg = if (isDark) Color(0xFF1E1A16) else Color(0xFFF5E6CC)
+        val solid = if (isDark) Color(0xFF181512) else Color(0xFFEDE0D4)
+        return TrackColors(accent, bg, solid)
+    }
+
+    suspend fun extract(context: Context, url: String, isDark: Boolean): TrackColors {
+        memoryCache[url]?.let { return it }
+        return withContext(Dispatchers.IO) {
+            try {
+                val req = coil.request.ImageRequest.Builder(context)
+                    .data(url)
+                    .allowHardware(false)
+                    .size(128)
+                    .build()
+                val drawable = coil.Coil.imageLoader(context).execute(req).drawable
+                val bmp = (drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                if (bmp != null) {
+                    val palette = androidx.palette.graphics.Palette.from(bmp).generate()
+                    val accentSwatch = palette.vibrantSwatch
+                        ?: palette.dominantSwatch
+                        ?: palette.lightVibrantSwatch
+                        ?: palette.mutedSwatch
+                    val bgSwatch = palette.darkVibrantSwatch
+                        ?: palette.dominantSwatch
+                        ?: palette.vibrantSwatch
+                        ?: palette.mutedSwatch
+
+                    val fallbackColors = fallback(isDark)
+                    val accent = accentSwatch?.let { Color(it.rgb) } ?: fallbackColors.accent
+                    val bg = bgSwatch?.let { Color(it.rgb) } ?: accent
+
+                    val solidBg = if (isDark) {
+                        if (bg.luminance() > 0.28f) {
+                            androidx.compose.ui.graphics.lerp(bg, Color.Black, 0.42f)
+                        } else if (bg.luminance() < 0.04f) {
+                            androidx.compose.ui.graphics.lerp(bg, accent, 0.35f)
+                        } else {
+                            bg
+                        }
+                    } else {
+                        if (bg.luminance() < 0.65f) {
+                            androidx.compose.ui.graphics.lerp(bg, Color.White, 0.55f)
+                        } else {
+                            bg
+                        }
+                    }
+
+                    val result = TrackColors(accent, bg, solidBg)
+                    withContext(Dispatchers.Main) {
+                        memoryCache[url] = result
+                    }
+                    result
+                } else {
+                    fallback(isDark)
+                }
+            } catch (_: Exception) {
+                fallback(isDark)
+            }
+        }
+    }
+}
+
 /** Состояние плеера для UI (через Player.Listener, без опроса). */
 internal class PlaybackUi(
     val isPlaying: Boolean,

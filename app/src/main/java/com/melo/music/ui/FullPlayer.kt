@@ -367,9 +367,21 @@ internal fun FullPlayer(
         )
     }
 
+    var showLyrics by remember(item.url) { mutableStateOf(false) }
+    var lyrics by remember(item.url) { mutableStateOf<Lyrics?>(null) }
+    var lyricsLoading by remember(item.url) { mutableStateOf(false) }
+    LaunchedEffect(showLyrics, item.url) {
+        if (showLyrics && lyrics == null && !lyricsLoading) {
+            lyricsLoading = true
+            lyrics = onFetchLyrics()
+            lyricsLoading = false
+        }
+    }
+
     val requestCollapse: () -> Unit = {
         if (!isCollapsing) {
             isCollapsing = true
+            showLyrics = false
             gestureScope.launch {
                 collapseProgress.animateTo(
                     targetValue = 1f,
@@ -399,17 +411,6 @@ internal fun FullPlayer(
 
     var dragFraction by remember { mutableStateOf<Float?>(null) }
 
-    var showLyrics by remember(item.url) { mutableStateOf(false) }
-    var lyrics by remember(item.url) { mutableStateOf<Lyrics?>(null) }
-    var lyricsLoading by remember(item.url) { mutableStateOf(false) }
-    LaunchedEffect(showLyrics, item.url) {
-        if (showLyrics && lyrics == null && !lyricsLoading) {
-            lyricsLoading = true
-            lyrics = onFetchLyrics()
-            lyricsLoading = false
-        }
-    }
-
     val hiRes = remember(item.thumbnailUrl) { upscaleThumb(item.thumbnailUrl, 600) }
     val white = Color.White
     val whiteDim = Color.White.copy(alpha = 0.7f)
@@ -437,65 +438,23 @@ internal fun FullPlayer(
         }
     }
     // ── Извлечение палитры обложки для кнопок Material 3 Expressive и сплошного фона ──
-    var artColor by remember(item.thumbnailUrl) { mutableStateOf(Color(0xFF90CEFF)) }
-    var artBgColor by remember(item.thumbnailUrl) { mutableStateOf<Color?>(null) }
-    LaunchedEffect(item.thumbnailUrl) {
-        val url = item.thumbnailUrl ?: return@LaunchedEffect
-        runCatching {
-            val req = coil.request.ImageRequest.Builder(playerContext)
-                .data(url)
-                .allowHardware(false)
-                .size(128)
-                .build()
-            val drawable = coil.Coil.imageLoader(playerContext).execute(req).drawable
-            val bmp = (drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
-            if (bmp != null) {
-                val palette = androidx.palette.graphics.Palette.from(bmp).generate()
-                val swatch = palette.vibrantSwatch
-                    ?: palette.dominantSwatch
-                    ?: palette.lightVibrantSwatch
-                    ?: palette.mutedSwatch
-                if (swatch != null) {
-                    artColor = Color(swatch.rgb)
-                }
-                val bgSwatch = palette.darkVibrantSwatch
-                    ?: palette.dominantSwatch
-                    ?: palette.vibrantSwatch
-                    ?: palette.mutedSwatch
-                if (bgSwatch != null) {
-                    artBgColor = Color(bgSwatch.rgb)
-                }
-            }
-        }
-    }
-
     val playerThemeCs = MaterialTheme.colorScheme
     val playerIsDark = playerThemeCs.background.luminance() < 0.5f
 
-    val solidCoverBg = remember(artBgColor, artColor, playerIsDark) {
-        val base = artBgColor ?: artColor
-        if (playerIsDark) {
-            // Насыщенный цвет с обложки. Если цвет слишком светлый (белый/ярко-жёлтый),
-            // слегка притемняем для идеального контраста белого текста и кнопок
-            if (base.luminance() > 0.28f) {
-                lerp(base, Color.Black, 0.42f)
-            } else if (base.luminance() < 0.04f) {
-                lerp(base, artColor, 0.35f)
-            } else {
-                base
-            }
-        } else {
-            // В светлой теме - пастельный оттенок обложки
-            if (base.luminance() < 0.65f) {
-                lerp(base, Color.White, 0.55f)
-            } else {
-                base
-            }
-        }
+    val trackColors = TrackColorCache.get(item.thumbnailUrl, playerIsDark)
+    LaunchedEffect(item.thumbnailUrl, playerIsDark) {
+        val url = item.thumbnailUrl ?: return@LaunchedEffect
+        TrackColorCache.extract(playerContext, url, playerIsDark)
     }
 
+    val artColor by animateColorAsState(
+        targetValue = trackColors.accent,
+        animationSpec = tween(500),
+        label = "artColor",
+    )
+
     val animatedPlayerSolidBg by animateColorAsState(
-        targetValue = solidCoverBg,
+        targetValue = trackColors.solidBg,
         animationSpec = tween(450),
         label = "animatedPlayerSolidBg",
     )
@@ -871,20 +830,29 @@ internal fun FullPlayer(
             val fullCs = MaterialTheme.colorScheme
             val fullIsDark = fullCs.background.luminance() < 0.5f
             val isSolid = com.melo.music.settings.AppSettings.solidBackground
-            val collapseBg = if (isSolid) {
+
+            val fullPlayerBg = if (isSolid) {
                 animatedPlayerSolidBg
             } else {
                 if (fullIsDark) Color(0xEB13110E) else fullCs.surfaceContainerHigh.copy(alpha = 0.95f)
             }
 
-            val targetBorderColor = if (fullIsDark) {
-                lerp(Color(0x33FFFFFF), artColor, 0.35f)
+            val targetMiniBarBg = if (isSolid) {
+                trackColors.solidBg
             } else {
-                lerp(fullCs.outlineVariant.copy(alpha = 0.45f), artColor, 0.35f)
+                if (fullIsDark) Color(0xEB13110E) else fullCs.surfaceContainerHigh.copy(alpha = 0.95f)
+            }
+
+            val collapseBg = lerp(fullPlayerBg, targetMiniBarBg, p)
+
+            val miniBorderColor = if (fullIsDark) {
+                lerp(Color(0x33FFFFFF), artColor, androidx.compose.ui.util.lerp(0.18f, 0.45f, miniPlayIntensity))
+            } else {
+                lerp(fullCs.outlineVariant.copy(alpha = 0.45f), artColor, androidx.compose.ui.util.lerp(0.20f, 0.50f, miniPlayIntensity))
             }
             val borderAlpha = (p / 0.30f).coerceIn(0f, 1f)
             val collapseBorder = if (borderAlpha > 0.01f) {
-                BorderStroke(1.2.dp, targetBorderColor.copy(alpha = borderAlpha))
+                BorderStroke(1.2.dp, miniBorderColor.copy(alpha = miniBorderColor.alpha * borderAlpha))
             } else null
 
             Surface(
@@ -898,7 +866,6 @@ internal fun FullPlayer(
                         width = with(localDensity) { currentW.toDp() },
                         height = with(localDensity) { currentH.toDp() },
                     )
-                    .clip(RoundedCornerShape(currentCorner))
                     .pointerInput(Unit) {
                         detectDragGestures(
                             onDragStart = {
@@ -1904,7 +1871,26 @@ internal fun FullPlayer(
     }
 }
 
+        // 1.5. Фоновый слой волн и точек мини-плеера (за обложкой)
+        if (miniControlsAlpha > 0.01f && !isSolid) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = miniControlsAlpha }
+                    .drawMiniPlayerBackdrop(
+                        isDark = fullIsDark,
+                        dotColorBase = if (fullIsDark) Color(0xFFF5E6CC) else fullCs.onSurfaceVariant.copy(alpha = 0.6f),
+                        bgColor = Color.Transparent,
+                        accentColor = artColor,
+                        playIntensity = miniPlayIntensity,
+                        phase1 = miniPhase1,
+                        phase2 = miniPhase2,
+                    ),
+            )
+        }
+
         // 2. Морфирующаяся независимая обложка трека (shared element)
+        // Рисуется ПОВЕРХ фонового слоя мини-плеера, непрозрачна 100%!
         if (!isWide && !showLyrics) {
             val morphProgress = ((p - 0.25f) / 0.70f).coerceIn(0f, 1f)
             val currentShape = when {
@@ -1952,21 +1938,12 @@ internal fun FullPlayer(
             }
         }
 
-        // 3. Мини-плеер (проявляется при сворачивании и идеально встает на свое место)
+        // 3. Текст и кнопки мини-плеера (проявляются поверх обложки и фона)
         if (miniControlsAlpha > 0.01f) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { alpha = miniControlsAlpha }
-                    .drawMiniPlayerBackdrop(
-                        isDark = fullIsDark,
-                        dotColorBase = if (fullIsDark) Color(0xFFF5E6CC) else fullCs.onSurfaceVariant.copy(alpha = 0.6f),
-                        bgColor = collapseBg,
-                        accentColor = artColor,
-                        playIntensity = miniPlayIntensity,
-                        phase1 = miniPhase1,
-                        phase2 = miniPhase2,
-                    ),
+                    .graphicsLayer { alpha = miniControlsAlpha },
                 contentAlignment = Alignment.Center,
             ) {
                 NowPlayingBarInner(
@@ -1980,7 +1957,7 @@ internal fun FullPlayer(
                     onPrev = onPrev,
                     onNext = onNext,
                     onClick = {},
-                    showArtwork = showLyrics || p > 0.96f,
+                    showArtwork = isWide || showLyrics,
                 )
             }
         }
