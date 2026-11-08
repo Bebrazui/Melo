@@ -205,8 +205,7 @@ fun ProfileHeaderCard() {
 
     Surface(
         shape = RoundedCornerShape(28.dp),
-        color = Color.White.copy(alpha = 0.06f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+        color = cs.surfaceContainer,
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 18.dp),
@@ -228,7 +227,7 @@ fun ProfileHeaderCard() {
                             letterSpacing = (-0.3).sp,
                         ),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = cs.onSurface,
                         maxLines = 1,
                     )
                     Badges(AuthManager.isDeveloper, AuthManager.isVerified)
@@ -237,7 +236,7 @@ fun ProfileHeaderCard() {
                 Text(
                     AuthManager.bio?.ifBlank { null } ?: "Расскажи о себе миру",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.65f),
+                    color = cs.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -245,7 +244,7 @@ fun ProfileHeaderCard() {
             Spacer(Modifier.width(8.dp))
             Surface(
                 shape = CircleShape,
-                color = cs.primaryContainer.copy(alpha = 0.7f),
+                color = cs.primaryContainer,
                 modifier = Modifier
                     .size(42.dp)
                     .clip(CircleShape)

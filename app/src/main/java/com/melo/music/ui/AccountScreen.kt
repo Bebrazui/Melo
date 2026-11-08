@@ -297,8 +297,8 @@ internal fun AccountTab(
     var deleteTarget by remember { mutableStateOf<Playlist?>(null) }
     var menuTarget by remember { mutableStateOf<Playlist?>(null) }
     val isDark = cs.background.luminance() < 0.5f
-    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
-    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
+    val cardBg = cs.surfaceContainer
+    val cardBorder: BorderStroke? = null
 
     Column(
         modifier = Modifier
@@ -341,8 +341,7 @@ internal fun AccountTab(
                 if (com.melo.music.auth.AuthManager.loggedIn) {
                     Surface(
                         shape = CircleShape,
-                        color = if (isDark) Color.White.copy(alpha = 0.08f) else cs.surfaceContainerHigh,
-                        border = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.1f) else cs.outlineVariant.copy(alpha = 0.35f)),
+                        color = cs.surfaceContainerHigh,
                         modifier = Modifier
                             .clip(CircleShape)
                             .clickable { accountScope.launch { com.melo.music.auth.AuthManager.logout() } },
@@ -375,8 +374,7 @@ internal fun AccountTab(
 
                 Surface(
                     shape = CircleShape,
-                    color = if (isDark) Color.White.copy(alpha = 0.08f) else cs.surfaceContainerHigh,
-                    border = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.1f) else cs.outlineVariant.copy(alpha = 0.35f)),
+                    color = cs.surfaceContainerHigh,
                     modifier = Modifier
                         .size(42.dp)
                         .clip(CircleShape)
@@ -610,8 +608,7 @@ internal fun AccountTab(
 
             Surface(
                 shape = RoundedCornerShape(24.dp),
-                color = cs.primaryContainer.copy(alpha = 0.25f),
-                border = BorderStroke(1.dp, cs.primary.copy(alpha = 0.35f)),
+                color = cardBg,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 14.dp)
@@ -727,7 +724,7 @@ internal fun AccountTab(
                     .fillMaxWidth()
                     .padding(top = 8.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                    .background(cs.surfaceContainer)
                     .padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {

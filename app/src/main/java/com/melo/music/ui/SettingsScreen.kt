@@ -92,14 +92,13 @@ fun SettingsScreen(
 ) {
     BackHandler(onBack = onBack)
     val cs = MaterialTheme.colorScheme
-    val isDark = cs.background.luminance() < 0.5f
-    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
-    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
-    val subCardBg = if (isDark) Color.White.copy(alpha = 0.08f) else cs.surfaceContainerHigh
-    val subCardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.1f) else cs.outlineVariant.copy(alpha = 0.3f))
+    val cardBg = cs.surfaceContainer
+    val cardBorder: BorderStroke? = null
+    val subCardBg = cs.surfaceContainerHigh
+    val subCardBorder: BorderStroke? = null
     val titleColor = cs.onSurface
     val subtitleColor = cs.onSurfaceVariant
-    val trackInactive = if (isDark) Color.White.copy(alpha = 0.12f) else cs.outlineVariant.copy(alpha = 0.35f)
+    val trackInactive = cs.surfaceContainerHighest
     val settingsContext = LocalContext.current
     val settingsScope = rememberCoroutineScope()
     var isSettingsSyncing by remember { mutableStateOf(false) }
@@ -208,8 +207,7 @@ fun SettingsScreen(
                     if (isYtLoggedIn) {
                         Surface(
                             shape = RoundedCornerShape(14.dp),
-                            color = cs.primary.copy(alpha = 0.2f),
-                            border = BorderStroke(1.dp, cs.primary.copy(alpha = 0.4f)),
+                            color = cs.primaryContainer,
                             modifier = Modifier.clickable {
                                 if (isSettingsSyncing) return@clickable
                                 ClickFeedback.play()
@@ -227,7 +225,7 @@ fun SettingsScreen(
                                 text = if (isSettingsSyncing) (settingsSyncMsg ?: "Синхронизация...") else "Синхронизировать",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = cs.primary,
+                                color = cs.onPrimaryContainer,
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                             )
                         }
@@ -237,7 +235,6 @@ fun SettingsScreen(
                         Surface(
                             shape = RoundedCornerShape(14.dp),
                             color = subCardBg,
-                            border = subCardBorder,
                             modifier = Modifier.clickable {
                                 ClickFeedback.play()
                                 com.melo.music.auth.YouTubeAccountManager.logout()
@@ -254,8 +251,7 @@ fun SettingsScreen(
                     } else {
                         Surface(
                             shape = RoundedCornerShape(14.dp),
-                            color = cs.primary.copy(alpha = 0.2f),
-                            border = BorderStroke(1.dp, cs.primary.copy(alpha = 0.4f)),
+                            color = cs.primaryContainer,
                             modifier = Modifier.clickable {
                                 ClickFeedback.play()
                                 showGoogleLoginSheet = true
@@ -265,8 +261,8 @@ fun SettingsScreen(
                                 text = "Войти в аккаунт",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = cs.primary,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                color = cs.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                             )
                         }
                     }
@@ -550,10 +546,6 @@ fun SettingsScreen(
         Spacer(Modifier.height(16.dp))
 
         // ── ⚡ Высокая частота обновления (120+ Гц) (Bento Card) ────
-        val hzContext = androidx.compose.ui.platform.LocalContext.current
-        val currentHz = androidx.compose.runtime.remember(com.melo.music.settings.AppSettings.highRefreshRate) {
-            com.melo.music.util.DisplayRefreshRateHelper.getCurrentRefreshRate(hzContext)
-        }
         Surface(
             shape = RoundedCornerShape(28.dp),
             color = cardBg,
@@ -583,27 +575,12 @@ fun SettingsScreen(
                 }
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "Плавность (120 Гц)",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = titleColor,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = cs.primary.copy(alpha = 0.18f),
-                            border = BorderStroke(0.8.dp, cs.primary.copy(alpha = 0.35f)),
-                        ) {
-                            Text(
-                                text = "${currentHz} Гц",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = cs.primary,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
-                        }
-                    }
+                    Text(
+                        "Плавность (120 Гц)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = titleColor,
+                    )
                     Spacer(Modifier.height(2.dp))
                     Text(
                         if (com.melo.music.settings.AppSettings.highRefreshRate)
@@ -766,8 +743,7 @@ fun SettingsScreen(
 
                     Surface(
                         shape = RoundedCornerShape(14.dp),
-                        color = cs.primary.copy(alpha = 0.15f),
-                        border = BorderStroke(1.dp, cs.primary.copy(alpha = 0.3f)),
+                        color = cs.primaryContainer,
                         modifier = Modifier.clickable {
                             ClickFeedback.play()
                             isCheckingUpdates = true
@@ -786,7 +762,7 @@ fun SettingsScreen(
                             text = if (isCheckingUpdates) "Проверка..." else "Проверить",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
-                            color = cs.primary,
+                            color = cs.onPrimaryContainer,
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                         )
                     }
@@ -992,12 +968,11 @@ private fun SpatialAudioSection() {
     var enabled by remember { mutableStateOf(EqualizerManager.isSpatialEnabled()) }
     var strength by remember { mutableIntStateOf(EqualizerManager.getSpatialStrength()) }
     val cs = MaterialTheme.colorScheme
-    val isDark = cs.background.luminance() < 0.5f
-    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
-    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
+    val cardBg = cs.surfaceContainer
+    val cardBorder: BorderStroke? = null
     val titleColor = cs.onSurface
     val subtitleColor = cs.onSurfaceVariant
-    val trackInactive = if (isDark) Color.White.copy(alpha = 0.12f) else cs.outlineVariant.copy(alpha = 0.35f)
+    val trackInactive = cs.surfaceContainerHighest
 
     Surface(
         shape = RoundedCornerShape(28.dp),
@@ -1115,12 +1090,11 @@ private fun CrystalAudioSection() {
     var intensity by remember { mutableIntStateOf(EqualizerManager.getCrystalIntensity()) }
     var space by remember { mutableIntStateOf(EqualizerManager.getCrystalSpace()) }
     val cs = MaterialTheme.colorScheme
-    val isDark = cs.background.luminance() < 0.5f
-    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
-    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
+    val cardBg = cs.surfaceContainer
+    val cardBorder: BorderStroke? = null
     val titleColor = cs.onSurface
     val subtitleColor = cs.onSurfaceVariant
-    val trackInactive = if (isDark) Color.White.copy(alpha = 0.12f) else cs.outlineVariant.copy(alpha = 0.35f)
+    val trackInactive = cs.surfaceContainerHighest
 
     Surface(
         shape = RoundedCornerShape(28.dp),
@@ -1150,28 +1124,12 @@ private fun CrystalAudioSection() {
                 }
                 Spacer(Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "Кристальный звук",
-                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
-                            fontWeight = FontWeight.Bold,
-                            color = titleColor,
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = cs.primary.copy(alpha = 0.2f),
-                            border = BorderStroke(0.5.dp, cs.primary.copy(alpha = 0.5f)),
-                        ) {
-                            Text(
-                                "HD+",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                fontWeight = FontWeight.Black,
-                                color = cs.primary,
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                            )
-                        }
-                    }
+                    Text(
+                        "Кристальный звук",
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                        fontWeight = FontWeight.Bold,
+                        color = titleColor,
+                    )
                     Spacer(Modifier.height(2.dp))
                     Text(
                         if (enabled) "Синтез ВЧ, глубокий саб-бас и деклиппинг" else "Улучшение звука выключено",
@@ -1304,12 +1262,11 @@ private fun BassBoostSection() {
     var enabled by remember { mutableStateOf(EqualizerManager.isBassBoostEnabled()) }
     var strength by remember { mutableIntStateOf(EqualizerManager.getBassBoostStrength()) }
     val cs = MaterialTheme.colorScheme
-    val isDark = cs.background.luminance() < 0.5f
-    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
-    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
+    val cardBg = cs.surfaceContainer
+    val cardBorder: BorderStroke? = null
     val titleColor = cs.onSurface
     val subtitleColor = cs.onSurfaceVariant
-    val trackInactive = if (isDark) Color.White.copy(alpha = 0.12f) else cs.outlineVariant.copy(alpha = 0.35f)
+    val trackInactive = cs.surfaceContainerHighest
 
     Surface(
         shape = RoundedCornerShape(28.dp),
@@ -1338,28 +1295,12 @@ private fun BassBoostSection() {
                 }
                 Spacer(Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "Басс буст",
-                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
-                            fontWeight = FontWeight.Bold,
-                            color = titleColor,
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = cs.primary.copy(alpha = 0.2f),
-                            border = BorderStroke(0.5.dp, cs.primary.copy(alpha = 0.5f)),
-                        ) {
-                            Text(
-                                "BASS",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                fontWeight = FontWeight.Black,
-                                color = cs.primary,
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                            )
-                        }
-                    }
+                    Text(
+                        "Басс буст",
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                        fontWeight = FontWeight.Bold,
+                        color = titleColor,
+                    )
                     Spacer(Modifier.height(2.dp))
                     Text(
                         if (enabled) "Суб-бас +24 dB, плотный панч и ламповый овердрайв" else "Басс-буст выключен",
@@ -1449,11 +1390,10 @@ private fun GainReverbSection() {
     var gain by remember { mutableIntStateOf(EqualizerManager.getGain()) }
     var reverb by remember { mutableIntStateOf(EqualizerManager.getReverbPreset()) }
     val cs = MaterialTheme.colorScheme
-    val isDark = cs.background.luminance() < 0.5f
-    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
-    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
+    val cardBg = cs.surfaceContainer
+    val cardBorder: BorderStroke? = null
     val titleColor = cs.onSurface
-    val trackInactive = if (isDark) Color.White.copy(alpha = 0.12f) else cs.outlineVariant.copy(alpha = 0.35f)
+    val trackInactive = cs.surfaceContainerHighest
 
     Surface(
         shape = RoundedCornerShape(28.dp),
@@ -1594,14 +1534,13 @@ private fun EqualizerSection() {
     val frequencies = EqualizerManager.bandFrequencies
     val presets = EqualizerManager.presetNames
     val cs = MaterialTheme.colorScheme
-    val isDark = cs.background.luminance() < 0.5f
-    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
-    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
-    val subCardBg = if (isDark) Color.White.copy(alpha = 0.08f) else cs.surfaceContainerHigh
-    val subCardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.1f) else cs.outlineVariant.copy(alpha = 0.3f))
+    val cardBg = cs.surfaceContainer
+    val cardBorder: BorderStroke? = null
+    val subCardBg = cs.surfaceContainerHigh
+    val subCardBorder: BorderStroke? = null
     val titleColor = cs.onSurface
     val subtitleColor = cs.onSurfaceVariant
-    val trackInactive = if (isDark) Color.White.copy(alpha = 0.12f) else cs.outlineVariant.copy(alpha = 0.35f)
+    val trackInactive = cs.surfaceContainerHighest
 
     Surface(
         shape = RoundedCornerShape(28.dp),
@@ -1774,11 +1713,10 @@ private fun IconPickerSection() {
     val context = LocalContext.current
     var current by remember { mutableStateOf(AppSettings.launcherIcon) }
     val cs = MaterialTheme.colorScheme
-    val isDark = cs.background.luminance() < 0.5f
-    val cardBg = if (isDark) Color.White.copy(alpha = 0.05f) else cs.surfaceContainerLow
-    val cardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.35f))
-    val subCardBg = if (isDark) Color.White.copy(alpha = 0.08f) else cs.surfaceContainerHigh
-    val subCardBorder = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.1f) else cs.outlineVariant.copy(alpha = 0.3f))
+    val cardBg = cs.surfaceContainer
+    val cardBorder: BorderStroke? = null
+    val subCardBg = cs.surfaceContainerHigh
+    val subCardBorder: BorderStroke? = null
     val titleColor = cs.onSurface
     val subtitleColor = cs.onSurfaceVariant
 
@@ -1806,8 +1744,10 @@ private fun IconPickerSection() {
             Spacer(Modifier.height(18.dp))
 
             Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
             ) {
                 IconPreset.entries.forEach { preset ->
                     val isSelected = current == preset.id
@@ -1837,7 +1777,7 @@ private fun IconPickerSection() {
                             Surface(
                                 shape = RoundedCornerShape(20.dp),
                                 color = if (isSelected) cs.primaryContainer else subCardBg,
-                                border = if (isSelected) BorderStroke(2.dp, cs.primary) else subCardBorder,
+                                border = if (isSelected) BorderStroke(2.dp, cs.primary) else null,
                                 modifier = Modifier.size(64.dp),
                             ) {
                                 Image(
