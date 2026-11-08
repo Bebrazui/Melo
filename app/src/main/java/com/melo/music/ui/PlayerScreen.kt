@@ -549,11 +549,15 @@ fun PlayerScreen(
                 if (playingIndex == -1) playingIndex = com.melo.music.playback.PlaybackService.queueIndex
             } else if (controller?.currentMediaItem != null) {
                 val meta = controller.currentMediaItem?.mediaMetadata
-                val title = meta?.title?.toString()
-                if (!title.isNullOrBlank()) {
+                val rawTitle = meta?.title?.toString()
+                if (!rawTitle.isNullOrBlank()) {
+                    val rawArtist = meta.artist?.toString()?.takeIf { it.isNotBlank() }
+                    val extractedArtist = rawArtist?.let { com.melo.music.extractor.cleanArtistName(it) }
+                        ?: com.melo.music.extractor.cleanArtistName(null, rawTitle)
+                    val extractedTitle = com.melo.music.extractor.cleanTrackTitle(rawTitle, extractedArtist)
                     nowPlaying = TrackItem(
-                        title = title,
-                        uploader = meta.artist?.toString() ?: "",
+                        title = extractedTitle,
+                        uploader = extractedArtist ?: "",
                         url = com.melo.music.playback.PlaybackService.currentAudioStreamUrl ?: "",
                         durationSeconds = 0L,
                         thumbnailUrl = meta.artworkUri?.toString(),
@@ -783,7 +787,13 @@ fun PlayerScreen(
                     android.util.Log.d("MeloTrack", "RESOLVE OK [index=$index] url=${item.url} streamUrl=${it.audioUrl.take(60)}")
                     // Если пользователь уже переключился — не играть старый трек.
                     if (resolvingUrl == item.url) {
-                        val resolvedWithArtist = if (it.artist.isNullOrBlank()) it.copy(artist = item.uploader) else it
+                        val artistCandidate = it.artist?.takeIf { a -> a.isNotBlank() }
+                            ?: item.uploader?.takeIf { u -> u.isNotBlank() }
+                        val cleanArtist = artistCandidate?.let { a -> com.melo.music.extractor.cleanArtistName(a) }
+                            ?: com.melo.music.extractor.cleanArtistName(null, it.title)
+                            ?: com.melo.music.extractor.cleanArtistName(null, item.title)
+                        val cleanTitle = com.melo.music.extractor.cleanTrackTitle(it.title.ifBlank { item.title }, cleanArtist)
+                        val resolvedWithArtist = it.copy(title = cleanTitle, artist = cleanArtist)
                         onPlayResolved(resolvedWithArtist)
                         // Сохранённая slowed/sped up/bass версия играет со своими параметрами.
                         setSpeed(item.speed)

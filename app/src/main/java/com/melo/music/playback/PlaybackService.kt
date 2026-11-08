@@ -520,12 +520,16 @@ class PlaybackService : MediaSessionService() {
         val fromP = active
         val toP = standby
 
+        val cleanA = artist?.let { com.melo.music.extractor.cleanArtistName(it) }
+            ?: (title?.let { com.melo.music.extractor.cleanArtistName(null, it) })
+            ?: ""
+        val cleanT = title?.let { com.melo.music.extractor.cleanTrackTitle(it, cleanA) } ?: ""
         val meta = MediaMetadata.Builder()
-            .setTitle(title ?: "")
-            .setDisplayTitle(title ?: "")
-            .setArtist(artist ?: "")
-            .setAlbumArtist(artist ?: "")
-            .setSubtitle(artist ?: "")
+            .setTitle(cleanT)
+            .setDisplayTitle(cleanT)
+            .setArtist(cleanA)
+            .setAlbumArtist(cleanA)
+            .setSubtitle(cleanA)
         artwork?.let { meta.setArtworkUri(android.net.Uri.parse(it)) }
         currentAudioStreamUrl = url
         val isHls = com.melo.music.extractor.isHlsUrl(url)

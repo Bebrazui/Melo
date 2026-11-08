@@ -22,8 +22,8 @@ object StreamCacheStore {
     private const val PREFS = "melo_stream_cache"
     private const val KEY = "entries"
     private const val KEY_VER = "cache_ver"
-    // 2: корректный расчёт срока для SoundCloud CloudFront Policy (раньше SC жил 4ч и протухал → 403).
-    private const val CACHE_VER = 2
+    // 3: сохранение артиста в кэше треков (раньше терялся → null в плеере).
+    private const val CACHE_VER = 3
     private const val MAX_ENTRIES = 400
 
     /** TTL по умолчанию, если в самой ссылке вообще нет срока. Коротко: лучше пере-резолв, чем 403. */
@@ -61,6 +61,7 @@ object StreamCacheStore {
             title = obj.optString("title", pageUrl),
             audioUrl = audioUrl,
             thumbnailUrl = obj.optString("thumb", "").ifBlank { null },
+            artist = obj.optString("artist", "").ifBlank { null },
             videoUrl = obj.optString("video", "").ifBlank { null },
         )
     }
@@ -74,6 +75,7 @@ object StreamCacheStore {
             JSONObject().apply {
                 put("audio", resolved.audioUrl)
                 put("title", resolved.title)
+                put("artist", resolved.artist ?: "")
                 put("thumb", resolved.thumbnailUrl ?: "")
                 put("video", resolved.videoUrl ?: "")
                 put("exp", expiryOf(resolved.audioUrl))

@@ -146,7 +146,7 @@ object NewPipeResolver {
 
         val author = info.uploaderName?.takeIf { it.isNotBlank() }
         ResolvedTrack(
-            title = if (author != null) "${info.name} — $author" else info.name,
+            title = info.name,
             audioUrl = audio.content,
             thumbnailUrl = info.thumbnails.firstOrNull()?.url,
             artist = author,

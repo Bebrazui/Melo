@@ -208,17 +208,11 @@ object SoundCloudResolver {
             else it.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t500x500.$1")
         }
 
-        val title = if (artist != null && !rawTitle.contains(artist, ignoreCase = true)) {
-            "$rawTitle — $artist"
-        } else {
-            rawTitle
-        }
-
         val elapsed = System.currentTimeMillis() - t0
-        FileLog.i(TAG, "== SUCCESS resolve (${elapsed}ms, snipped=$isFinalSnipped): '$title' -> stream: ${finalAudioStreamUrl.take(70)} ==")
+        FileLog.i(TAG, "== SUCCESS resolve (${elapsed}ms, snipped=$isFinalSnipped): '$rawTitle' -> stream: ${finalAudioStreamUrl.take(70)} ==")
 
         ResolvedTrack(
-            title = title,
+            title = rawTitle,
             audioUrl = finalAudioStreamUrl,
             thumbnailUrl = artwork,
             artist = artist,

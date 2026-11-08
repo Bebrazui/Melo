@@ -126,8 +126,23 @@ fun cleanArtistName(rawUploader: String?, rawTitle: String? = null): String? {
     if (s.isBlank() || (rawTitle != null && s.equals(rawTitle.trim(), ignoreCase = true))) {
         if (rawTitle != null && (rawTitle.contains(" - ") || rawTitle.contains(" — "))) {
             val split = rawTitle.split(Regex(" [—-] "), limit = 2)
-            if (split.size == 2 && split[0].isNotBlank()) {
-                return split[0].trim()
+            if (split.size == 2) {
+                val p0 = split[0].trim()
+                val p1 = split[1].trim()
+                if (p1.endsWith(" - Topic", ignoreCase = true) || p1.endsWith(" - Тема", ignoreCase = true)) {
+                    val cleanP1 = p1.replace(Regex(" - (Topic|Тема)$", RegexOption.IGNORE_CASE), "").trim()
+                    if (cleanP1.isNotBlank()) return cleanP1
+                }
+                if (p0.endsWith(" - Topic", ignoreCase = true) || p0.endsWith(" - Тема", ignoreCase = true)) {
+                    val cleanP0 = p0.replace(Regex(" - (Topic|Тема)$", RegexOption.IGNORE_CASE), "").trim()
+                    if (cleanP0.isNotBlank()) return cleanP0
+                }
+                if (p0.lowercase() in genericWords && p1.isNotBlank()) {
+                    return p1
+                }
+                if (p0.isNotBlank()) {
+                    return p0
+                }
             }
         }
         return if (s.isNotBlank()) s else null
@@ -148,9 +163,22 @@ fun cleanTrackTitle(rawTitle: String, rawUploader: String? = null): String {
             }
         }
     }
-    val artist = cleanArtistName(rawUploader)
-    if (artist != null && (t.startsWith("$artist - ", ignoreCase = true) || t.startsWith("$artist — ", ignoreCase = true))) {
-        t = t.substring(artist.length + 3).trim()
+    val artist = cleanArtistName(rawUploader, rawTitle)
+    if (artist != null) {
+        if (t.startsWith("$artist - ", ignoreCase = true) || t.startsWith("$artist — ", ignoreCase = true)) {
+            t = t.substring(artist.length + 3).trim()
+        } else if (t.endsWith(" - $artist - Topic", ignoreCase = true) || t.endsWith(" — $artist - Topic", ignoreCase = true)) {
+            t = t.substring(0, t.length - artist.length - 11).trim()
+        } else if (t.endsWith(" - $artist - Тема", ignoreCase = true) || t.endsWith(" — $artist - Тема", ignoreCase = true)) {
+            t = t.substring(0, t.length - artist.length - 10).trim()
+        } else if (t.endsWith(" - $artist", ignoreCase = true) || t.endsWith(" — $artist", ignoreCase = true)) {
+            t = t.substring(0, t.length - artist.length - 3).trim()
+        }
+    }
+    if (t.endsWith(" - Topic", ignoreCase = true)) {
+        t = t.substring(0, t.length - 8).trim()
+    } else if (t.endsWith(" - Тема", ignoreCase = true)) {
+        t = t.substring(0, t.length - 7).trim()
     }
     return t.ifBlank { rawTitle }
 }

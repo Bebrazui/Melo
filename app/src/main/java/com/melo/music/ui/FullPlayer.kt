@@ -1122,32 +1122,34 @@ internal fun FullPlayer(
                                 maxLines = if (isLandscape) 1 else 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            artistName?.let { name ->
-                                Spacer(Modifier.height(3.dp))
-                                Text(
-                                    text = name.uppercase(Locale.getDefault()),
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontSize = if (isLandscape) 13.sp else 15.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.6.sp,
-                                    ),
-                                    color = whiteDim,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.clickable {
+                            val displayArtist = artistName?.takeIf { it.isNotBlank() } ?: "Неизвестный исполнитель"
+                            val isKnown = !artistName.isNullOrBlank()
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                text = displayArtist.uppercase(Locale.getDefault()),
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontSize = if (isLandscape) 13.sp else 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.6.sp,
+                                ),
+                                color = whiteDim,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = if (isKnown) {
+                                    Modifier.clickable {
                                         val artistItem = TrackItem(
-                                            title = name,
-                                            uploader = name,
-                                            url = "artist:$name",
+                                            title = displayArtist,
+                                            uploader = displayArtist,
+                                            url = "artist:$displayArtist",
                                             durationSeconds = 0L,
                                             thumbnailUrl = item.thumbnailUrl,
                                             source = item.source,
                                             kind = ItemKind.ARTIST,
                                         )
                                         onOpenArtist(artistItem)
-                                    },
-                                )
-                            }
+                                    }
+                                } else Modifier,
+                            )
                         }
                     }
 

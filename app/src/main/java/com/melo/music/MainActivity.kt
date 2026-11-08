@@ -129,13 +129,17 @@ class MainActivity : ComponentActivity() {
     private fun playResolved(track: ResolvedTrack) {
         PlaybackService.currentAudioStreamUrl = track.audioUrl
         val player = controller ?: return
-        val artist = track.artist ?: ""
+        val rawArtist = track.artist?.takeIf { it.isNotBlank() }
+        val cleanArtist = rawArtist?.let { com.melo.music.extractor.cleanArtistName(it) }
+            ?: com.melo.music.extractor.cleanArtistName(null, track.title)
+            ?: ""
+        val cleanTitle = com.melo.music.extractor.cleanTrackTitle(track.title, cleanArtist)
         val meta = MediaMetadata.Builder()
-            .setTitle(track.title)
-            .setDisplayTitle(track.title)
-            .setArtist(artist)
-            .setAlbumArtist(artist)
-            .setSubtitle(artist)
+            .setTitle(cleanTitle)
+            .setDisplayTitle(cleanTitle)
+            .setArtist(cleanArtist)
+            .setAlbumArtist(cleanArtist)
+            .setSubtitle(cleanArtist)
         track.thumbnailUrl?.let { meta.setArtworkUri(android.net.Uri.parse(it)) }
         val isHls = com.melo.music.extractor.isHlsUrl(track.audioUrl)
         val item = MediaItem.Builder()
