@@ -746,9 +746,9 @@ fun SettingsScreen(
                     Spacer(Modifier.height(2.dp))
                     Text(
                         if (com.melo.music.settings.AppSettings.solidBackground)
-                            "Минималистичный сплошной цвет без размытия обложки, тумана и градиентов"
+                            "Сплошной фон приложения и плеера в цвет обложки без градиентов и размытых пятен"
                         else
-                            "Динамический живой фон с размытием обложки и атмосферными градиентами",
+                            "Динамический живой фон с размытием обложки, атмосферными пятнами и эффектами",
                         style = MaterialTheme.typography.bodySmall,
                         color = subtitleColor,
                     )

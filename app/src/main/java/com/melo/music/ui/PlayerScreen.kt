@@ -1006,29 +1006,35 @@ fun PlayerScreen(
         label = "ambientPhase",
     )
 
+    val isSolidBg = com.melo.music.settings.AppSettings.solidBackground
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(ambientBg)
-            // Анимированные пятна на самом заднем слое — под всем, включая плашку плеера.
-            .drawBehind {
-                val p = ambientPhase
-                fun spot(color: Color, cx: Float, cy: Float, r: Float) {
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(color, Color.Transparent),
-                            center = Offset(size.width * cx, size.height * cy),
-                            radius = size.minDimension * r,
-                        ),
-                    )
-                }
-                spot(ambientLight, 0.18f + 0.07f * kotlin.math.sin(p), 0.16f + 0.05f * kotlin.math.cos(p * 0.8f), 0.42f)
-                spot(ambientDark, 0.92f + 0.06f * kotlin.math.cos(p * 0.7f), 0.32f + 0.07f * kotlin.math.sin(p * 1.1f), 0.46f)
-                spot(ambientLight, 0.85f + 0.07f * kotlin.math.sin(p * 1.3f + 1f), 0.78f + 0.06f * kotlin.math.cos(p), 0.38f)
-                spot(ambientDark, 0.08f + 0.06f * kotlin.math.cos(p * 0.9f + 2f), 0.9f + 0.05f * kotlin.math.sin(p * 0.6f), 0.34f)
-                // Пятно у низа — чтобы за стеклянной плашкой плеера было что просвечивать.
-                spot(ambientLight, 0.5f + 0.05f * kotlin.math.sin(p * 0.5f), 0.99f, 0.45f)
-            },
+            // Анимированные пятна на самом заднем слое (выключаются в режиме сплошного фона)
+            .then(
+                if (!isSolidBg) {
+                    Modifier.drawBehind {
+                        val p = ambientPhase
+                        fun spot(color: Color, cx: Float, cy: Float, r: Float) {
+                            drawRect(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(color, Color.Transparent),
+                                    center = Offset(size.width * cx, size.height * cy),
+                                    radius = size.minDimension * r,
+                                ),
+                            )
+                        }
+                        spot(ambientLight, 0.18f + 0.07f * kotlin.math.sin(p), 0.16f + 0.05f * kotlin.math.cos(p * 0.8f), 0.42f)
+                        spot(ambientDark, 0.92f + 0.06f * kotlin.math.cos(p * 0.7f), 0.32f + 0.07f * kotlin.math.sin(p * 1.1f), 0.46f)
+                        spot(ambientLight, 0.85f + 0.07f * kotlin.math.sin(p * 1.3f + 1f), 0.78f + 0.06f * kotlin.math.cos(p), 0.38f)
+                        spot(ambientDark, 0.08f + 0.06f * kotlin.math.cos(p * 0.9f + 2f), 0.9f + 0.05f * kotlin.math.sin(p * 0.6f), 0.34f)
+                        // Пятно у низа — чтобы за стеклянной плашкой плеера было что просвечивать.
+                        spot(ambientLight, 0.5f + 0.05f * kotlin.math.sin(p * 0.5f), 0.99f, 0.45f)
+                    }
+                } else Modifier
+            ),
     ) {
     Scaffold(
         containerColor = Color.Transparent,

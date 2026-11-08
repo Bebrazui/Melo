@@ -436,8 +436,9 @@ internal fun FullPlayer(
             likeAnimProgress.snapTo(0f)
         }
     }
-    // ── Извлечение палитры обложки для кнопок Material 3 Expressive ──
+    // ── Извлечение палитры обложки для кнопок Material 3 Expressive и сплошного фона ──
     var artColor by remember(item.thumbnailUrl) { mutableStateOf(Color(0xFF90CEFF)) }
+    var artBgColor by remember(item.thumbnailUrl) { mutableStateOf<Color?>(null) }
     LaunchedEffect(item.thumbnailUrl) {
         val url = item.thumbnailUrl ?: return@LaunchedEffect
         runCatching {
@@ -457,9 +458,47 @@ internal fun FullPlayer(
                 if (swatch != null) {
                     artColor = Color(swatch.rgb)
                 }
+                val bgSwatch = palette.darkVibrantSwatch
+                    ?: palette.dominantSwatch
+                    ?: palette.vibrantSwatch
+                    ?: palette.mutedSwatch
+                if (bgSwatch != null) {
+                    artBgColor = Color(bgSwatch.rgb)
+                }
             }
         }
     }
+
+    val playerThemeCs = MaterialTheme.colorScheme
+    val playerIsDark = playerThemeCs.background.luminance() < 0.5f
+
+    val solidCoverBg = remember(artBgColor, artColor, playerIsDark) {
+        val base = artBgColor ?: artColor
+        if (playerIsDark) {
+            // Насыщенный цвет с обложки. Если цвет слишком светлый (белый/ярко-жёлтый),
+            // слегка притемняем для идеального контраста белого текста и кнопок
+            if (base.luminance() > 0.28f) {
+                lerp(base, Color.Black, 0.42f)
+            } else if (base.luminance() < 0.04f) {
+                lerp(base, artColor, 0.35f)
+            } else {
+                base
+            }
+        } else {
+            // В светлой теме - пастельный оттенок обложки
+            if (base.luminance() < 0.65f) {
+                lerp(base, Color.White, 0.55f)
+            } else {
+                base
+            }
+        }
+    }
+
+    val animatedPlayerSolidBg by animateColorAsState(
+        targetValue = solidCoverBg,
+        animationSpec = tween(450),
+        label = "animatedPlayerSolidBg",
+    )
 
     val playBtnColor by animateColorAsState(
         targetValue = if (artColor.luminance() < 0.2f) lerp(artColor, Color.White, 0.65f) else lerp(artColor, Color.White, 0.42f),
@@ -808,7 +847,7 @@ internal fun FullPlayer(
             val fullIsDark = fullCs.background.luminance() < 0.5f
             val isSolid = com.melo.music.settings.AppSettings.solidBackground
             val collapseBg = if (isSolid) {
-                if (fullIsDark) Color(0xFF101211) else fullCs.surface
+                animatedPlayerSolidBg
             } else {
                 if (fullIsDark) Color(0xEB13110E) else fullCs.surfaceContainerHigh.copy(alpha = 0.95f)
             }
@@ -966,7 +1005,7 @@ internal fun FullPlayer(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(if (fullIsDark) Color(0xFF101211) else fullCs.surface)
+                    .background(animatedPlayerSolidBg)
             )
         } else {
             FlowingBackground(

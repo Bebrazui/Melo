@@ -592,6 +592,10 @@ internal fun Modifier.drawMiniPlayerBackdrop(
     // 1. Базовый фон карточки
     drawRect(color = bgColor)
 
+    if (com.melo.music.settings.AppSettings.solidBackground) {
+        return@drawBehind
+    }
+
     // 2. Живой плавающий волновой градиент с плавным затуханием при паузе
     val waveShift = kotlin.math.sin(phase1.toDouble() * 1.5).toFloat() * (h * 0.15f) * playIntensity
     val startY = androidx.compose.ui.util.lerp(h * 0.42f, (h * 0.10f + waveShift).coerceIn(0f, h * 0.40f), playIntensity)
@@ -723,9 +727,16 @@ internal fun NowPlayingBar(
 
     val cs = MaterialTheme.colorScheme
     val isDark = cs.background.luminance() < 0.5f
+    val isSolid = com.melo.music.settings.AppSettings.solidBackground
 
-    val miniBarBg = if (isDark) Color(0xEB13110E) else cs.surfaceContainerHigh.copy(alpha = 0.95f)
-    val miniBarBorder = if (isDark) {
+    val miniBarBg = if (isSolid) {
+        if (isDark) cs.surfaceContainerHigh else cs.surfaceContainer
+    } else {
+        if (isDark) Color(0xEB13110E) else cs.surfaceContainerHigh.copy(alpha = 0.95f)
+    }
+    val miniBarBorder = if (isSolid) {
+        null
+    } else if (isDark) {
         BorderStroke(1.2.dp, lerp(Color(0x33FFFFFF), animatedTrackColor, androidx.compose.ui.util.lerp(0.18f, 0.45f, playIntensity)))
     } else {
         BorderStroke(1.2.dp, lerp(cs.outlineVariant.copy(alpha = 0.45f), animatedTrackColor, androidx.compose.ui.util.lerp(0.20f, 0.50f, playIntensity)))
