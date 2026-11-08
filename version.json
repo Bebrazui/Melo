@@ -1,7 +1,7 @@
 {
-  "versionCode": 6,
-  "versionName": "0.5-beta",
-  "apkUrl": "https://github.com/Bebrazui/Melo-Releases/raw/v0.5-beta/app-release.apk",
-  "changelog": "• Карта музыки в Material 3 Expressive дизайне\n• Поиск треков на карте с голосовым вводом\n• Возможность удалять свои оставленные треки на карте\n• Адаптивный плеер для экранов 9:16 и компактных режимов\n• Исправлено двойное переключение треков из шторки\n• Оптимизация и повышение стабильности",
-  "sha256": "cc6340fe729e91f43c3bd14890e8842bcdc8af395343aa54ea7acbcb4f2e7cab"
+  "versionCode": 16,
+  "versionName": "0.5.8-beta",
+  "apkUrl": "https://github.com/Bebrazui/Melo/releases/download/v0.5.8-beta/app-release.apk",
+  "changelog": "• Сплошной фон без градиентов и кругов в приложении и плеере\n• Аватарка, имя и почта аккаунта Google / YouTube Music\n• Плавная анимация сворачивания плеера без мерцания обложки\n• Material 3 заливка карточек в аккаунте и настройках\n• Оптимизация размера APK (arm64)",
+  "sha256": "2a70be3b1a7cbf5be16e6b3f83d63cec7a8a97fb60b692a066974448ddfd2e4d"
 }
