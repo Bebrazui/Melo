@@ -28,7 +28,7 @@ object ByeDpiProxy {
     const val DEFAULT_HOST = "127.0.0.1"
 
     const val DEFAULT_CMD =
-        """-X -H:"youtube.com googlevideo.com ytimg.com ggpht.com youtu.be youtubei.googleapis.com yt3.googleusercontent.com googleusercontent.com accounts.youtube.com music.youtube.com bandcamp.com bcbits.com f4.bcbits.com t4.bcbits.com" -Kt,h -d1 -s1+s -s3+s -s6+s -s9+s -s12+s -s15+s -s20+s -s30+s -An -H:"a-v2.sndcdn.com cf-hls-media.sndcdn.com cf-media.sndcdn.com playback.media-streaming.soundcloud.cloud soundcloud.cloud" -f-200 -s2 -s5+hm -t6 -Qr -n wb.ru -An -H:"soundcloud.com api.soundcloud.com api-v2.soundcloud.com m.soundcloud.com" -Kt -r1+s -An -H:"i1.sndcdn.com i2.sndcdn.com i3.sndcdn.com i4.sndcdn.com" -Kt -r1+s -s2 -An -H:"discord.com discord.gg discord.media discordapp.com cdn.discordapp.com media.discordapp.net images-ext-1.discordapp.net images-ext-2.discordapp.net images.discordapp.net gateway.discord.gg status.discord.com api.discord.com discord-attachments-uploads-prd.storage.googleapis.com hcaptcha.com recaptcha.net accounts.google.com accounts.youtube.com appleid.apple.com" -Kt,h -Qorig -n "www.google.com" -f-1 -t5 -o1 -s1+s -s2+s -s5+s -d3+s -s7+s -s10+s -s15+s -An -Ku""""
+        """-X -H:"youtube.com googlevideo.com ytimg.com ggpht.com youtu.be youtubei.googleapis.com yt3.googleusercontent.com googleusercontent.com accounts.youtube.com music.youtube.com bandcamp.com bcbits.com f4.bcbits.com t4.bcbits.com" -Kt,h -d1 -s1+s -s3+s -s6+s -s9+s -s12+s -s15+s -s20+s -s30+s -An -H:"a-v2.sndcdn.com cf-hls-media.sndcdn.com cf-media.sndcdn.com playback.media-streaming.soundcloud.cloud soundcloud.cloud soundcloud.com api.soundcloud.com api-v2.soundcloud.com m.soundcloud.com" -f-200 -s2 -s5+hm -t6 -Qr -n wb.ru -An -H:"i1.sndcdn.com i2.sndcdn.com i3.sndcdn.com i4.sndcdn.com" -Kt -r1+s -s2 -An -H:"discord.com discord.gg discord.media discordapp.com cdn.discordapp.com media.discordapp.net images-ext-1.discordapp.net images-ext-2.discordapp.net images.discordapp.net gateway.discord.gg status.discord.com api.discord.com discord-attachments-uploads-prd.storage.googleapis.com hcaptcha.com recaptcha.net accounts.google.com accounts.youtube.com appleid.apple.com" -Kt,h -Qorig -n "www.google.com" -f-1 -t5 -o1 -s1+s -s2+s -s5+s -d3+s -s7+s -s10+s -s15+s -An -Ku""""
 
     private var prefs: SharedPreferences? = null
     private var appContext: Context? = null
@@ -108,9 +108,8 @@ object ByeDpiProxy {
     fun getCommandLine(): String {
         val saved = prefs?.getString(KEY_CMD, null)
         if (saved.isNullOrBlank() ||
-            !saved.contains("-H:\"soundcloud.com api.soundcloud.com api-v2.soundcloud.com m.soundcloud.com\" -Kt -r1+s -An") ||
-            !saved.contains("-H:\"i1.sndcdn.com i2.sndcdn.com i3.sndcdn.com i4.sndcdn.com\" -Kt -r1+s -s2") ||
-            !saved.contains("-H:\"a-v2.sndcdn.com cf-hls-media.sndcdn.com")
+            !saved.contains("-H:\"a-v2.sndcdn.com cf-hls-media.sndcdn.com cf-media.sndcdn.com playback.media-streaming.soundcloud.cloud soundcloud.cloud soundcloud.com api.soundcloud.com api-v2.soundcloud.com m.soundcloud.com\" -f-200") ||
+            !saved.contains("-H:\"i1.sndcdn.com i2.sndcdn.com i3.sndcdn.com i4.sndcdn.com\" -Kt -r1+s -s2")
         ) {
             prefs?.edit()?.putString(KEY_CMD, DEFAULT_CMD)?.apply()
             return DEFAULT_CMD

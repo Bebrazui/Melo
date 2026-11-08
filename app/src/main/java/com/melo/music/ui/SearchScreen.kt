@@ -622,7 +622,7 @@ internal fun TopResultCard(
                     .padding(start = 14.dp, end = 72.dp, bottom = 12.dp),
             ) {
                 Text(
-                    text = item.title,
+                    text = item.cleanTitle,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -635,7 +635,7 @@ internal fun TopResultCard(
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text = listOfNotNull(
-                            item.uploader ?: sourceLabel(item.source),
+                            item.cleanUploader ?: sourceLabel(item.source),
                             formatDuration(item.durationSeconds).takeIf { it.isNotBlank() },
                         ).joinToString(" · "),
                         style = MaterialTheme.typography.bodyMedium,
@@ -777,13 +777,13 @@ internal fun SearchAlbumCard(
                                  Spacer(Modifier.width(12.dp))
                                  Column(modifier = Modifier.weight(1f)) {
                                      Text(
-                                         t.title,
+                                         t.cleanTitle,
                                          style = MaterialTheme.typography.bodyLarge,
                                          maxLines = 1,
                                          overflow = TextOverflow.Ellipsis,
                                          fontWeight = if (nowPlayingUrl == t.url) FontWeight.Bold else FontWeight.Normal,
                                      )
-                                     t.uploader?.let {
+                                     t.cleanUploader?.let {
                                          Text(
                                              it,
                                              style = MaterialTheme.typography.bodySmall,

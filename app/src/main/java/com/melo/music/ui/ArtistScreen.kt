@@ -141,6 +141,7 @@ import androidx.compose.material.icons.rounded.Casino
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.viewinterop.AndroidView
 import com.melo.music.extractor.NewPipeResolver
+import com.melo.music.extractor.cleanArtistName
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -432,7 +433,7 @@ internal fun ArtistScreen(
                         Spacer(Modifier.height(8.dp))
 
                         Text(
-                            text = artist.title,
+                            text = cleanArtistName(artist.title) ?: artist.title,
                             style = MaterialTheme.typography.displaySmall.copy(
                                 fontSize = 34.sp,
                                 lineHeight = 36.sp,
@@ -919,14 +920,14 @@ internal fun ArtistTrackTile(
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = item.title,
+                    text = item.cleanTitle,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (playing) FontWeight.Bold else FontWeight.Medium,
                     color = white,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                item.uploader?.let {
+                item.cleanUploader?.let {
                     Text(
                         text = it,
                         style = MaterialTheme.typography.bodySmall,

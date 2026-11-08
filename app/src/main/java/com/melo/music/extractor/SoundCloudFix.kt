@@ -34,7 +34,7 @@ object SoundCloudFix {
     private const val KEY_ID = "client_id"
 
     private val FALLBACK_IDS = listOf(
-        "Pb72ranhoyt6gw7hM7TkzUItXlMWSNSo",
+        "39AVoiZVrdvJEMFLH8T0c5WGshQaAPRJ",
         "a370fb6cdb70938d7171d82117bf7887",
         "iZIs9mchVcX5lhVR1EzGCcyUzgTInu96",
         "bJv63JqJ1Y1lV8bF2Z8fX1G4wN5yP7Q2",
@@ -123,9 +123,9 @@ object SoundCloudFix {
         return ensure(context)
     }
 
-    private const val DEFAULT_WORKING_ID = "Pb72ranhoyt6gw7hM7TkzUItXlMWSNSo"
+    private const val DEFAULT_WORKING_ID = "39AVoiZVrdvJEMFLH8T0c5WGshQaAPRJ"
 
-    /** Гарантирует валидный client_id и внедряет его в NewPipe. Мгновенно, без сетевых задержек. */
+    /** Гарантирует валидный client_id и внедряет его в NewPipe. Мгновенно, без задержек. */
     @Synchronized
     fun ensure(context: Context): String? {
         awaitProxy()
@@ -135,20 +135,31 @@ object SoundCloudFix {
 
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-        // 2) Если есть сохранённый валидный ключ в SharedPreferences — отдаём его
+        // 2) Если есть сохранённый ключ в SharedPreferences — используем его
         val saved = prefs.getString(KEY_ID, null)
-        if (!saved.isNullOrBlank() && saved == DEFAULT_WORKING_ID) {
+        if (!saved.isNullOrBlank()) {
             cachedId = saved
             inject(saved)
             return saved
         }
 
-        // 3) Иначе берём рабочий production client_id
-        cachedId = DEFAULT_WORKING_ID
-        prefs.edit().putString(KEY_ID, DEFAULT_WORKING_ID).apply()
-        inject(DEFAULT_WORKING_ID)
-        com.melo.music.util.FileLog.i("MeloSC", "ensure: using verified client_id: $DEFAULT_WORKING_ID")
-        return DEFAULT_WORKING_ID
+        // 3) Динамическая автодобыча ключа с сайта
+        val discovered = discover()
+        if (!discovered.isNullOrBlank()) {
+            cachedId = discovered
+            prefs.edit().putString(KEY_ID, discovered).apply()
+            inject(discovered)
+            com.melo.music.util.FileLog.i("MeloSC", "ensure: discovered dynamic client_id: $discovered")
+            return discovered
+        }
+
+        // 4) Если сеть недоступна / первый запуск офлайн — резерв
+        val fallback = FALLBACK_IDS.firstOrNull { isValid(it) } ?: FALLBACK_IDS.firstOrNull() ?: DEFAULT_WORKING_ID
+        cachedId = fallback
+        prefs.edit().putString(KEY_ID, fallback).apply()
+        inject(fallback)
+        com.melo.music.util.FileLog.i("MeloSC", "ensure: fallback client_id: $fallback")
+        return fallback
     }
 
     @Synchronized

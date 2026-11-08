@@ -412,7 +412,7 @@ internal fun FavoritesHeader(
 ) {
     val covers = remember(tracks) { tracks.mapNotNull { it.thumbnailUrl }.distinct() }
     val topArtist = remember(tracks) {
-        tracks.mapNotNull { it.uploader?.takeIf { u -> u.isNotBlank() } }
+        tracks.mapNotNull { it.cleanUploader?.takeIf { u -> u.isNotBlank() } }
             .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
     }
     Box(modifier = Modifier.fillMaxWidth().height(240.dp)) {

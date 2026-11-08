@@ -234,12 +234,18 @@ object YouTubeSyncManager {
                 if (cols.size > 1) {
                     // Вторая колонка — исполнитель, альбом, просмотры, время
                     val authorRuns = Regex(""""text":"([^"]+)"""").findAll(cols[1]).map { it.groupValues[1] }.toList()
+                    val typeDescriptors = setOf(
+                        "композиция", "песня", "видео", "сингл", "альбом", "трек", "запись",
+                        "song", "video", "track", "single", "album", "artist", "исполнитель"
+                    )
                     trackAuthor = authorRuns.firstOrNull { text ->
                         text.isNotBlank() &&
                             text != "•" &&
                             text != "." &&
+                            text != "·" &&
                             text != trackTitle &&
                             text != "YouTube Music" &&
+                            !typeDescriptors.contains(text.lowercase()) &&
                             !text.matches(Regex("""\d+:\d+""")) &&
                             !text.contains("просмотр", ignoreCase = true) &&
                             !text.contains("воспроизведен", ignoreCase = true) &&

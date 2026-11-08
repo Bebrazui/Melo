@@ -97,7 +97,7 @@ class MainActivity : ComponentActivity() {
                         onScRefresh = {
                             withContext(Dispatchers.IO) { SoundCloudFix.refresh(this@MainActivity) }
                         },
-                        onResolveAudioUrl = { url, query -> Extractor.resolveAudioUrl(this, url, query) },
+                        onResolveAudioUrl = { url, query, title, uploader -> Extractor.resolveAudioUrl(this, url, query, title, uploader) },
                         isCached = { url -> Extractor.isCached(url) },
                         onPrefetch = { url -> Extractor.prefetch(this, url) },
                         onInvalidateCache = { url -> Extractor.invalidate(url) },

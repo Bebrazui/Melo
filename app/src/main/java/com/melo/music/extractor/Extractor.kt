@@ -66,7 +66,94 @@ data class TrackItem(
     val pitchSemi: Float = 0f,
     /** Сид рандомизации нот / тональности (0 = выкл, >0 = уникальный рандомный сдвиг нот). */
     val noteShiftSeed: Long = 0L,
-)
+) {
+    val cleanUploader: String?
+        get() = cleanArtistName(uploader, title)
+
+    val cleanTitle: String
+        get() = cleanTrackTitle(title, uploader)
+}
+
+fun cleanArtistName(rawUploader: String?, rawTitle: String? = null): String? {
+    var s = rawUploader?.trim() ?: ""
+    if (s.startsWith("by — ", ignoreCase = true) || s.startsWith("by - ", ignoreCase = true) || s.startsWith("by: ", ignoreCase = true)) {
+        s = s.substring(4).trim().trimStart('—', '-', ':').trim()
+    } else if (s.startsWith("by ", ignoreCase = true)) {
+        s = s.substring(3).trim()
+    }
+
+    val typePrefixes = listOf(
+        "Композиция", "Песня", "Видео", "Сингл", "Альбом", "Трек", "Запись",
+        "Song", "Video", "Track", "Single", "Album"
+    )
+    for (tp in typePrefixes) {
+        if (s.startsWith(tp, ignoreCase = true)) {
+            val after = s.substring(tp.length).trim()
+            if (after.startsWith("•") || after.startsWith("·") || after.startsWith("-")) {
+                s = after.trimStart('•', '·', '-').trim()
+            }
+        }
+    }
+
+    if (s.contains("•") || s.contains("·")) {
+        val parts = s.split(Regex("[•·]")).map { it.trim() }.filter { it.isNotBlank() }
+        val cand = parts.firstOrNull { part ->
+            !typePrefixes.any { it.equals(part, ignoreCase = true) } &&
+                !part.matches(Regex("""\d+:\d+""")) &&
+                !part.contains("просмотр", ignoreCase = true) &&
+                !part.contains("воспроизведен", ignoreCase = true) &&
+                !part.contains("views", ignoreCase = true) &&
+                !part.contains("plays", ignoreCase = true) &&
+                !part.equals("YouTube Music", ignoreCase = true)
+        }
+        if (!cand.isNullOrBlank()) s = cand
+    }
+
+    if (s.endsWith(" - Topic", ignoreCase = true)) {
+        s = s.substring(0, s.length - 8).trim()
+    } else if (s.endsWith(" - Тема", ignoreCase = true)) {
+        s = s.substring(0, s.length - 7).trim()
+    }
+
+    val genericWords = setOf(
+        "исполнитель", "артист", "композиция", "песня", "видео", "трек",
+        "artist", "unknown", "неизвестный исполнитель", "неизвестно", "youtube music"
+    )
+    if (s.lowercase() in genericWords) {
+        s = ""
+    }
+
+    if (s.isBlank() || (rawTitle != null && s.equals(rawTitle.trim(), ignoreCase = true))) {
+        if (rawTitle != null && (rawTitle.contains(" - ") || rawTitle.contains(" — "))) {
+            val split = rawTitle.split(Regex(" [—-] "), limit = 2)
+            if (split.size == 2 && split[0].isNotBlank()) {
+                return split[0].trim()
+            }
+        }
+        return if (s.isNotBlank()) s else null
+    }
+
+    return s.ifBlank { null }
+}
+
+fun cleanTrackTitle(rawTitle: String, rawUploader: String? = null): String {
+    var t = rawTitle.trim()
+    val typePrefixes = listOf("Композиция", "Песня", "Видео", "Сингл", "Альбом", "Трек", "Song", "Video", "Track")
+    for (tp in typePrefixes) {
+        if (t.startsWith(tp, ignoreCase = true)) {
+            val after = t.substring(tp.length).trim()
+            if (after.startsWith("•") || after.startsWith("·")) {
+                val rem = after.trimStart('•', '·').trim()
+                if (rem.isNotBlank()) t = rem
+            }
+        }
+    }
+    val artist = cleanArtistName(rawUploader)
+    if (artist != null && (t.startsWith("$artist - ", ignoreCase = true) || t.startsWith("$artist — ", ignoreCase = true))) {
+        t = t.substring(artist.length + 3).trim()
+    }
+    return t.ifBlank { rawTitle }
+}
 
 class TrackCopyrightException(
     message: String = "Трек удалён правообладателем",
@@ -158,13 +245,21 @@ object Extractor {
             YoutubeDL.getInstance().updateYoutubeDL(context.applicationContext)
         }
 
-    suspend fun resolveAudioUrl(context: Context, url: String, fallbackQuery: String? = null): ResolvedTrack {
+    suspend fun resolveAudioUrl(
+        context: Context,
+        url: String,
+        fallbackQuery: String? = null,
+        title: String? = null,
+        uploader: String? = null,
+    ): ResolvedTrack {
         // 0) Офлайн: скачанный трек играем прямо с диска, без сети.
-        com.melo.music.offline.OfflineManager.localUri(url)?.let { local ->
+        com.melo.music.offline.OfflineManager.getOrFindLocalUri(context, url, title, uploader, fallbackQuery)?.let { local ->
             // android.util.Log.e("MeloPerf", "OFFLINE HIT $url")
+            val trackTitle = com.melo.music.offline.OfflineManager.titleFor(url) ?: (title ?: url)
             return ResolvedTrack(
-                title = com.melo.music.offline.OfflineManager.titleFor(url) ?: url,
+                title = trackTitle,
                 audioUrl = local,
+                artist = uploader,
             )
         }
         // 1) Память.

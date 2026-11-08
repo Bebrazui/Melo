@@ -363,13 +363,14 @@ object NewPipeResolver {
         if (isYouTube(artist.url) && (artist.url.contains("/channel/") || artist.url.contains("/@") || artist.url.contains("/user/"))) {
             return@withContext artist.url
         }
+        val cleanName = cleanArtistName(artist.title) ?: artist.title
         runCatching {
             val search = SearchInfo.getInfo(
                 ServiceList.YouTube,
-                ServiceList.YouTube.searchQHFactory.fromQuery(artist.title, listOf("music_artists"), "")
+                ServiceList.YouTube.searchQHFactory.fromQuery(cleanName, listOf("music_artists"), "")
             )
             val channels = search.relatedItems.filterIsInstance<ChannelInfoItem>()
-            val target = normalizeArtistName(artist.title)
+            val target = normalizeArtistName(cleanName)
             val exact = channels.firstOrNull { ch ->
                 normalizeArtistName(ch.name) == target
             }
@@ -387,6 +388,7 @@ object NewPipeResolver {
     suspend fun artistTracks(context: Context, artist: TrackItem): List<TrackItem> =
         withContext(Dispatchers.IO) {
             ensureInit(context)
+            val cleanName = cleanArtistName(artist.title) ?: artist.title
             val channelUrl = if (artist.url.startsWith("http") && (artist.url.contains("/channel/") || artist.url.contains("/@") || artist.url.contains("/user/"))) {
                 artist.url
             } else {
@@ -409,7 +411,7 @@ object NewPipeResolver {
             // Если треки получены напрямую с официального канала артиста — возвращаем ТОЛЬКО их!
             // Никаких сторонних треков из общего поиска не подмешивается.
             if (viaChannel.isNotEmpty()) {
-                android.util.Log.e("MeloArtist", "artistTracks ${artist.title}: strictly viaChannel count=${viaChannel.size}")
+                android.util.Log.e("MeloArtist", "artistTracks $cleanName: strictly viaChannel count=${viaChannel.size}")
                 return@withContext viaChannel
             }
 
@@ -418,15 +420,15 @@ object NewPipeResolver {
                 val raw = when (artist.source) {
                     Source.SOUNDCLOUD -> {
                         SoundCloudFix.ensure(context)
-                        searchService(ServiceList.SoundCloud, artist.title, Source.SOUNDCLOUD, listOf("tracks"))
+                        searchService(ServiceList.SoundCloud, cleanName, Source.SOUNDCLOUD, listOf("tracks"))
                     }
-                    Source.BANDCAMP -> BandcampSearcher.search(artist.title)
-                    else -> searchService(ServiceList.YouTube, artist.title, Source.YOUTUBE_MUSIC, listOf("music_songs"))
+                    Source.BANDCAMP -> BandcampSearcher.search(cleanName)
+                    else -> searchService(ServiceList.YouTube, cleanName, Source.YOUTUBE_MUSIC, listOf("music_songs"))
                 }
-                raw.filter { artistMatches(it.uploader, artist.title, it.title) }
+                raw.filter { artistMatches(it.uploader, cleanName, it.title) }
             }.getOrDefault(emptyList())
 
-            android.util.Log.e("MeloArtist", "artistTracks ${artist.title}: fallback search count=${fromSearch.size}")
+            android.util.Log.e("MeloArtist", "artistTracks $cleanName: fallback search count=${fromSearch.size}")
             fromSearch.distinctBy { it.url }
         }
 
@@ -452,7 +454,7 @@ object NewPipeResolver {
                         .map { pl ->
                             TrackItem(
                                 title = pl.name,
-                                uploader = artist.title,
+                                uploader = cleanArtistName(artist.title) ?: artist.title,
                                 url = pl.url,
                                 durationSeconds = 0,
                                 thumbnailUrl = pl.thumbnails.maxByOrNull { it.height }?.url

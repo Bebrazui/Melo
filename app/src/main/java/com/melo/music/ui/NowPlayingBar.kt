@@ -460,7 +460,7 @@ internal fun NowPlayingBarInner(
                     .padding(end = 6.dp),
             ) {
                 Text(
-                    text = item.title,
+                    text = item.cleanTitle,
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontSize = 17.sp,
                         letterSpacing = (-0.2).sp,
@@ -472,7 +472,7 @@ internal fun NowPlayingBarInner(
                 )
                 Spacer(Modifier.height(1.dp))
                 Text(
-                    text = "by — ${item.uploader ?: "Unknown"}",
+                    text = item.cleanUploader ?: "Неизвестный исполнитель",
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 13.sp,
                     ),
@@ -492,10 +492,10 @@ internal fun NowPlayingBarInner(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            val btnBg = if (isDark) lerp(Color(0xFFE2D6BE), animatedTrackColor, 0.12f) else cs.surfaceContainerHighest
-            val playBg = if (isDark) lerp(Color(0xFFF5EACF), animatedTrackColor, 0.20f) else cs.primary
-            val btnIconTint = if (isDark) Color(0xFF1A1612) else cs.onSurface
-            val playIconTint = if (isDark) Color(0xFF1A1612) else cs.onPrimary
+            val playBg = if (animatedTrackColor.luminance() < 0.2f) lerp(animatedTrackColor, Color.White, 0.65f) else lerp(animatedTrackColor, Color.White, 0.42f)
+            val btnBg = if (animatedTrackColor.luminance() < 0.2f) lerp(animatedTrackColor, Color.White, 0.50f) else lerp(animatedTrackColor, Color.White, 0.26f)
+            val playIconTint = if (playBg.luminance() > 0.22f) Color(0xFF0F1E28) else Color.White
+            val btnIconTint = if (btnBg.luminance() > 0.22f) Color(0xFF0F1E28) else Color.White
 
             // Prev
             Surface(

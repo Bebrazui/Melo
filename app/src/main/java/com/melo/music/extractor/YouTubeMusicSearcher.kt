@@ -205,11 +205,16 @@ object YouTubeMusicSearcher {
         var browseId: String? = null
         var durationSeconds = 0L
 
+        val typeDescriptors = setOf(
+            "композиция", "песня", "видео", "сингл", "альбом", "трек", "запись",
+            "song", "video", "track", "single", "album", "artist", "исполнитель"
+        )
+
         if (runs != null) {
             for (i in 0 until runs.length()) {
                 val r = runs.optJSONObject(i) ?: continue
                 val text = r.optString("text").trim()
-                if (text.isBlank() || text == "•" || text == ".") continue
+                if (text.isBlank() || text == "•" || text == "." || text == "·") continue
 
                 val nav = r.optJSONObject("navigationEndpoint")
                 val bId = nav?.optJSONObject("browseEndpoint")?.optString("browseId")
@@ -217,6 +222,14 @@ object YouTubeMusicSearcher {
                     ?.optJSONObject("browseEndpointContextSupportedConfigs")
                     ?.optJSONObject("browseEndpointContextMusicConfig")
                     ?.optString("pageType")
+
+                val isArtistNav = pageType == "MUSIC_PAGE_TYPE_ARTIST" ||
+                    pageType == "MUSIC_PAGE_TYPE_USER_CHANNEL" ||
+                    (!bId.isNullOrBlank() && bId.startsWith("UC"))
+
+                if (isArtistNav && uploader == null && !typeDescriptors.contains(text.lowercase())) {
+                    uploader = text
+                }
 
                 if (pageType == "MUSIC_PAGE_TYPE_ARTIST" || (text.contains("Исполнитель", ignoreCase = true) || text.contains("Artist", ignoreCase = true))) {
                     isArtist = true
@@ -231,7 +244,13 @@ object YouTubeMusicSearcher {
                     if (parts.size == 2) {
                         durationSeconds = (parts[0].toLongOrNull() ?: 0L) * 60 + (parts[1].toLongOrNull() ?: 0L)
                     }
-                } else if (uploader == null && !text.contains("просмотр", ignoreCase = true) && !text.contains("воспроизведен", ignoreCase = true)) {
+                } else if (uploader == null &&
+                    !typeDescriptors.contains(text.lowercase()) &&
+                    !text.contains("просмотр", ignoreCase = true) &&
+                    !text.contains("воспроизведен", ignoreCase = true) &&
+                    !text.contains("views", ignoreCase = true) &&
+                    !text.contains("plays", ignoreCase = true)
+                ) {
                     uploader = text
                 }
             }

@@ -110,6 +110,9 @@ object TrackDownloader {
             val filename = sanitizeFilename("${item.uploader ?: "Unknown"} - ${item.title}") + ".mp3"
 
             if (existsInMusic(context, filename)) {
+                OfflineManager.findUriInMusic(context, filename)?.let { existingUri ->
+                    OfflineManager.add(item.url, existingUri, label)
+                }
                 if (batchIndex == null) toast(context, "Уже скачано")
                 return
             }

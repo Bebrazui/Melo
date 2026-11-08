@@ -1100,7 +1100,7 @@ internal fun FullPlayer(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     androidx.compose.animation.AnimatedContent(
-                        targetState = Pair(item.title, item.uploader),
+                        targetState = Pair(item.cleanTitle, item.cleanUploader),
                         transitionSpec = {
                             val dir = trackSwitchDirection
                             (slideInHorizontally(tween(340, easing = FastOutSlowInEasing)) { width -> (width * 0.25f * dir).toInt() } + fadeIn(tween(260)))

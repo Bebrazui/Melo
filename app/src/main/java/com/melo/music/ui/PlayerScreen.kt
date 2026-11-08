@@ -306,7 +306,7 @@ fun PlayerScreen(
     scGetId: () -> String?,
     onScSetManual: suspend (String) -> Boolean,
     onScRefresh: suspend () -> String?,
-    onResolveAudioUrl: suspend (String, String?) -> ResolvedTrack,
+    onResolveAudioUrl: suspend (url: String, fallbackQuery: String?, title: String?, uploader: String?) -> ResolvedTrack,
     isCached: (String) -> Boolean,
     onPrefetch: (String) -> Unit,
     onInvalidateCache: (String) -> Unit = {},
@@ -581,7 +581,7 @@ fun PlayerScreen(
         // android.util.Log.e("MeloPerf", "PLAYER ERROR → re-resolve ${item.url}")
         onInvalidateCache(item.url)
         val query = listOfNotNull(item.title, item.uploader).joinToString(" ").takeIf { it.isNotBlank() }
-        val resolved = runCatching { onResolveAudioUrl(item.url, query) }.getOrNull() ?: return@LaunchedEffect
+        val resolved = runCatching { onResolveAudioUrl(item.url, query, item.title, item.uploader) }.getOrNull() ?: return@LaunchedEffect
         if (nowPlaying?.url == item.url) {
             onPlayResolved(resolved)
             playerProvider()?.let { p ->
@@ -728,7 +728,7 @@ fun PlayerScreen(
         scope.launch {
             val nextItem = list.getOrNull(nextIdx) ?: return@launch
             val nextQuery = listOfNotNull(nextItem.title, nextItem.uploader).joinToString(" ").takeIf { it.isNotBlank() }
-            val resolved = runCatching { onResolveAudioUrl(nextItem.url, nextQuery) }.getOrNull()
+            val resolved = runCatching { onResolveAudioUrl(nextItem.url, nextQuery, nextItem.title, nextItem.uploader) }.getOrNull()
             // Проверяем, что очередь/индекс не сменились, пока резолвили.
             if (resolved != null && playingIndex == fromIndex) {
                 com.melo.music.playback.PlaybackService.setNext(
@@ -777,7 +777,7 @@ fun PlayerScreen(
             val tStart = android.os.SystemClock.elapsedRealtime()
             resolvingUrl = item.url
             val query = listOfNotNull(item.title, item.uploader).joinToString(" ").takeIf { it.isNotBlank() }
-            runCatching { onResolveAudioUrl(item.url, query) }
+            runCatching { onResolveAudioUrl(item.url, query, item.title, item.uploader) }
                 .onSuccess {
                     copyrightBlockedTrack = null
                     android.util.Log.d("MeloTrack", "RESOLVE OK [index=$index] url=${item.url} streamUrl=${it.audioUrl.take(60)}")

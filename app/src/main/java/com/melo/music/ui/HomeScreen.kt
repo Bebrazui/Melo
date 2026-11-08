@@ -984,14 +984,14 @@ internal fun TrackCard(
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = item.title,
+                    text = item.cleanTitle,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = onColor,
                     maxLines = 2,
                 )
                 val subtitle = listOfNotNull(
-                    item.uploader,
+                    item.cleanUploader,
                     formatDuration(item.durationSeconds),
                 ).joinToString(" · ")
                 Row(verticalAlignment = Alignment.CenterVertically) {
