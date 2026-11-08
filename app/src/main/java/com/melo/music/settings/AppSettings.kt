@@ -23,6 +23,7 @@ object AppSettings {
     private const val KEY_AUTO_UPDATE = "auto_update"
     private const val KEY_HIGH_REFRESH_RATE = "high_refresh_rate"
     private const val KEY_MORE_EFFECTS = "more_effects"
+    private const val KEY_SOLID_BACKGROUND = "solid_background"
 
     private var prefs: SharedPreferences? = null
 
@@ -66,6 +67,10 @@ object AppSettings {
     var moreEffects by mutableStateOf(false)
         private set
 
+    /** Сплошной фон плеера без градиентов, размытия обложки и атмосферных эффектов. */
+    var solidBackground by mutableStateOf(false)
+        private set
+
     fun init(context: Context) {
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         karaoke = prefs?.getBoolean(KEY_KARAOKE, false) ?: false
@@ -78,6 +83,7 @@ object AppSettings {
         autoUpdate = prefs?.getBoolean(KEY_AUTO_UPDATE, true) ?: true
         highRefreshRate = prefs?.getBoolean(KEY_HIGH_REFRESH_RATE, true) ?: true
         moreEffects = prefs?.getBoolean(KEY_MORE_EFFECTS, false) ?: false
+        solidBackground = prefs?.getBoolean(KEY_SOLID_BACKGROUND, false) ?: false
     }
 
     fun setSeenWelcome() {
@@ -124,6 +130,11 @@ object AppSettings {
     fun updateMoreEffects(value: Boolean) {
         moreEffects = value
         prefs?.edit()?.putBoolean(KEY_MORE_EFFECTS, value)?.apply()
+    }
+
+    fun updateSolidBackground(value: Boolean) {
+        solidBackground = value
+        prefs?.edit()?.putBoolean(KEY_SOLID_BACKGROUND, value)?.apply()
     }
 
     /**

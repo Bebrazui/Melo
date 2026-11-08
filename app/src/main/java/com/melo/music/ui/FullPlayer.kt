@@ -725,7 +725,7 @@ internal fun FullPlayer(
                                 )
 
                                 // Едва заметный, мягкий круглый блик света
-                                if (p < 0.35f) {
+                                if (!com.melo.music.settings.AppSettings.solidBackground && p < 0.35f) {
                                     Canvas(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 1f - (p / 0.35f) }) {
                                         val sheenAlpha = (0.10f + (kotlin.math.abs(tiltRoll) + kotlin.math.abs(tiltPitch)) * 0.04f).coerceIn(0.02f, 0.14f)
                                         val cx = size.width * (0.45f + tiltRoll * 0.25f)
@@ -806,12 +806,17 @@ internal fun FullPlayer(
         ) {
             val fullCs = MaterialTheme.colorScheme
             val fullIsDark = fullCs.background.luminance() < 0.5f
-            val collapseBg = if (fullIsDark) Color(0xEB13110E) else fullCs.surfaceContainerHigh.copy(alpha = 0.95f)
+            val isSolid = com.melo.music.settings.AppSettings.solidBackground
+            val collapseBg = if (isSolid) {
+                if (fullIsDark) Color(0xFF101211) else fullCs.surface
+            } else {
+                if (fullIsDark) Color(0xEB13110E) else fullCs.surfaceContainerHigh.copy(alpha = 0.95f)
+            }
             Surface(
                 shape = RoundedCornerShape(currentCorner),
                 color = collapseBg,
-                shadowElevation = currentElevation,
-                border = if (p > 0.05f) BorderStroke(
+                shadowElevation = if (isSolid) 0.dp else currentElevation,
+                border = if (!isSolid && p > 0.05f) BorderStroke(
                     1.2.dp,
                     if (fullIsDark) {
                         lerp(Color(0x33FFFFFF), artColor, 0.45f).copy(alpha = ((p - 0.05f) / 0.95f).coerceIn(0f, 1f))
@@ -957,30 +962,38 @@ internal fun FullPlayer(
                                 .graphicsLayer { alpha = fullControlsAlpha }
                                 .onGloballyPositioned { fullControlsCoordinates = it },
                         ) {
-        FlowingBackground(
-            thumbnailUrl = hiRes,
-            audioSessionId = audioSessionId,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    // Контр-параллакс фона при наклоне устройства для создания ощущения глубины
-                    translationX = -tiltRoll * 4.dp.toPx()
-                    translationY = -tiltPitch * 4.dp.toPx()
-                    scaleX = 1.03f
-                    scaleY = 1.03f
-                },
-        )
-        Box(
-            modifier = Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color.Black.copy(alpha = 0.35f),
-                        Color.Black.copy(alpha = 0.58f),
-                        Color.Black.copy(alpha = 0.90f),
+        if (com.melo.music.settings.AppSettings.solidBackground) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(if (fullIsDark) Color(0xFF101211) else fullCs.surface)
+            )
+        } else {
+            FlowingBackground(
+                thumbnailUrl = hiRes,
+                audioSessionId = audioSessionId,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        // Контр-параллакс фона при наклоне устройства для создания ощущения глубины
+                        translationX = -tiltRoll * 4.dp.toPx()
+                        translationY = -tiltPitch * 4.dp.toPx()
+                        scaleX = 1.03f
+                        scaleY = 1.03f
+                    },
+            )
+            Box(
+                modifier = Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.Black.copy(alpha = 0.35f),
+                            Color.Black.copy(alpha = 0.58f),
+                            Color.Black.copy(alpha = 0.90f),
+                        ),
                     ),
                 ),
-            ),
-        )
+            )
+        }
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val isCompact = isCompactScreen
@@ -1811,12 +1824,14 @@ internal fun FullPlayer(
             }
 
             // ── Атмосферный медленно движущийся туман (наплывает на кнопки и низ экрана) ──
-            AtmosphericMistLayer(
-                mistColor = lerp(playBtnColor, Color.White, 0.35f),
-                tiltRoll = tiltRoll,
-                tiltPitch = tiltPitch,
-                modifier = Modifier.fillMaxSize(),
-            )
+            if (!com.melo.music.settings.AppSettings.solidBackground) {
+                AtmosphericMistLayer(
+                    mistColor = lerp(playBtnColor, Color.White, 0.35f),
+                    tiltRoll = tiltRoll,
+                    tiltPitch = tiltPitch,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 }

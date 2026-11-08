@@ -6,7 +6,18 @@ import android.webkit.CookieManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.melo.music.net.MeloNet
+import com.melo.music.sync.InnerTubeConfig
+import com.melo.music.util.MeloLog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
 
 /**
  * Управляет сессией Google / YouTube Music.
@@ -19,6 +30,7 @@ object YouTubeAccountManager {
     private const val KEY_COOKIES = "yt_cookies"
     private const val KEY_ACCOUNT_NAME = "yt_account_name"
     private const val KEY_ACCOUNT_EMAIL = "yt_account_email"
+    private const val KEY_ACCOUNT_AVATAR = "yt_account_avatar"
     private const val KEY_IS_LOGGED_IN = "yt_is_logged_in"
 
     private var prefs: SharedPreferences? = null
@@ -30,6 +42,9 @@ object YouTubeAccountManager {
         private set
 
     var accountEmail by mutableStateOf<String?>(null)
+        private set
+
+    var accountAvatarUrl by mutableStateOf<String?>(null)
         private set
 
     @Volatile
@@ -45,23 +60,171 @@ object YouTubeAccountManager {
         isLoggedIn = prefs?.getBoolean(KEY_IS_LOGGED_IN, false) ?: false
         accountName = prefs?.getString(KEY_ACCOUNT_NAME, null)
         accountEmail = prefs?.getString(KEY_ACCOUNT_EMAIL, null)
+        accountAvatarUrl = prefs?.getString(KEY_ACCOUNT_AVATAR, null)
     }
 
     /**
      * Сохраняет cookies сессии YouTube Music.
      */
-    fun saveSession(cookies: String, name: String? = null, email: String? = null) {
+    fun saveSession(
+        cookies: String,
+        name: String? = null,
+        email: String? = null,
+        avatarUrl: String? = null
+    ) {
         cachedCookieString = cookies
         isLoggedIn = true
         accountName = name ?: accountName ?: "Google Аккаунт"
         accountEmail = email ?: accountEmail
+        accountAvatarUrl = avatarUrl ?: accountAvatarUrl
 
         prefs?.edit()
             ?.putString(KEY_COOKIES, cookies)
             ?.putString(KEY_ACCOUNT_NAME, accountName)
             ?.putString(KEY_ACCOUNT_EMAIL, accountEmail)
+            ?.putString(KEY_ACCOUNT_AVATAR, accountAvatarUrl)
             ?.putBoolean(KEY_IS_LOGGED_IN, true)
             ?.apply()
+    }
+
+    fun updateAccountDetails(name: String?, email: String?, avatarUrl: String?) {
+        if (!name.isNullOrBlank()) accountName = name
+        if (!email.isNullOrBlank()) accountEmail = email
+        if (!avatarUrl.isNullOrBlank()) accountAvatarUrl = avatarUrl
+
+        prefs?.edit()
+            ?.putString(KEY_ACCOUNT_NAME, accountName)
+            ?.putString(KEY_ACCOUNT_EMAIL, accountEmail)
+            ?.putString(KEY_ACCOUNT_AVATAR, accountAvatarUrl)
+            ?.apply()
+    }
+
+    /**
+     * Загружает данные пользователя (имя, email, аватарку) через InnerTube account_menu.
+     */
+    suspend fun fetchAccountDetails(): Boolean = withContext(Dispatchers.IO) {
+        val cookies = getCookies() ?: return@withContext false
+        val auth = getSapisidHash()
+        val apiKey = InnerTubeConfig.getApiKey()
+        val clientVersion = InnerTubeConfig.getClientVersion()
+
+        val attempts = listOf(
+            Triple(
+                "https://music.youtube.com/youtubei/v1/account/account_menu?key=$apiKey&prettyPrint=false",
+                "WEB_REMIX",
+                "https://music.youtube.com"
+            ),
+            Triple(
+                "https://www.youtube.com/youtubei/v1/account/account_menu?key=$apiKey&prettyPrint=false",
+                "WEB",
+                "https://www.youtube.com"
+            )
+        )
+
+        for ((url, clientName, origin) in attempts) {
+            try {
+                val jsonBody = JSONObject().apply {
+                    put("context", JSONObject().apply {
+                        put("client", JSONObject().apply {
+                            put("clientName", clientName)
+                            put("clientVersion", if (clientName == "WEB") "2.20260915.00.00" else clientVersion)
+                            put("hl", "ru")
+                            put("gl", "RU")
+                        })
+                    })
+                }
+
+                val reqBuilder = Request.Builder()
+                    .url(url)
+                    .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
+                    .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                    .addHeader("Referer", "$origin/")
+                    .addHeader("Origin", origin)
+                    .addHeader("X-Origin", origin)
+                    .addHeader("Cookie", cookies)
+
+                val specificAuth = getSapisidHash(origin) ?: auth
+                if (!specificAuth.isNullOrBlank()) {
+                    reqBuilder.addHeader("Authorization", specificAuth)
+                }
+                if (clientName == "WEB_REMIX") {
+                    reqBuilder.addHeader("X-YouTube-Client-Name", "67")
+                    reqBuilder.addHeader("X-YouTube-Client-Version", clientVersion)
+                }
+
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(10, TimeUnit.SECONDS)
+                    .readTimeout(15, TimeUnit.SECONDS)
+                    .dns(MeloNet.dns)
+                    .proxySelector(MeloNet.byedpiSelector)
+                    .build()
+
+                client.newCall(reqBuilder.build()).execute().use { resp ->
+                    if (!resp.isSuccessful) return@use
+                    val bodyStr = resp.body?.string() ?: return@use
+                    val json = JSONObject(bodyStr)
+
+                    var parsedName: String? = null
+                    var parsedEmail: String? = null
+                    var parsedAvatar: String? = null
+
+                    // 1. Поиск через activeAccountHeaderRenderer
+                    val actions = json.optJSONArray("actions")
+                    if (actions != null) {
+                        for (i in 0 until actions.length()) {
+                            val action = actions.optJSONObject(i)
+                            val header = action?.optJSONObject("openPopupAction")
+                                ?.optJSONObject("popup")
+                                ?.optJSONObject("multiPageMenuRenderer")
+                                ?.optJSONObject("header")
+                                ?.optJSONObject("activeAccountHeaderRenderer")
+                            if (header != null) {
+                                parsedName = header.optJSONObject("accountName")?.let {
+                                    it.optString("simpleText").takeIf { s -> s.isNotBlank() }
+                                        ?: it.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
+                                }
+                                parsedEmail = header.optJSONObject("email")?.let {
+                                    it.optString("simpleText").takeIf { s -> s.isNotBlank() }
+                                        ?: it.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
+                                } ?: header.optJSONObject("channelHandle")?.let {
+                                    it.optString("simpleText").takeIf { s -> s.isNotBlank() }
+                                        ?: it.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
+                                }
+                                val thumbs = header.optJSONObject("accountPhoto")?.optJSONArray("thumbnails")
+                                if (thumbs != null && thumbs.length() > 0) {
+                                    parsedAvatar = thumbs.optJSONObject(thumbs.length() - 1)?.optString("url")
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. Фолбэк на регулярные выражения
+                    if (parsedName.isNullOrBlank()) {
+                        parsedName = Regex(""""accountName":\s*\{[^}]*"text"\s*:\s*"([^"]+)"""").find(bodyStr)?.groupValues?.get(1)
+                            ?: Regex(""""accountName":\s*\{[^}]*"simpleText"\s*:\s*"([^"]+)"""").find(bodyStr)?.groupValues?.get(1)
+                    }
+                    if (parsedEmail.isNullOrBlank()) {
+                        parsedEmail = Regex(""""email":\s*\{[^}]*"text"\s*:\s*"([^"]+)"""").find(bodyStr)?.groupValues?.get(1)
+                            ?: Regex(""""email":\s*\{[^}]*"simpleText"\s*:\s*"([^"]+)"""").find(bodyStr)?.groupValues?.get(1)
+                            ?: Regex("""([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})""").find(bodyStr)?.groupValues?.get(1)
+                    }
+                    if (parsedAvatar.isNullOrBlank()) {
+                        parsedAvatar = Regex(""""accountPhoto":\s*\{[^}]*"url"\s*:\s*"([^"]+)"""").find(bodyStr)?.groupValues?.get(1)
+                            ?: Regex("""(https://lh3\.googleusercontent\.com/[a-zA-Z0-9_\-=]+)""").find(bodyStr)?.groupValues?.get(1)
+                    }
+
+                    if (!parsedName.isNullOrBlank() || !parsedEmail.isNullOrBlank() || !parsedAvatar.isNullOrBlank()) {
+                        withContext(Dispatchers.Main) {
+                            updateAccountDetails(parsedName, parsedEmail, parsedAvatar)
+                        }
+                        return@withContext true
+                    }
+                }
+            } catch (e: Exception) {
+                MeloLog.e("YouTubeAccount", "Ошибка загрузки данных аккаунта: ${e.message}")
+            }
+        }
+        false
     }
 
     /**
@@ -165,6 +328,7 @@ object YouTubeAccountManager {
         isLoggedIn = false
         accountName = null
         accountEmail = null
+        accountAvatarUrl = null
 
         prefs?.edit()?.clear()?.apply()
 

@@ -63,6 +63,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -153,6 +154,34 @@ fun SettingsScreen(
         var showGoogleLoginSheet by remember { mutableStateOf(false) }
         val isYtLoggedIn = com.melo.music.auth.YouTubeAccountManager.isLoggedIn
 
+        LaunchedEffect(isYtLoggedIn) {
+            if (isYtLoggedIn && (com.melo.music.auth.YouTubeAccountManager.accountName == null || com.melo.music.auth.YouTubeAccountManager.accountAvatarUrl == null || com.melo.music.auth.YouTubeAccountManager.accountEmail == null)) {
+                com.melo.music.auth.YouTubeAccountManager.fetchAccountDetails()
+            }
+        }
+
+        val ytName = com.melo.music.auth.YouTubeAccountManager.accountName
+        val ytEmail = com.melo.music.auth.YouTubeAccountManager.accountEmail
+        val ytAvatar = com.melo.music.auth.YouTubeAccountManager.accountAvatarUrl
+
+        val authName = com.melo.music.auth.AuthManager.name
+        val authEmail = com.melo.music.auth.AuthManager.email
+        val authAvatar = com.melo.music.auth.AuthManager.avatarUrl
+
+        val displayName = if (isYtLoggedIn) {
+            ytName ?: authName ?: ytEmail?.substringBefore("@") ?: authEmail?.substringBefore("@") ?: "Google Аккаунт"
+        } else {
+            "YouTube Music / Google"
+        }
+
+        val displayEmail = if (isYtLoggedIn) {
+            ytEmail ?: authEmail ?: "Подключено"
+        } else {
+            "Войдите для доступа к вашей медиатеке"
+        }
+
+        val displayAvatar = if (isYtLoggedIn) (ytAvatar ?: authAvatar) else null
+
         Surface(
             shape = RoundedCornerShape(28.dp),
             color = cardBg,
@@ -171,26 +200,36 @@ fun SettingsScreen(
                         modifier = Modifier.size(48.dp),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = if (isYtLoggedIn) "YT" else "G",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Black,
-                                color = if (isYtLoggedIn) cs.onPrimaryContainer else cs.onSurface,
-                            )
+                            if (isYtLoggedIn && !displayAvatar.isNullOrBlank()) {
+                                coil.compose.AsyncImage(
+                                    model = displayAvatar,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                    contentScale = ContentScale.Crop,
+                                )
+                            } else {
+                                Text(
+                                    text = if (isYtLoggedIn) {
+                                        displayName.firstOrNull()?.uppercaseChar()?.toString() ?: "G"
+                                    } else "G",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Black,
+                                    color = if (isYtLoggedIn) cs.onPrimaryContainer else cs.onSurface,
+                                )
+                            }
                         }
                     }
                     Spacer(Modifier.width(16.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "YouTube Music / Google",
+                            displayName,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = titleColor,
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            if (isYtLoggedIn) "Подключено"
-                            else "Войдите для доступа к вашей медиатеке",
+                            displayEmail,
                             style = MaterialTheme.typography.bodySmall,
                             color = if (isYtLoggedIn) cs.primary else subtitleColor,
                         )
@@ -658,6 +697,67 @@ fun SettingsScreen(
                     onCheckedChange = {
                         ClickFeedback.play()
                         com.melo.music.settings.AppSettings.updateMoreEffects(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = cs.onPrimary,
+                        checkedTrackColor = cs.primary,
+                    ),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // ── 🎨 Сплошной фон без эффектов и градиентов (Bento Card) ──
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = cardBg,
+            border = cardBorder,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = cs.primaryContainer,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.AspectRatio,
+                            contentDescription = null,
+                            tint = cs.onPrimaryContainer,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Сплошной фон",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = titleColor,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        if (com.melo.music.settings.AppSettings.solidBackground)
+                            "Минималистичный сплошной цвет без размытия обложки, тумана и градиентов"
+                        else
+                            "Динамический живой фон с размытием обложки и атмосферными градиентами",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = subtitleColor,
+                    )
+                }
+                Switch(
+                    checked = com.melo.music.settings.AppSettings.solidBackground,
+                    onCheckedChange = {
+                        ClickFeedback.play()
+                        com.melo.music.settings.AppSettings.updateSolidBackground(it)
                     },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = cs.onPrimary,

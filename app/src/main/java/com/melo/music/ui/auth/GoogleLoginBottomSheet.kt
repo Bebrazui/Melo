@@ -54,6 +54,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.ProxyConfig
 import androidx.webkit.ProxyController
 import androidx.webkit.WebViewFeature
+import kotlinx.coroutines.launch
 import com.melo.music.auth.YouTubeAccountManager
 import com.melo.music.byedpi.ByeDpiProxy
 
@@ -220,6 +221,9 @@ fun GoogleLoginBottomSheet(
                                             .joinToString("; ")
                                         val finalCookies = if (merged.isNotBlank()) merged else cookies
                                         YouTubeAccountManager.saveSession(finalCookies)
+                                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                            YouTubeAccountManager.fetchAccountDetails()
+                                        }
                                         onSuccess()
                                     }
                                 }
@@ -323,6 +327,9 @@ fun GoogleLoginBottomSheet(
                         val trimmed = manualCookieText.trim()
                         if (trimmed.isNotBlank()) {
                             YouTubeAccountManager.saveSession(trimmed)
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                YouTubeAccountManager.fetchAccountDetails()
+                            }
                             showManualCookieDialog = false
                             onSuccess()
                         }
