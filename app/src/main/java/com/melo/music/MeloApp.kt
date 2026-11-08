@@ -45,6 +45,7 @@ class MeloApp : Application(), ImageLoaderFactory {
         com.melo.music.util.FileLog.i("MeloApp", "Application started")
         StreamCacheStore.init(this)
         FavoritesManager.init(this)
+        com.melo.music.artists.ArtistSubscriptionManager.init(this)
         PlaylistManager.init(this)
         com.melo.music.auth.LoginGuard.init(this)
         com.melo.music.auth.AuthManager.init(this)
@@ -108,27 +109,19 @@ class MeloApp : Application(), ImageLoaderFactory {
                 val sc = host.contains("sndcdn") || host.contains("soundcloud")
                 val origUrl = origReq.url.toString()
 
-                val isAvatar = origUrl.contains("/avatars-")
+                val isAvatar = origUrl.contains("/avatars-") || origUrl.contains("avatar")
+                val isDefaultAvatar = origUrl.contains("default_avatar")
                 val is500 = origUrl.contains("-t500x500.")
-                val is300 = origUrl.contains("-t300x300.")
-                val primaryUrl = if (sc) {
-                    if (isAvatar) {
-                        if (!is300) {
-                            origUrl.replace(Regex("-(?:large|badge|small|mini|t500x500)\\.(jpg|jpeg|png)"), "-t300x300.$1")
-                        } else {
-                            origUrl
-                        }
+                val primaryUrl = if (sc && !isDefaultAvatar) {
+                    if (!is500) {
+                        origUrl.replace(Regex("-(?:large|badge|small|mini|t300x300)\\.(jpg|jpeg|png)"), "-t500x500.$1")
                     } else {
-                        if (!is500) {
-                            origUrl.replace(Regex("-(?:large|badge|small|mini|t300x300)\\.(jpg|jpeg|png)"), "-t500x500.$1")
-                        } else {
-                            origUrl
-                        }
+                        origUrl
                     }
                 } else {
                     origUrl
                 }
-                val fallbackUrl = if (sc) {
+                val fallbackUrl = if (sc && !isDefaultAvatar && (is500 || primaryUrl != origUrl)) {
                     primaryUrl.replace("-t500x500.", "-large.").replace("-t300x300.", "-large.")
                 } else null
 

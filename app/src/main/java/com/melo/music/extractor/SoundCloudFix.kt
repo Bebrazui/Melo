@@ -463,4 +463,51 @@ object SoundCloudFix {
             field.set(null, id)
         }.onFailure { android.util.Log.e("MeloSC", "inject failed: $it") }
     }
+
+    fun searchUsers(context: Context, query: String, limit: Int = 5): List<TrackItem> {
+        val cid = ensure(context) ?: return emptyList()
+        val encoded = runCatching { java.net.URLEncoder.encode(query, "UTF-8") }.getOrDefault(query)
+        val url = "https://api-v2.soundcloud.com/search/users?q=$encoded&client_id=$cid&limit=$limit"
+        val req = Request.Builder().url(url).header("User-Agent", UA).build()
+        return runCatching {
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return emptyList()
+                val body = resp.body?.string() ?: return emptyList()
+                val json = org.json.JSONObject(body)
+                val arr = json.optJSONArray("collection") ?: return emptyList()
+                val list = mutableListOf<TrackItem>()
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val username = obj.optString("username").ifBlank { null } ?: continue
+                    val permalink = obj.optString("permalink_url").ifBlank {
+                        val p = obj.optString("permalink")
+                        if (p.isNotBlank()) "https://soundcloud.com/$p" else ""
+                    }
+                    val rawAvatar = obj.optString("avatar_url").takeIf { it.isNotBlank() }
+                    val avatar = rawAvatar?.let {
+                        if (it.contains("default_avatar")) it
+                        else it.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t500x500.$1")
+                    }
+                    list.add(
+                        TrackItem(
+                            title = cleanArtistName(username) ?: username,
+                            uploader = "Исполнитель",
+                            url = if (permalink.isNotBlank()) permalink else "artist:$username",
+                            durationSeconds = 0,
+                            thumbnailUrl = avatar,
+                            source = Source.SOUNDCLOUD,
+                            kind = ItemKind.ARTIST,
+                        )
+                    )
+                }
+                list
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    fun resolveArtistAvatar(context: Context, artistName: String): String? {
+        val clean = cleanArtistName(artistName) ?: artistName
+        val users = searchUsers(context, clean, limit = 1)
+        return users.firstOrNull()?.thumbnailUrl
+    }
 }

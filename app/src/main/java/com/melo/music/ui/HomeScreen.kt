@@ -482,6 +482,7 @@ internal fun HomeFeed(
     onSeaNext: () -> Unit,
     onSeaLike: () -> Unit,
     onRelatedTracks: suspend (TrackItem) -> List<TrackItem>,
+    onOpenArtist: (TrackItem) -> Unit = {},
     topInset: androidx.compose.ui.unit.Dp = 0.dp,
     bottomInset: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
@@ -507,6 +508,8 @@ internal fun HomeFeed(
     // Кэш полок живёт здесь (LazyColumn не уничтожается при скролле),
     // поэтому возврат к полке не перезапрашивает её.
     val shelfCache = remember { mutableStateMapOf<String, List<TrackItem>>() }
+    val subVersion = com.melo.music.artists.ArtistSubscriptionManager.version
+    val subscriptions = remember(subVersion) { com.melo.music.artists.ArtistSubscriptionManager.getAll() }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().bouncyOverscroll(),
@@ -533,6 +536,44 @@ internal fun HomeFeed(
                 onNext = onSeaNext,
                 onLike = onSeaLike,
             )
+        }
+
+        if (subscriptions.isNotEmpty()) {
+            item(key = "home_subs_title") { SectionTitle("Подписки") }
+            item(key = "home_subs_row") {
+                val subRowState = rememberLazyListState()
+                LazyRow(
+                    state = subRowState,
+                    modifier = Modifier.bouncyHorizontalOverscroll(),
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    items(subscriptions, key = { "home_sub_${it.url}" }) { artist ->
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .width(84.dp)
+                                .clickable { onOpenArtist(artist) },
+                        ) {
+                            Artwork(
+                                url = artist.thumbnailUrl,
+                                modifier = Modifier
+                                    .size(72.dp)
+                                    .clip(CircleShape),
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = artist.cleanTitle,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         if (history.isNotEmpty()) {

@@ -288,6 +288,7 @@ internal fun AccountTab(
     onOpenImport: () -> Unit,
     onOpenLogin: () -> Unit,
     refreshKey: Int,
+    onOpenArtist: (TrackItem) -> Unit = {},
     bottomInset: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
     val accountScope = rememberCoroutineScope()
@@ -476,11 +477,14 @@ internal fun AccountTab(
             }
         }
 
-        // Bento-сетка быстрой статистики (Любимое + Плейлисты)
+        // Bento-сетка быстрой статистики (Любимое + Подписки + Плейлисты)
         val favCount = remember(refreshKey) { com.melo.music.favorites.FavoritesManager.getAll().size }
+        val subVersion = com.melo.music.artists.ArtistSubscriptionManager.version
+        val subscriptions = remember(refreshKey, subVersion) { com.melo.music.artists.ArtistSubscriptionManager.getAll() }
+
         Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             // Карточка «Избранное»
             Surface(
@@ -489,24 +493,24 @@ internal fun AccountTab(
                 border = cardBorder,
                 modifier = Modifier.weight(1f),
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     Surface(
                         shape = CircleShape,
                         color = Color(0xFFE53935).copy(alpha = 0.2f),
-                        modifier = Modifier.size(38.dp),
+                        modifier = Modifier.size(36.dp),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 Icons.Rounded.Favorite,
                                 contentDescription = null,
                                 tint = Color(0xFFFF6E6E),
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(18.dp),
                             )
                         }
                     }
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        "$favCount треков",
+                        "$favCount",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = cs.onSurface,
@@ -515,6 +519,45 @@ internal fun AccountTab(
                         "В Избранном",
                         style = MaterialTheme.typography.bodySmall,
                         color = cs.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+            }
+
+            // Карточка «Подписки»
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = cardBg,
+                border = cardBorder,
+                modifier = Modifier.weight(1f),
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Surface(
+                        shape = CircleShape,
+                        color = cs.tertiaryContainer.copy(alpha = 0.6f),
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.AccountCircle,
+                                contentDescription = null,
+                                tint = cs.onTertiaryContainer,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "${subscriptions.size}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = cs.onSurface,
+                    )
+                    Text(
+                        "Подписки",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onSurfaceVariant,
+                        maxLines = 1,
                     )
                 }
             }
@@ -526,33 +569,87 @@ internal fun AccountTab(
                 border = cardBorder,
                 modifier = Modifier.weight(1f),
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     Surface(
                         shape = CircleShape,
                         color = cs.primaryContainer.copy(alpha = 0.6f),
-                        modifier = Modifier.size(38.dp),
+                        modifier = Modifier.size(36.dp),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 Icons.Rounded.LibraryMusic,
                                 contentDescription = null,
                                 tint = cs.onPrimaryContainer,
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(18.dp),
                             )
                         }
                     }
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        "${playlists.size} шт.",
+                        "${playlists.size}",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = cs.onSurface,
                     )
                     Text(
-                        "Мои плейлисты",
+                        "Плейлисты",
                         style = MaterialTheme.typography.bodySmall,
                         color = cs.onSurfaceVariant,
+                        maxLines = 1,
                     )
+                }
+            }
+        }
+
+        if (subscriptions.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    "Подписки на исполнителей",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 20.sp,
+                        letterSpacing = (-0.3).sp,
+                    ),
+                    fontWeight = FontWeight.Bold,
+                    color = cs.onSurface,
+                )
+                Text(
+                    "${subscriptions.size}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = cs.onSurfaceVariant,
+                )
+            }
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.padding(bottom = 18.dp),
+            ) {
+                items(subscriptions, key = { "acc_sub_${it.url}" }) { artist ->
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .width(84.dp)
+                            .clickable { onOpenArtist(artist) },
+                    ) {
+                        Artwork(
+                            url = artist.thumbnailUrl,
+                            modifier = Modifier
+                                .size(72.dp)
+                                .clip(CircleShape),
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = artist.cleanTitle,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                            color = cs.onSurface,
+                        )
+                    }
                 }
             }
         }

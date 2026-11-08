@@ -326,12 +326,30 @@ internal fun ArtistScreen(
     val popularUrls = remember(popular) { popular.map { it.url }.toSet() }
     val otherTracks = tracks.filter { it.url !in popularUrls }
 
-    val hiRes = remember(artist.thumbnailUrl) { upscaleThumb(artist.thumbnailUrl, 700) }
+    val context = LocalContext.current
+    var avatarUrl by remember(artist.url) { mutableStateOf(artist.thumbnailUrl) }
+
+    LaunchedEffect(artist.url, artist.title) {
+        if (artist.source == Source.SOUNDCLOUD) {
+            val resolved = withContext(Dispatchers.IO) {
+                com.melo.music.extractor.SoundCloudFix.resolveArtistAvatar(context, artist.title)
+            }
+            if (!resolved.isNullOrBlank()) {
+                avatarUrl = resolved
+            }
+        }
+    }
+
+    val subVersion = com.melo.music.artists.ArtistSubscriptionManager.version
+    val isSubscribed = remember(artist.url, artist.title, subVersion) {
+        com.melo.music.artists.ArtistSubscriptionManager.isSubscribed(artist)
+    }
+
+    val hiRes = remember(avatarUrl) { upscaleThumb(avatarUrl, 700) }
     val cs = MaterialTheme.colorScheme
     val isDark = cs.background.luminance() < 0.5f
     val white = if (isDark) Color.White else cs.onBackground
 
-    val context = LocalContext.current
     val fallback = MaterialTheme.colorScheme.primary
     var accent by remember(artist.url) { mutableStateOf(fallback) }
     LaunchedEffect(hiRes) {
@@ -368,7 +386,7 @@ internal fun ArtistScreen(
                         .height(390.dp),
                 ) {
                     Artwork(
-                        url = hiRes ?: artist.thumbnailUrl,
+                        url = hiRes ?: avatarUrl ?: artist.thumbnailUrl,
                         modifier = Modifier.fillMaxSize(),
                     )
                     Box(
@@ -460,7 +478,7 @@ internal fun ArtistScreen(
                         Spacer(Modifier.height(16.dp))
 
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Surface(
@@ -474,7 +492,7 @@ internal fun ArtistScreen(
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 22.dp),
+                                    modifier = Modifier.padding(horizontal = 20.dp),
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.PlayArrow,
@@ -507,6 +525,39 @@ internal fun ArtistScreen(
                                         contentDescription = "Перемешать",
                                         tint = white,
                                         modifier = Modifier.size(22.dp),
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(26.dp),
+                                color = if (isSubscribed) Color.White.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, if (isSubscribed) animatedAccent.copy(alpha = 0.7f) else Color.White.copy(alpha = 0.18f)),
+                                modifier = Modifier
+                                    .height(52.dp)
+                                    .clip(RoundedCornerShape(26.dp))
+                                    .clickable {
+                                        ClickFeedback.play()
+                                        val currentItem = artist.copy(thumbnailUrl = avatarUrl ?: artist.thumbnailUrl)
+                                        com.melo.music.artists.ArtistSubscriptionManager.toggle(currentItem)
+                                    },
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSubscribed) Icons.Rounded.Check else Icons.Rounded.Add,
+                                        contentDescription = null,
+                                        tint = if (isSubscribed) animatedAccent else white,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isSubscribed) "В подписках" else "Подписаться",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = white,
                                     )
                                 }
                             }

@@ -204,11 +204,8 @@ object SoundCloudResolver {
         val rawArtwork = trackJson.optString("artwork_url").takeIf { it.isNotBlank() }
             ?: userObj?.optString("avatar_url")?.takeIf { it.isNotBlank() }
         val artwork = rawArtwork?.let {
-            if (it.contains("/avatars-")) {
-                it.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t300x300.$1")
-            } else {
-                it.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t500x500.$1")
-            }
+            if (it.contains("default_avatar")) it
+            else it.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t500x500.$1")
         }
 
         val title = if (artist != null && !rawTitle.contains(artist, ignoreCase = true)) {

@@ -245,14 +245,16 @@ object NewPipeResolver {
         launch(Dispatchers.IO) {
             val scItems = runCatching {
                 SoundCloudFix.ensure(context)
-                try {
+                val tracks = try {
                     searchService(ServiceList.SoundCloud, query, Source.SOUNDCLOUD, listOf("tracks"))
                 } catch (e: Exception) {
                     SoundCloudFix.invalidate(context)
                     SoundCloudFix.ensure(context)
                     searchService(ServiceList.SoundCloud, query, Source.SOUNDCLOUD, listOf("tracks"))
                 }
-            }.getOrDefault(emptyList()).take(10)
+                val artists = SoundCloudFix.searchUsers(context, query, limit = 3)
+                artists + tracks
+            }.getOrDefault(emptyList()).take(15)
 
             if (scItems.isNotEmpty()) {
                 mutex.withLock {
@@ -769,9 +771,15 @@ object NewPipeResolver {
             service.searchQHFactory.fromQuery(query)
         }
         val info = SearchInfo.getInfo(service, handler)
-        return info.relatedItems
-            .filterIsInstance<StreamInfoItem>()
-            .map { it.toTrackItem(source) }
+        val items = mutableListOf<TrackItem>()
+        for (item in info.relatedItems) {
+            when (item) {
+                is StreamInfoItem -> items.add(item.toTrackItem(source))
+                is ChannelInfoItem -> items.add(item.toArtistItem(source))
+                is PlaylistInfoItem -> items.add(item.toAlbumItem(source))
+            }
+        }
+        return items
     }
 
     /**
@@ -819,11 +827,8 @@ object NewPipeResolver {
     private fun fixThumb(url: String?, source: Source): String? {
         if (url == null) return null
         if (source == Source.SOUNDCLOUD || url.contains("sndcdn.com") || url.contains("soundcloud.com")) {
-            return if (url.contains("/avatars-")) {
-                url.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t300x300.$1")
-            } else {
-                url.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t500x500.$1")
-            }
+            if (url.contains("default_avatar")) return url
+            return url.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t500x500.$1")
         }
         return url
     }

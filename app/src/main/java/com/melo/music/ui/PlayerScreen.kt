@@ -1184,6 +1184,7 @@ fun PlayerScreen(
                             },
                             onSeaLike = { if (seaActive) nowPlaying?.let { toggleLike(it) } },
                             onRelatedTracks = onRelatedTracks,
+                            onOpenArtist = { artistOpen = it },
                             topInset = searchInset,
                             bottomInset = playerInset,
                         )
@@ -1278,6 +1279,7 @@ fun PlayerScreen(
                     onOpenImport = { importOpen = true },
                     onOpenLogin = { authDismissible = true; authVisible = true },
                     refreshKey = libraryVersion,
+                    onOpenArtist = { artistOpen = it },
                     bottomInset = playerInset,
                 )
             }

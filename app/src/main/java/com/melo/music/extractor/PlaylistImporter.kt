@@ -242,11 +242,8 @@ object PlaylistImporter {
         durationSeconds = optLong("duration", 0L) / 1000,
         thumbnailUrl = (optString("artwork_url", "").ifBlank { optJSONObject("user")?.optString("avatar_url", "") ?: "" }).ifBlank { null }
             ?.let {
-                if (it.contains("/avatars-")) {
-                    it.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t300x300.$1")
-                } else {
-                    it.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t500x500.$1")
-                }
+                if (it.contains("default_avatar")) it
+                else it.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t500x500.$1")
             },
         source = Source.SOUNDCLOUD,
         kind = ItemKind.TRACK,
@@ -315,11 +312,8 @@ object PlaylistImporter {
                     permalink = t.optString("permalink_url", "").ifBlank { null },
                     artwork = (t.optString("artwork_url", "").ifBlank { t.optJSONObject("user")?.optString("avatar_url", "") ?: "" }).ifBlank { null }
                         ?.let {
-                            if (it.contains("/avatars-")) {
-                                it.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t300x300.$1")
-                            } else {
-                                it.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t500x500.$1")
-                            }
+                            if (it.contains("default_avatar")) it
+                            else it.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t500x500.$1")
                         },
                 ),
             )

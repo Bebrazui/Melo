@@ -552,11 +552,8 @@ internal fun karaokeLine(
 fun upscaleThumb(url: String?, size: Int = 600): String? {
     if (url == null) return null
     if (url.contains("sndcdn.com") || url.contains("soundcloud.com")) {
-        return if (url.contains("/avatars-")) {
-            url.replace(Regex("-(?:large|badge|small|mini|t500x500|t300x300)\\.(jpg|jpeg|png)"), "-t300x300.$1")
-        } else {
-            url.replace(Regex("-(?:large|badge|small|mini|t300x300)\\.(jpg|jpeg|png)"), "-t500x500.$1")
-        }
+        if (url.contains("default_avatar")) return url
+        return url.replace(Regex("-(?:large|badge|small|mini)\\.(jpg|jpeg|png)"), "-t500x500.$1")
     }
     val cut = url.indexOf('=')
     return if (cut > 0) url.substring(0, cut) + "=w$size-h$size-l90-rj" else url
