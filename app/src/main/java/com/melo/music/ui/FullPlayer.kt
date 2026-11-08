@@ -669,6 +669,7 @@ internal fun FullPlayer(
             shape: Shape = RoundedCornerShape(32.dp),
             border: BorderStroke? = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f)),
             elevation: Dp = 12.dp,
+            forceStaticArt: Boolean = false,
         ) {
             if (showVideo && videoUrl != null) {
                 Surface(
@@ -717,6 +718,30 @@ internal fun FullPlayer(
                             }
                         }
                     }
+                }
+            } else if (forceStaticArt) {
+                Surface(
+                    shape = shape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = border,
+                    shadowElevation = elevation,
+                    modifier = boxModifier.clip(shape),
+                ) {
+                    val context = LocalContext.current
+                    val request = remember(hiRes) {
+                        coil.request.ImageRequest.Builder(context)
+                            .data(hiRes)
+                            .memoryCacheKey(hiRes)
+                            .diskCacheKey(hiRes)
+                            .crossfade(false)
+                            .build()
+                    }
+                    AsyncImage(
+                        model = request,
+                        contentDescription = null,
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             } else {
                 androidx.compose.animation.AnimatedContent(
@@ -829,12 +854,12 @@ internal fun FullPlayer(
 
         val miniArtSizePx = with(localDensity) { 52.dp.toPx() }
         val miniArtX = with(localDensity) { 13.dp.toPx() }
-        val miniArtY = with(localDensity) { 10.dp.toPx() }
+        val miniArtY = with(localDensity) { 11.dp.toPx() }
 
         val artSizePx = androidx.compose.ui.util.lerp(fullArtSize, miniArtSizePx, p)
         val artX = androidx.compose.ui.util.lerp(fullArtX, miniArtX, p)
         val artY = androidx.compose.ui.util.lerp(fullArtY, miniArtY, p)
-        val artCorner = androidx.compose.ui.unit.lerp(32.dp, 16.dp, (p / 0.65f).coerceIn(0f, 1f))
+        val artCorner = androidx.compose.ui.unit.lerp(32.dp, 26.dp, p)
 
         // Мягкое затемнение фона под выдвигающейся карточкой
         val scrimAlpha = (1f - p).coerceIn(0f, 1f) * 0.55f
@@ -851,18 +876,22 @@ internal fun FullPlayer(
             } else {
                 if (fullIsDark) Color(0xEB13110E) else fullCs.surfaceContainerHigh.copy(alpha = 0.95f)
             }
+
+            val targetBorderColor = if (fullIsDark) {
+                lerp(Color(0x33FFFFFF), artColor, 0.35f)
+            } else {
+                lerp(fullCs.outlineVariant.copy(alpha = 0.45f), artColor, 0.35f)
+            }
+            val borderAlpha = (p / 0.30f).coerceIn(0f, 1f)
+            val collapseBorder = if (borderAlpha > 0.01f) {
+                BorderStroke(1.2.dp, targetBorderColor.copy(alpha = borderAlpha))
+            } else null
+
             Surface(
                 shape = RoundedCornerShape(currentCorner),
                 color = collapseBg,
                 shadowElevation = if (isSolid) 0.dp else currentElevation,
-                border = if (!isSolid && p > 0.05f) BorderStroke(
-                    1.2.dp,
-                    if (fullIsDark) {
-                        lerp(Color(0x33FFFFFF), artColor, 0.45f).copy(alpha = ((p - 0.05f) / 0.95f).coerceIn(0f, 1f))
-                    } else {
-                        lerp(fullCs.outlineVariant.copy(alpha = 0.45f), artColor, 0.45f).copy(alpha = ((p - 0.05f) / 0.95f).coerceIn(0f, 1f))
-                    }
-                ) else null,
+                border = collapseBorder,
                 modifier = Modifier
                     .offset { IntOffset(currentX.roundToInt(), currentY.roundToInt()) }
                     .size(
@@ -1877,11 +1906,34 @@ internal fun FullPlayer(
 
         // 2. Морфирующаяся независимая обложка трека (shared element)
         if (!isWide && !showLyrics) {
-            val morphProgress = ((p - 0.45f) / 0.35f).coerceIn(0f, 1f)
-            val artAlphaA = 1f - morphProgress
-            val artAlphaB = morphProgress
+            val morphProgress = ((p - 0.25f) / 0.70f).coerceIn(0f, 1f)
+            val currentShape = when {
+                isVinylMode -> {
+                    if (morphProgress > 0.05f) {
+                        ScallopedShape(petals = 10, depth = 0.12f * ((morphProgress - 0.05f) / 0.95f))
+                    } else {
+                        CircleShape
+                    }
+                }
+                morphProgress > 0.20f -> {
+                    val scallopedDepth = 0.12f * ((morphProgress - 0.20f) / 0.80f)
+                    ScallopedShape(petals = 10, depth = scallopedDepth)
+                }
+                else -> {
+                    RoundedCornerShape(artCorner)
+                }
+            }
 
             val artElevation = androidx.compose.ui.unit.lerp(12.dp, 3.dp, p)
+            val currentArtBorder = BorderStroke(
+                width = androidx.compose.ui.unit.lerp(1.5.dp, 1.8.dp, p),
+                color = lerp(
+                    Color.White.copy(alpha = 0.12f * (1f - (p / 0.65f).coerceIn(0f, 1f))),
+                    artColor,
+                    morphProgress,
+                ),
+            )
+
             Box(
                 modifier = Modifier
                     .offset {
@@ -1890,41 +1942,13 @@ internal fun FullPlayer(
                     }
                     .size(with(localDensity) { artSizePx.toDp() }),
             ) {
-                // Слой A: полноразмерная обложка (скругленный квадрат или виниловая пластинка)
-                if (artAlphaA > 0.01f) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer { alpha = artAlphaA },
-                    ) {
-                        RenderArtwork(
-                            boxModifier = Modifier.fillMaxSize(),
-                            shape = if (isVinylMode) CircleShape else RoundedCornerShape(artCorner),
-                            border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.12f * (1f - (p / 0.65f).coerceIn(0f, 1f)))),
-                            elevation = artElevation,
-                        )
-                    }
-                }
-
-                // Слой B: мини-обложка (печенье scallopedArt с рамкой)
-                if (artAlphaB > 0.01f) {
-                    Surface(
-                        shape = scallopedArt,
-                        color = if (fullIsDark) Color(0xFF1E1A16) else fullCs.surfaceContainerHighest,
-                        border = BorderStroke(1.8.dp, lerp(fullCs.outlineVariant.copy(alpha = 0.2f), artColor, morphProgress)),
-                        shadowElevation = artElevation,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer { alpha = artAlphaB },
-                    ) {
-                        Artwork(
-                            url = item.thumbnailUrl,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(scallopedArt),
-                        )
-                    }
-                }
+                RenderArtwork(
+                    boxModifier = Modifier.fillMaxSize(),
+                    shape = currentShape,
+                    border = currentArtBorder,
+                    elevation = artElevation,
+                    forceStaticArt = isVinylMode && p > 0.35f,
+                )
             }
         }
 
@@ -1956,7 +1980,7 @@ internal fun FullPlayer(
                     onPrev = onPrev,
                     onNext = onNext,
                     onClick = {},
-                    showArtwork = showLyrics,
+                    showArtwork = showLyrics || p > 0.96f,
                 )
             }
         }

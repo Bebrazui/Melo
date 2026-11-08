@@ -734,9 +734,7 @@ internal fun NowPlayingBar(
     } else {
         if (isDark) Color(0xEB13110E) else cs.surfaceContainerHigh.copy(alpha = 0.95f)
     }
-    val miniBarBorder = if (isSolid) {
-        null
-    } else if (isDark) {
+    val miniBarBorder = if (isDark) {
         BorderStroke(1.2.dp, lerp(Color(0x33FFFFFF), animatedTrackColor, androidx.compose.ui.util.lerp(0.18f, 0.45f, playIntensity)))
     } else {
         BorderStroke(1.2.dp, lerp(cs.outlineVariant.copy(alpha = 0.45f), animatedTrackColor, androidx.compose.ui.util.lerp(0.20f, 0.50f, playIntensity)))

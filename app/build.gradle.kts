@@ -21,8 +21,8 @@ android {
         applicationId = "com.melo.music"
         minSdk = 26
         targetSdk = 34
-        versionCode = 15
-        versionName = "0.5.7-beta"
+        versionCode = 16
+        versionName = "0.5.8-beta"
 
         vectorDrawables {
             useSupportLibrary = true
