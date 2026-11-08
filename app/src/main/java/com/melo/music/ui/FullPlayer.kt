@@ -324,6 +324,7 @@ internal fun FullPlayer(
     copyrightBlocked: Boolean = false,
     onFindSimilar: () -> Unit = {},
     onDismissCopyright: () -> Unit = {},
+    externalSwitchDirection: Int = 1,
 ) {
     val playerContext = androidx.compose.ui.platform.LocalContext.current
     var showVideo by remember(item.url) { mutableStateOf(false) }
@@ -568,7 +569,7 @@ internal fun FullPlayer(
     val swipeX = remember { Animatable(0f) }
     // 0 = ось ещё не выбрана, 1 = вертикаль, 2 = горизонталь.
     var axis by remember { mutableIntStateOf(0) }
-    var trackSwitchDirection by remember { mutableIntStateOf(1) }
+    var trackSwitchDirection by remember(item.url) { mutableIntStateOf(externalSwitchDirection) }
 
     var speedWasOpenAtDragStart by remember { mutableStateOf(false) }
 

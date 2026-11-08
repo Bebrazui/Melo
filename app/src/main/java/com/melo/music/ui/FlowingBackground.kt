@@ -150,8 +150,15 @@ fun FlowingBackground(
     )
 
     Box(modifier = modifier.fillMaxSize()) {
+        val imageModel = remember(thumbnailUrl) {
+            coil.request.ImageRequest.Builder(context)
+                .data(thumbnailUrl)
+                .crossfade(true)
+                .crossfade(600)
+                .build()
+        }
         AsyncImage(
-            model = thumbnailUrl,
+            model = imageModel,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier

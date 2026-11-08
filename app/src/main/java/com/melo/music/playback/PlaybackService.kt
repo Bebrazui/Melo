@@ -470,6 +470,54 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    private var standbyPreparedUrl: String? = null
+
+    /**
+     * Прогревает standby-плеер за 10-12 секунд до конца трека, чтобы
+     * соединение было свежим, буфер полным, а старт кроссфейда мгновенным.
+     */
+    private fun prepareStandbyIfReady() {
+        val url = nextUrl ?: return
+        if (standbyPreparedUrl == url && standby.playbackState != Player.STATE_IDLE) return
+        val title = nextTitle
+        val artwork = nextArtwork
+        val artist = nextArtist
+        val speed = nextSpeed
+        val toP = standby
+
+        val cleanA = artist?.let { com.melo.music.extractor.cleanArtistName(it) }
+            ?: (title?.let { com.melo.music.extractor.cleanArtistName(null, it) })
+            ?: ""
+        val cleanT = title?.let { com.melo.music.extractor.cleanTrackTitle(it, cleanA) } ?: ""
+        val meta = MediaMetadata.Builder()
+            .setTitle(cleanT)
+            .setDisplayTitle(cleanT)
+            .setArtist(cleanA)
+            .setAlbumArtist(cleanA)
+            .setSubtitle(cleanA)
+        artwork?.let { meta.setArtworkUri(android.net.Uri.parse(it)) }
+        val isHls = com.melo.music.extractor.isHlsUrl(url)
+        toP.stop()
+        toP.clearMediaItems()
+        toP.setMediaItem(
+            MediaItem.Builder()
+                .setUri(url)
+                .apply {
+                    if (isHls) {
+                        setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
+                    }
+                }
+                .setMediaMetadata(meta.build())
+                .build(),
+        )
+        toP.playbackParameters = androidx.media3.common.PlaybackParameters(speed, speed)
+        toP.volume = 0f
+        toP.playWhenReady = false
+        toP.prepare()
+        standbyPreparedUrl = url
+        com.melo.music.util.FileLog.d("MeloFade", "Standby pre-buffered: $cleanT")
+    }
+
     /** Каждые 200мс проверяем, не пора ли начинать кроссфейд. */
     private val crossfadeTick = object : Runnable {
         override fun run() {
@@ -495,11 +543,14 @@ class PlaybackService : MediaSessionService() {
                     sleepEndAt == 0L &&
                     nextUrl != null &&
                     p.isPlaying &&
-                    dur > 0 &&
-                    dur - pos <= crossfadeMs &&
-                    dur - pos > 0
+                    dur > 0
                 ) {
-                    startCrossfade()
+                    val remainMs = dur - pos
+                    if (remainMs <= crossfadeMs + 10_000L && remainMs > crossfadeMs) {
+                        prepareStandbyIfReady()
+                    } else if (remainMs <= crossfadeMs && remainMs > 0) {
+                        startCrossfade()
+                    }
                 }
             } catch (_: Exception) {
             }
@@ -515,41 +566,44 @@ class PlaybackService : MediaSessionService() {
         val advanceIndex = nextIndexPending
         val speed = nextSpeed
         crossfading = true
-        clearNext()
+        nextUrl = null
 
         val fromP = active
         val toP = standby
 
-        val cleanA = artist?.let { com.melo.music.extractor.cleanArtistName(it) }
-            ?: (title?.let { com.melo.music.extractor.cleanArtistName(null, it) })
-            ?: ""
-        val cleanT = title?.let { com.melo.music.extractor.cleanTrackTitle(it, cleanA) } ?: ""
-        val meta = MediaMetadata.Builder()
-            .setTitle(cleanT)
-            .setDisplayTitle(cleanT)
-            .setArtist(cleanA)
-            .setAlbumArtist(cleanA)
-            .setSubtitle(cleanA)
-        artwork?.let { meta.setArtworkUri(android.net.Uri.parse(it)) }
-        currentAudioStreamUrl = url
-        val isHls = com.melo.music.extractor.isHlsUrl(url)
-        toP.setMediaItem(
-            MediaItem.Builder()
-                .setUri(url)
-                .apply {
-                    if (isHls) {
-                        setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
+        if (standbyPreparedUrl != url || toP.playbackState == Player.STATE_IDLE) {
+            val cleanA = artist?.let { com.melo.music.extractor.cleanArtistName(it) }
+                ?: (title?.let { com.melo.music.extractor.cleanArtistName(null, it) })
+                ?: ""
+            val cleanT = title?.let { com.melo.music.extractor.cleanTrackTitle(it, cleanA) } ?: ""
+            val meta = MediaMetadata.Builder()
+                .setTitle(cleanT)
+                .setDisplayTitle(cleanT)
+                .setArtist(cleanA)
+                .setAlbumArtist(cleanA)
+                .setSubtitle(cleanA)
+            artwork?.let { meta.setArtworkUri(android.net.Uri.parse(it)) }
+            val isHls = com.melo.music.extractor.isHlsUrl(url)
+            toP.stop()
+            toP.clearMediaItems()
+            toP.setMediaItem(
+                MediaItem.Builder()
+                    .setUri(url)
+                    .apply {
+                        if (isHls) {
+                            setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
+                        }
                     }
-                }
-                .setMediaMetadata(meta.build())
-                .build(),
-        )
-        // Скорость/тон следующего трека применяем на уровне сервиса — работает и в фоне.
-        toP.playbackParameters = androidx.media3.common.PlaybackParameters(speed, speed)
-        playbackSpeed = speed
+                    .setMediaMetadata(meta.build())
+                    .build(),
+            )
+            toP.playbackParameters = androidx.media3.common.PlaybackParameters(speed, speed)
+            toP.prepare()
+        }
+
+        currentAudioStreamUrl = url
         toP.volume = 0f
-        toP.prepare()
-        toP.play()
+        toP.playWhenReady = true
 
         // Переключаем сессию/UI на новый трек СРАЗУ (меняется заранее, во время наложения).
         usingA = !usingA
@@ -566,32 +620,63 @@ class PlaybackService : MediaSessionService() {
             onCrossfadeAdvance?.invoke(advanceIndex)
         }
 
-        // Плавно гасим старый, проявляем новый.
-        val duration = crossfadeMs.toLong()
-        val start = System.currentTimeMillis()
-        val fade = object : Runnable {
-            override fun run() {
-                val elapsed = System.currentTimeMillis() - start
-                val frac = (elapsed.toFloat() / duration).coerceIn(0f, 1f)
-                fromP.volume = 1f - frac
-                toP.volume = frac
-                if (frac < 1f && crossfading) {
-                    handler.postDelayed(this, 60)
-                } else {
-                    fromP.stop()
-                    fromP.clearMediaItems()
-                    fromP.volume = 1f
-                    toP.volume = 1f
-                    crossfading = false
+        fun runFade() {
+            val duration = crossfadeMs.toLong().coerceAtLeast(600L)
+            val start = System.currentTimeMillis()
+            val fade = object : Runnable {
+                override fun run() {
+                    val elapsed = System.currentTimeMillis() - start
+                    val frac = (elapsed.toFloat() / duration).coerceIn(0f, 1f)
+                    // Равномощный синусный кроссфейд: сумма энергий 1.0 без провала громкости в центре
+                    val rad = frac * (Math.PI.toFloat() / 2f)
+                    fromP.volume = kotlin.math.cos(rad)
+                    toP.volume = kotlin.math.sin(rad)
+                    if (frac < 1f && crossfading) {
+                        handler.postDelayed(this, 35)
+                    } else {
+                        fromP.stop()
+                        fromP.clearMediaItems()
+                        fromP.volume = 1f
+                        toP.volume = 1f
+                        crossfading = false
+                        standbyPreparedUrl = null
+                        com.melo.music.util.FileLog.d("MeloFade", "Crossfade done -> idx=$advanceIndex")
+                    }
                 }
             }
+            handler.post(fade)
         }
-        handler.post(fade)
+
+        if (toP.playbackState == Player.STATE_READY) {
+            runFade()
+        } else {
+            // Если standby ещё догружается — НЕ гасим fromP в тишину! Держим звук до готовности toP.
+            val readyListener = object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_READY) {
+                        toP.removeListener(this)
+                        if (crossfading) runFade()
+                    }
+                }
+            }
+            toP.addListener(readyListener)
+            handler.postDelayed({
+                toP.removeListener(readyListener)
+                if (crossfading) runFade()
+            }, 3000L)
+        }
     }
 
     /** Прерывает кроссфейд (ручное переключение трека). */
     private fun abortCrossfade() {
-        if (!crossfading) return
+        standbyPreparedUrl = null
+        if (!crossfading) {
+            standby.stop()
+            standby.clearMediaItems()
+            standby.volume = 1f
+            clearNext()
+            return
+        }
         crossfading = false
         standby.stop()
         standby.clearMediaItems()

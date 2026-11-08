@@ -407,6 +407,7 @@ fun PlayerScreen(
     var copyrightBlockedTrack by remember { mutableStateOf<TrackItem?>(null) }
     var resolvingUrl by rememberSaveable { mutableStateOf<String?>(null) }
     var trackStartTime by remember { mutableLongStateOf(0L) }
+    var trackSwitchDirection by remember { mutableIntStateOf(1) }
 
     // Очередь воспроизведения (управляется в UI) + режимы.
     var playingList by rememberSaveable(stateSaver = TrackSaver.listOfSaver()) { mutableStateOf<List<TrackItem>>(emptyList()) }
@@ -732,12 +733,21 @@ fun PlayerScreen(
         scope.launch {
             val nextItem = list.getOrNull(nextIdx) ?: return@launch
             val nextQuery = listOfNotNull(nextItem.title, nextItem.uploader).joinToString(" ").takeIf { it.isNotBlank() }
-            val resolved = runCatching { onResolveAudioUrl(nextItem.url, nextQuery, nextItem.title, nextItem.uploader) }.getOrNull()
+            var resolved = runCatching { onResolveAudioUrl(nextItem.url, nextQuery, nextItem.title, nextItem.uploader) }.getOrNull()
+            if (resolved == null && playingIndex == fromIndex) {
+                kotlinx.coroutines.delay(1200)
+                if (playingIndex == fromIndex) {
+                    resolved = runCatching { onResolveAudioUrl(nextItem.url, nextQuery, nextItem.title, nextItem.uploader) }.getOrNull()
+                }
+            }
             // Проверяем, что очередь/индекс не сменились, пока резолвили.
             if (resolved != null && playingIndex == fromIndex) {
                 com.melo.music.playback.PlaybackService.setNext(
                     resolved.audioUrl, nextItem.title, nextIdx, nextItem.speed, nextItem.thumbnailUrl, nextItem.uploader,
                 )
+                com.melo.music.util.FileLog.d("MeloFade", "Next resolved OK: [idx=$nextIdx] ${nextItem.title}")
+            } else if (resolved == null) {
+                com.melo.music.util.FileLog.w("MeloFade", "Next resolve failed: [idx=$nextIdx] ${nextItem.title} (${nextItem.url})")
             }
         }
     }
@@ -755,6 +765,9 @@ fun PlayerScreen(
         ) {
             playerProvider()?.let { if (it.isPlaying) it.pause() else it.play() }
             return
+        }
+        if (index != playingIndex && playingIndex != -1) {
+            trackSwitchDirection = if (index >= playingIndex) 1 else -1
         }
         // Ручное переключение — отменяем активный кроссфейд и заготовку.
         com.melo.music.playback.PlaybackService.cancelCrossfade()
@@ -830,11 +843,13 @@ fun PlayerScreen(
     }
     fun playNext() {
         if (playingList.isEmpty()) return
+        trackSwitchDirection = 1
         val next = if (shuffle) pickNextShuffleIndex(playingList.size, playingIndex) else (playingIndex + 1) % playingList.size
         playAt(playingList, next, keepSea = seaActive)
     }
     fun playPrev() {
         if (playingList.isEmpty()) return
+        trackSwitchDirection = -1
         val prev = if (playingIndex <= 0) playingList.lastIndex else playingIndex - 1
         playAt(playingList, prev, keepSea = seaActive)
     }
@@ -940,6 +955,7 @@ fun PlayerScreen(
             if (repeatOne) {
                 controller?.let { it.seekTo(0); it.play() }
             } else {
+                trackSwitchDirection = 1
                 playNext()
             }
         }
@@ -949,6 +965,7 @@ fun PlayerScreen(
     LaunchedEffect(playingList, repeatOne, shuffle) {
         crossfadeAdvanceRef.value = ref@{ idx ->
             val item = playingList.getOrNull(idx) ?: return@ref
+            trackSwitchDirection = 1
             playingIndex = idx
             nowPlaying = item
             com.melo.music.playback.PlaybackService.setQueue(playingList, idx)
@@ -969,11 +986,7 @@ fun PlayerScreen(
             crossfadeAdvanceRef.value?.invoke(idx)
         }
         onDispose {
-            com.melo.music.playback.PlaybackService.onTrackEnded = null
-            com.melo.music.playback.PlaybackService.onSkipNext = null
-            com.melo.music.playback.PlaybackService.onSkipPrev = null
-            com.melo.music.playback.PlaybackService.onToggleFavorite = null
-            com.melo.music.playback.PlaybackService.onCrossfadeAdvance = null
+            // Сохраняем колбэки в сервисе активными для фонового воспроизведения и управления с гарнитуры
         }
     }
 
@@ -1478,6 +1491,7 @@ fun PlayerScreen(
                     onDismissCopyright = {
                         copyrightBlockedTrack = null
                     },
+                    externalSwitchDirection = trackSwitchDirection,
                 )
             }
         }

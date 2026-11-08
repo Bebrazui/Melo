@@ -454,36 +454,48 @@ internal fun NowPlayingBarInner(
             Spacer(Modifier.width(12.dp))
 
             // Название трека и автор
-            Column(
+            androidx.compose.animation.AnimatedContent(
+                targetState = Pair(item.cleanTitle, item.cleanUploader ?: "Неизвестный исполнитель"),
+                transitionSpec = {
+                    (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(240)) +
+                        androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(280)) { h -> (h * 0.35f).toInt() })
+                        .togetherWith(
+                            androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180)) +
+                                androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.tween(220)) { h -> (-h * 0.35f).toInt() }
+                        )
+                },
+                label = "miniPlayerTextTransition",
                 modifier = Modifier
                     .weight(1f)
                     .padding(end = 6.dp),
-            ) {
-                Text(
-                    text = item.cleanTitle,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 17.sp,
-                        letterSpacing = (-0.2).sp,
-                    ),
-                    fontWeight = FontWeight.Bold,
-                    color = if (isDark) Color.White else cs.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(1.dp))
-                Text(
-                    text = item.cleanUploader ?: "Неизвестный исполнитель",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 13.sp,
-                    ),
-                    color = if (isDark) {
-                        lerp(Color.White.copy(alpha = 0.7f), animatedTrackColor, 0.35f)
-                    } else {
-                        lerp(cs.onSurfaceVariant, animatedTrackColor, 0.35f)
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            ) { (titleText, artistText) ->
+                Column {
+                    Text(
+                        text = titleText,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 17.sp,
+                            letterSpacing = (-0.2).sp,
+                        ),
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDark) Color.White else cs.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(1.dp))
+                    Text(
+                        text = artistText,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 13.sp,
+                        ),
+                        color = if (isDark) {
+                            lerp(Color.White.copy(alpha = 0.7f), animatedTrackColor, 0.35f)
+                        } else {
+                            lerp(cs.onSurfaceVariant, animatedTrackColor, 0.35f)
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
 
