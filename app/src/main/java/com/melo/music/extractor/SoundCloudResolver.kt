@@ -103,7 +103,7 @@ object SoundCloudResolver {
                 }
                 is FetchTrackResult.NetworkError -> {
                     FileLog.w(TAG, "SoundCloud resolve network error (attempt $attempt): ${r.message}")
-                    Thread.sleep(250)
+                    kotlinx.coroutines.delay(250)
                 }
             }
         }
