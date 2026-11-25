@@ -24,8 +24,12 @@ object OfflineManager {
     private const val MELO_DIR = "Melo"
 
     private var prefs: SharedPreferences? = null
+    private var appContext: Context? = null
     // url -> (localUri, title)
     private val map = HashMap<String, Pair<String, String>>()
+
+    /** URI уже проверенных «хороших» файлов (кэш проб контейнера). */
+    private val probed: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     /** Версия для реактивности Compose: меняется при скачивании/удалении. */
     var version by mutableIntStateOf(0)
@@ -33,6 +37,7 @@ object OfflineManager {
 
     fun init(context: Context) {
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        appContext = context.applicationContext
         load()
     }
 
@@ -69,6 +74,47 @@ object OfflineManager {
         }
     }.getOrDefault(false)
 
+    /**
+     * Файл читаем И содержит нормальный аудио-контейнер (MP3/MP4/WebM/OGG/WAV).
+     * Файл с расширением .mp3, внутри которого лежит fMP4-фрагмент или WebM с
+     * ID3-префиксом, Media3 не читает — такие файлы раньше «залипали» на 3003.
+     */
+    fun isPlayableLocal(context: Context, uriStr: String): Boolean {
+        if (probed.contains(uriStr)) return true
+        val ok = runCatching {
+            if (!isUriReadable(context, uriStr)) return@runCatching false
+            AudioContainer.probeUri(context, uriStr) != AudioFormat.UNKNOWN
+        }.getOrDefault(false)
+        if (ok) probed.add(uriStr)
+        return ok
+    }
+
+    /** Удаляет локальный файл (content:// через MediaStore или file:// напрямую). */
+    fun deleteLocal(context: Context, uriStr: String) {
+        runCatching {
+            val uri = Uri.parse(uriStr)
+            if (uri.scheme == "file") {
+                uri.path?.let { File(it).delete() }
+            } else {
+                context.contentResolver.delete(uri, null, null)
+            }
+        }
+        probed.remove(uriStr)
+    }
+
+    /**
+     * Если офлайн-запись трека битая (файл удалён или контейнер нечитаемый) —
+     * вычищаем её, чтобы трек не залипал на ошибке и ушёл в сеть.
+     */
+    fun invalidateBroken(url: String) {
+        val ctx = appContext ?: return
+        val uriStr = map[url]?.first ?: return
+        if (isPlayableLocal(ctx, uriStr)) return
+        com.melo.music.util.FileLog.w("MeloOffline", "Removing broken offline file for $url -> $uriStr")
+        deleteLocal(ctx, uriStr)
+        remove(url)
+    }
+
     fun findUriInMusic(context: Context, filename: String): String? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
@@ -98,8 +144,9 @@ object OfflineManager {
 
     /**
      * Возвращает локальный URI скачанного трека:
-     * 1) Из сохранённого кэша map[url] (проверив читаемость).
+     * 1) Из сохранённого кэша map[url] (проверив читаемость и контейнер).
      * 2) Поиском существующего файла в Music/Melo по имени трека/артиста.
+     * Битые файлы (нечитаемый/неверный контейнер) удаляются, чтобы не ловить 3003 по кругу.
      */
     @Synchronized
     fun getOrFindLocalUri(
@@ -111,7 +158,12 @@ object OfflineManager {
     ): String? {
         // 1. Проверяем сохраненный в map URL
         map[url]?.first?.let { uriStr ->
-            if (isUriReadable(context, uriStr)) return uriStr
+            if (isUriReadable(context, uriStr)) {
+                if (isPlayableLocal(context, uriStr)) return uriStr
+                // Файл есть, но это нечитаемый контейнер — вычищаем.
+                com.melo.music.util.FileLog.w("MeloOffline", "Broken local container, deleting: $uriStr")
+                deleteLocal(context, uriStr)
+            }
             // URI устарел или файл удален — чистим
             map.remove(url)
             save()
@@ -122,26 +174,30 @@ object OfflineManager {
         val cleanTitle = title?.takeIf { it.isNotBlank() }?.let { sanitizeFilename(it) }
         val cleanUploader = uploader?.takeIf { it.isNotBlank() }?.let { sanitizeFilename(it) }
 
+        val extensions = listOf("mp3", "m4a", "webm", "ogg")
         if (cleanTitle != null) {
             if (cleanUploader != null) {
-                candidates.add("$cleanUploader - $cleanTitle.mp3")
+                extensions.forEach { ext -> candidates.add("$cleanUploader - $cleanTitle.$ext") }
             }
-            candidates.add("$cleanTitle.mp3")
+            extensions.forEach { ext -> candidates.add("$cleanTitle.$ext") }
         }
 
         if (fallbackQuery != null && fallbackQuery.isNotBlank()) {
             val cleanQuery = sanitizeFilename(fallbackQuery)
-            candidates.add("$cleanQuery.mp3")
+            extensions.forEach { ext -> candidates.add("$cleanQuery.$ext") }
         }
 
         // 3. Ищем среди файлов на диске
         for (cand in candidates) {
-            val foundUri = findUriInMusic(context, cand)
-            if (foundUri != null && isUriReadable(context, foundUri)) {
+            val foundUri = findUriInMusic(context, cand) ?: continue
+            if (isPlayableLocal(context, foundUri)) {
                 val label = listOfNotNull(cleanUploader, cleanTitle).joinToString(" — ").ifBlank { url }
                 add(url, foundUri, label)
                 return foundUri
             }
+            // Найденный файл — мусор (например, fMP4-склейка под видом .mp3). Удаляем.
+            com.melo.music.util.FileLog.w("MeloOffline", "Broken local file removed by name: $cand")
+            deleteLocal(context, foundUri)
         }
 
         return null

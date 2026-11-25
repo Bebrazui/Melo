@@ -1,6 +1,10 @@
 package com.melo.music.playback
 
+import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -151,6 +155,7 @@ class PlaybackService : MediaSessionService() {
 
     private var crossfading = false
     private val handler = Handler(Looper.getMainLooper())
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     // Подсчёт нажатий на кнопку гарнитуры: 1 = play/pause, 2 = next, 3+ = prev.
     private var tapCount = 0
@@ -244,10 +249,11 @@ class PlaybackService : MediaSessionService() {
         // DefaultDataSource: локальные офлайн-файлы (content://, file://) играем напрямую,
         // сетевые ссылки уходят в httpFactory (через ByeDPI).
         val dsFactory = androidx.media3.datasource.DefaultDataSource.Factory(this, httpFactory)
-        // 4xx (403/401/404) = протухшая/невалидная ссылка — НЕ транзиентно: не долбим,
-        // сразу отдаём ошибку вверх → UI инвалидирует кэш и пере-резолвит свежую ссылку.
-        // Транзиентные сетевые сбои (таймаут/RST) повторяем пару раз с короткой паузой.
+        // Транзиентные сетевые сбои (таймаут/RST/потеря сети) повторяем агрессивно,
+        // чтобы при пропадании и появлении интернета плеер не вылетал в STATE_IDLE.
         val loadErrorPolicy = object : androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy() {
+            override fun getMinimumLoadableRetryCount(dataType: Int): Int = 10
+
             override fun getRetryDelayMsFor(
                 info: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo,
             ): Long {
@@ -255,9 +261,9 @@ class PlaybackService : MediaSessionService() {
                 if (ex is androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException &&
                     ex.responseCode in 400..499
                 ) {
-                    return androidx.media3.common.C.TIME_UNSET // не повторять — пусть пере-резолвит
+                    return androidx.media3.common.C.TIME_UNSET // 4xx: протухла ссылка — пусть пере-резолвит
                 }
-                return minOf(info.errorCount * 500L, 2_000L)
+                return minOf(info.errorCount * 1_000L, 5_000L)
             }
         }
         // Важно: у каждого плеера СВОЙ LoadControl (общий требует общий поток).
@@ -351,6 +357,48 @@ class PlaybackService : MediaSessionService() {
 
         cancelCrossfadeCmd = { handler.post { abortCrossfade() } }
         handler.post(crossfadeTick)
+
+        // Слушаем восстановление сети для автоматического продолжения трека
+        registerNetworkCallback()
+    }
+
+    private fun registerNetworkCallback() {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        if (networkCallback != null) return
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                handler.post {
+                    retryPlaybackIfStalled()
+                }
+            }
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+                if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
+                    handler.post {
+                        retryPlaybackIfStalled()
+                    }
+                }
+            }
+        }
+        cm.registerDefaultNetworkCallback(cb)
+        networkCallback = cb
+    }
+
+    /**
+     * Если воспроизведение прервалось из-за отвала сети или плеер завис в STATE_IDLE/ошибке —
+     * при возвращении интернета восстанавливаем проигрывание с той же секунды.
+     */
+    private fun retryPlaybackIfStalled() {
+        val p = active
+        val error = p.playerError
+        val idle = p.playbackState == Player.STATE_IDLE
+        val playWhenReady = p.playWhenReady
+        if (error != null || (idle && playWhenReady)) {
+            val curPos = p.currentPosition
+            com.melo.music.util.FileLog.i("MeloPlay", "Network restored: retrying playback at pos=$curPos")
+            p.prepare()
+            if (curPos > 0) p.seekTo(curPos)
+            p.play()
+        }
     }
 
     /**
@@ -448,12 +496,20 @@ class PlaybackService : MediaSessionService() {
         }
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
             android.util.Log.e("MeloPlay", "ExoPlayer error: ${error.errorCodeName} (${error.errorCode}): ${error.message}", error)
+            com.melo.music.util.FileLog.e("MeloPlay", "ExoPlayer error: ${error.errorCodeName} (${error.errorCode}): ${error.message}")
+            // При ошибке сетевого тайм-аута или разрыва соединения пробуем мягко восстановиться через 2 секунды
+            if (active.playWhenReady) {
+                handler.postDelayed({
+                    if (active.playWhenReady && active.playbackState == Player.STATE_IDLE) {
+                        retryPlaybackIfStalled()
+                    }
+                }, 2000L)
+            }
         }
         override fun onAudioSessionIdChanged(newSessionId: Int) {
             if (newSessionId != androidx.media3.common.C.AUDIO_SESSION_ID_UNSET && newSessionId != 0) {
-                audioSessionId = newSessionId
-                EqualizerManager.attach(newSessionId)
-                applyReverb(active)
+                // Сессия создалась уже после старта наложения — цепляем эффекты сейчас.
+                attachEffects(active)
             }
         }
         override fun onPlaybackStateChanged(state: Int) {
@@ -471,6 +527,20 @@ class PlaybackService : MediaSessionService() {
     }
 
     private var standbyPreparedUrl: String? = null
+    private var fadeRunnable: Runnable? = null
+
+    /**
+     * Цепляет эквалайзер/реверб к аудио-сессии плеера.
+     * Раньше здесь подставлялся sessionId=0 (сессия нового плеера ещё не создана) —
+     * EqualizerManager.attach() падал в catch, и после кроссфейда EQ/реверб отваливались.
+     */
+    private fun attachEffects(player: ExoPlayer) {
+        val sid = player.audioSessionId
+        if (sid == androidx.media3.common.C.AUDIO_SESSION_ID_UNSET || sid == 0) return
+        audioSessionId = sid
+        EqualizerManager.attach(sid)
+        applyReverb(player)
+    }
 
     /**
      * Прогревает standby-плеер за 10-12 секунд до конца трека, чтобы
@@ -546,9 +616,11 @@ class PlaybackService : MediaSessionService() {
                     dur > 0
                 ) {
                     val remainMs = dur - pos
-                    if (remainMs <= crossfadeMs + 10_000L && remainMs > crossfadeMs) {
+                    // Начинаем прогрев standby задолго до конца, как только есть nextUrl
+                    if (remainMs <= crossfadeMs + 25_000L && remainMs > crossfadeMs) {
                         prepareStandbyIfReady()
-                    } else if (remainMs <= crossfadeMs && remainMs > 0) {
+                    } else if (remainMs <= crossfadeMs) {
+                        prepareStandbyIfReady()
                         startCrossfade()
                     }
                 }
@@ -610,9 +682,8 @@ class PlaybackService : MediaSessionService() {
         fromP.removeListener(endListener)
         toP.addListener(endListener)
         mediaSession?.player = MeloForwardingPlayer(toP)
-        audioSessionId = toP.audioSessionId
-        EqualizerManager.attach(audioSessionId)
-        applyReverb(toP)
+        // Эффекты цепляем только к валидной audio-сессии нового плеера.
+        attachEffects(toP)
         if (advanceIndex >= 0) {
             queueIndex = advanceIndex
             currentTrackItem = queue.getOrNull(advanceIndex)
@@ -622,18 +693,21 @@ class PlaybackService : MediaSessionService() {
 
         fun runFade() {
             val duration = crossfadeMs.toLong().coerceAtLeast(600L)
-            val start = System.currentTimeMillis()
+            val start = SystemClock.elapsedRealtime()
             val fade = object : Runnable {
                 override fun run() {
-                    val elapsed = System.currentTimeMillis() - start
+                    val elapsed = SystemClock.elapsedRealtime() - start
                     val frac = (elapsed.toFloat() / duration).coerceIn(0f, 1f)
                     // Равномощный синусный кроссфейд: сумма энергий 1.0 без провала громкости в центре
                     val rad = frac * (Math.PI.toFloat() / 2f)
                     fromP.volume = kotlin.math.cos(rad)
                     toP.volume = kotlin.math.sin(rad)
                     if (frac < 1f && crossfading) {
-                        handler.postDelayed(this, 35)
+                        // 16мс — обновление громкости чаще, чем буфер аудио (≈20мс):
+                        // ступени на слух не слышны даже при просадке UI-потока.
+                        handler.postDelayed(this, 16)
                     } else {
+                        fadeRunnable = null
                         fromP.stop()
                         fromP.clearMediaItems()
                         fromP.volume = 1f
@@ -644,13 +718,15 @@ class PlaybackService : MediaSessionService() {
                     }
                 }
             }
+            fadeRunnable = fade
             handler.post(fade)
         }
 
         if (toP.playbackState == Player.STATE_READY) {
             runFade()
         } else {
-            // Если standby ещё догружается — НЕ гасим fromP в тишину! Держим звук до готовности toP.
+            // Если standby ещё догружается — НЕ гасим fromP в тишину!
+            // Ждем готовности toP. Когда toP станет готов — запускаем плавный переход.
             val readyListener = object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
                     if (state == Player.STATE_READY) {
@@ -662,14 +738,45 @@ class PlaybackService : MediaSessionService() {
             toP.addListener(readyListener)
             handler.postDelayed({
                 toP.removeListener(readyListener)
-                if (crossfading) runFade()
-            }, 3000L)
+                if (!crossfading) return@postDelayed
+                if (toP.playbackState == Player.STATE_READY) {
+                    runFade()
+                } else if (fromP.playbackState == Player.STATE_ENDED) {
+                    // Старый трек уже физически кончился, а новый так и не готов за 8с — откатываемся на обычный fallback
+                    com.melo.music.util.FileLog.w("MeloFade", "Standby not ready in 8s and old track ended, fallback")
+                    rollbackCrossfade(fromP, toP)
+                }
+            }, 8000L)
+        }
+    }
+
+    /** Откат неудачного кроссфейда: возвращаем управление старым треком без провала звука. */
+    private fun rollbackCrossfade(fromP: ExoPlayer, toP: ExoPlayer) {
+        crossfading = false
+        fadeRunnable?.let { handler.removeCallbacks(it) }
+        fadeRunnable = null
+        toP.stop()
+        toP.clearMediaItems()
+        toP.volume = 1f
+        toP.removeListener(endListener)
+        fromP.addListener(endListener)
+        fromP.volume = 1f
+        fromP.playWhenReady = true
+        standbyPreparedUrl = null
+        usingA = !usingA
+        mediaSession?.player = MeloForwardingPlayer(fromP)
+        clearNext()
+        // Старый трек к этому моменту уже доигран — отдаём UI, чтобы он переключил трек.
+        if (fromP.playbackState == Player.STATE_ENDED) {
+            onTrackEnded?.invoke()
         }
     }
 
     /** Прерывает кроссфейд (ручное переключение трека). */
     private fun abortCrossfade() {
         standbyPreparedUrl = null
+        fadeRunnable?.let { handler.removeCallbacks(it) }
+        fadeRunnable = null
         if (!crossfading) {
             standby.stop()
             standby.clearMediaItems()
@@ -697,6 +804,11 @@ class PlaybackService : MediaSessionService() {
         onCrossfadeAdvance = null
         cancelCrossfadeCmd = null
         EqualizerManager.onReverbChanged = null
+        networkCallback?.let {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            runCatching { cm?.unregisterNetworkCallback(it) }
+            networkCallback = null
+        }
         clearNext()
         queue = emptyList()
         queueIndex = 0

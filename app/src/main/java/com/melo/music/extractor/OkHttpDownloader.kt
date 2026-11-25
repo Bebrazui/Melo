@@ -114,8 +114,10 @@ class OkHttpDownloader(
 
         val body = response.body?.string()
         val ms = System.currentTimeMillis() - started
+        val logMsg = "$httpMethod $host -> ${response.code} ${body?.length ?: 0}b ${ms}ms proxy=$proxied"
         if (sc || LOG_ALL) {
-            android.util.Log.i("MeloNet", "$httpMethod $host -> ${response.code} ${body?.length ?: 0}b ${ms}ms proxy=$proxied")
+            android.util.Log.i("MeloNet", logMsg)
+            com.melo.music.util.FileLog.d("MeloNet", logMsg)
         }
         val latestUrl = response.request.url.toString()
         return Response(

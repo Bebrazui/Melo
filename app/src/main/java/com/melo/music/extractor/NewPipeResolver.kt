@@ -132,10 +132,9 @@ object NewPipeResolver {
             isBandcamp(url) -> Source.BANDCAMP
             else -> Source.YOUTUBE_MUSIC
         }
-        android.util.Log.d(
-            "MeloPerf",
-            "resolve init=${t1 - t0}ms getInfo=${t2 - t1}ms pick=${t3 - t2}ms TOTAL=${t3 - t0}ms url=$url audio=${audio.content.take(60)}",
-        )
+        val perfMsg = "resolve init=${t1 - t0}ms getInfo=${t2 - t1}ms pick=${t3 - t2}ms TOTAL=${t3 - t0}ms url=$url audio=${audio.content.take(60)}"
+        android.util.Log.d("MeloPerf", perfMsg)
+        com.melo.music.util.FileLog.d("MeloPerf", perfMsg)
 
         val video = if (isYouTube(url)) {
             info.videoStreams.filter { it.content.isNotBlank() && !it.isVideoOnly }

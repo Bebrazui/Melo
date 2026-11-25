@@ -228,7 +228,7 @@ object Extractor {
                 for (url in prefetchQueue) {
                     val ctx = appCtx ?: continue
                     if (!isCached(url)) {
-                        // android.util.Log.e("MeloPerf", "prefetch[$worker] resolve $url")
+                        com.melo.music.util.FileLog.d("MeloPerf", "prefetch[$worker] starting resolve for $url")
                         runCatching { resolveAudioUrl(ctx, url) }
                     }
                 }
@@ -250,11 +250,14 @@ object Extractor {
     /**
      * Выбрасывает трек из всех кэшей — для авто-перерезолва, когда плеер словил
      * ошибку (например, протухшую/привязанную к IP ссылку → 403).
+     * Дополнительно вычищает офлайн-запись, если локальный файл оказался битым
+     * (иначе трек снова подхватит тот же файл и уйдёт в бесконечный цикл 3003).
      */
     fun invalidate(url: String) {
         streamCache.remove(url)
         StreamCacheStore.remove(url)
         inFlight.remove(url)
+        com.melo.music.offline.OfflineManager.invalidateBroken(url)
     }
 
     @Synchronized
@@ -279,30 +282,41 @@ object Extractor {
         fallbackQuery: String? = null,
         title: String? = null,
         uploader: String? = null,
+        preferProgressive: Boolean = false,
     ): ResolvedTrack {
         // 0) Офлайн: скачанный трек играем прямо с диска, без сети.
         com.melo.music.offline.OfflineManager.getOrFindLocalUri(context, url, title, uploader, fallbackQuery)?.let { local ->
             // android.util.Log.e("MeloPerf", "OFFLINE HIT $url")
             val trackTitle = com.melo.music.offline.OfflineManager.titleFor(url) ?: (title ?: url)
+            val thumb = com.melo.music.favorites.FavoritesManager.getAll().find { it.url == url }?.thumbnailUrl
             return ResolvedTrack(
                 title = trackTitle,
                 audioUrl = local,
+                thumbnailUrl = thumb,
                 artist = uploader,
             )
         }
-        // 1) Память.
-        streamCache.get(url)?.let {
-            // android.util.Log.e("MeloPerf", "CACHE HIT (mem) $url")
-            return it
-        }
-        // 2) Диск — мгновенно, если ссылка ещё не протухла.
-        StreamCacheStore.get(url)?.let {
-            // android.util.Log.e("MeloPerf", "CACHE HIT (disk) $url")
-            streamCache.put(url, it)
-            return it
+        // Для офлайн-загрузки нужен свежий резолв (HLS-кэш не подходит: из HLS-сегментов
+        // SoundCloud получается нечитаемая склейка), поэтому кэш потока обходим.
+        if (!preferProgressive) {
+            // 1) Память.
+            streamCache.get(url)?.let {
+                // android.util.Log.e("MeloPerf", "CACHE HIT (mem) $url")
+                return it
+            }
+            // 2) Диск — мгновенно, если ссылка ещё не протухла.
+            StreamCacheStore.get(url)?.let {
+                // android.util.Log.e("MeloPerf", "CACHE HIT (disk) $url")
+                streamCache.put(url, it)
+                return it
+            }
         }
         val app = context.applicationContext
-        val flightKey = if (!fallbackQuery.isNullOrBlank()) "$url#$fallbackQuery" else url
+        val flightKey = buildString {
+            append(url)
+            if (!fallbackQuery.isNullOrBlank()) append('#').append(fallbackQuery)
+            if (preferProgressive) append("#prog")
+        }
         // Дедуп: если этот URL уже резолвится — ждём тот же результат.
         val deferred = inFlight.getOrPut(flightKey) {
             // android.util.Log.e("MeloPerf", "CACHE MISS → resolve $url")
@@ -310,8 +324,8 @@ object Extractor {
                 try {
                     // SoundCloud — прямой нативный HLS-резолвер (<300мс)
                     if (NewPipeResolver.isSoundCloud(url)) {
-                        com.melo.music.util.FileLog.i("MeloExtract", "Resolving via SoundCloudResolver: $url")
-                        val scResolved = runCatching { SoundCloudResolver.resolve(app, url) }.getOrNull()
+                        com.melo.music.util.FileLog.i("MeloExtract", "Resolving via SoundCloudResolver: $url (progressive=$preferProgressive)")
+                        val scResolved = runCatching { SoundCloudResolver.resolve(app, url, preferProgressive) }.getOrNull()
                         if (scResolved != null) {
                             val ytQuery = fallbackQuery ?: listOfNotNull(scResolved.title, scResolved.artist).joinToString(" ").takeIf { it.isNotBlank() }
                             if (scResolved.isSnipped && !ytQuery.isNullOrBlank()) {
@@ -320,14 +334,18 @@ object Extractor {
                                 if (ytMatch != null && ytMatch.url.isNotBlank()) {
                                     val ytResolved = runCatching { NewPipeResolver.resolve(app, ytMatch.url) }.getOrNull()
                                     if (ytResolved != null) {
-                                        streamCache.put(url, ytResolved)
-                                        StreamCacheStore.put(url, ytResolved)
+                                        if (!preferProgressive) {
+                                            streamCache.put(url, ytResolved)
+                                            StreamCacheStore.put(url, ytResolved)
+                                        }
                                         return@async ytResolved
                                     }
                                 }
                             }
-                            streamCache.put(url, scResolved)
-                            StreamCacheStore.put(url, scResolved)
+                            if (!preferProgressive) {
+                                streamCache.put(url, scResolved)
+                                StreamCacheStore.put(url, scResolved)
+                            }
                             return@async scResolved
                         } else {
                             com.melo.music.util.FileLog.w("MeloExtract", "SoundCloudResolver failed for $url, attempting fallback to YouTube: $fallbackQuery")
@@ -336,8 +354,10 @@ object Extractor {
                                 if (ytMatch != null && ytMatch.url.isNotBlank()) {
                                     val ytResolved = runCatching { NewPipeResolver.resolve(app, ytMatch.url) }.getOrNull()
                                     if (ytResolved != null) {
-                                        streamCache.put(url, ytResolved)
-                                        StreamCacheStore.put(url, ytResolved)
+                                        if (!preferProgressive) {
+                                            streamCache.put(url, ytResolved)
+                                            StreamCacheStore.put(url, ytResolved)
+                                        }
                                         return@async ytResolved
                                     }
                                 }
@@ -349,6 +369,7 @@ object Extractor {
                     // YouTube и SoundCloud (fallback) — через NewPipe, с надёжным авто-фолбэком на yt-dlp при ошибках.
                     val resolved = if (NewPipeResolver.isSupported(url)) {
                         try {
+                            com.melo.music.util.FileLog.i("MeloExtract", "Resolving via NewPipe: $url")
                             NewPipeResolver.resolve(app, url)
                         } catch (e: Exception) {
                             val msg = e.message.orEmpty().lowercase()
@@ -357,10 +378,10 @@ object Extractor {
                                 msg.contains("interscope") ||
                                 msg.contains("dmca")
                             if (isExplicitCopyright) {
-                                android.util.Log.e("MeloExtract", "Track blocked by copyright: $url")
+                                com.melo.music.util.FileLog.e("MeloExtract", "Track blocked by copyright: $url")
                                 throw TrackCopyrightException("Трек удалён правообладателем", e)
                             }
-                            android.util.Log.e("MeloExtract", "NewPipe resolve failed for $url: ${e.message}, falling back to yt-dlp")
+                            com.melo.music.util.FileLog.w("MeloExtract", "NewPipe resolve failed for $url: ${e.message}, falling back to yt-dlp")
                             try {
                                 resolveWithYtDlp(app, url)
                             } catch (e2: Exception) {
@@ -372,10 +393,13 @@ object Extractor {
                             }
                         }
                     } else {
+                        com.melo.music.util.FileLog.i("MeloExtract", "Resolving via yt-dlp: $url")
                         resolveWithYtDlp(app, url)
                     }
-                    streamCache.put(url, resolved)
-                    StreamCacheStore.put(url, resolved)
+                    if (!preferProgressive) {
+                        streamCache.put(url, resolved)
+                        StreamCacheStore.put(url, resolved)
+                    }
                     resolved
                 } finally {
                     inFlight.remove(flightKey)

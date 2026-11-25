@@ -38,6 +38,9 @@ object TrackDownloader {
     private const val DL_CHANNEL = "melo_downloads"
     private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0"
 
+    /** Расширения, в которых хранятся офлайн-треки (по реальному контейнеру файла). */
+    private val SUPPORTED_EXTENSIONS = listOf("mp3", "m4a", "webm", "ogg")
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val isBatchDownloading = AtomicBoolean(false)
 
@@ -107,21 +110,33 @@ object TrackDownloader {
         ensureChannel(context)
 
         try {
-            val filename = sanitizeFilename("${item.uploader ?: "Unknown"} - ${item.title}") + ".mp3"
+            val baseName = sanitizeFilename("${item.uploader ?: "Unknown"} - ${item.title}")
 
-            if (existsInMusic(context, filename)) {
-                OfflineManager.findUriInMusic(context, filename)?.let { existingUri ->
-                    OfflineManager.add(item.url, existingUri, label)
+            // Уже скачан? Ищем по всем поддерживаемым расширениям.
+            for (ext in SUPPORTED_EXTENSIONS) {
+                val existingName = "$baseName.$ext"
+                val existingUri = OfflineManager.findUriInMusic(context, existingName)
+                if (existingUri != null) {
+                    if (OfflineManager.isPlayableLocal(context, existingUri)) {
+                        OfflineManager.add(item.url, existingUri, label)
+                        if (batchIndex == null) toast(context, "Уже скачано")
+                        return
+                    }
+                    // Битый файл (например, fMP4-склейка под видом .mp3) — вычищаем.
+                    com.melo.music.util.FileLog.w("MeloDownload", "Removing broken offline file: $existingName")
+                    OfflineManager.deleteLocal(context, existingUri)
                 }
-                if (batchIndex == null) toast(context, "Уже скачано")
-                return
             }
 
             val prefix = if (batchIndex != null && batchTotal != null) "[$batchIndex/$batchTotal] " else ""
             notifyProgress(context, notifId, "$prefix$label", "Получение ссылки...", 0, indeterminate = true)
 
             val fallbackQuery = listOfNotNull(item.title, item.uploader).joinToString(" ").takeIf { it.isNotBlank() }
-            val resolved: ResolvedTrack = Extractor.resolveAudioUrl(context, item.url, fallbackQuery)
+            // preferProgressive: для офлайна нужен цельный progressive-поток — HLS-сегменты
+            // SoundCloud склеиваются в нечитаемый Media3 файл.
+            val resolved: ResolvedTrack = Extractor.resolveAudioUrl(
+                context, item.url, fallbackQuery, item.title, item.uploader, preferProgressive = true,
+            )
 
             // 2. Скачивание обложки
             val artworkBytes: ByteArray? = item.thumbnailUrl?.takeIf { it.isNotBlank() }?.let { url ->
@@ -154,7 +169,20 @@ object TrackDownloader {
                     .toList()
                 if (segments.isEmpty()) throw Exception("В HLS плейлисте нет аудио сегментов")
 
+                // Init-сегмент (EXT-X-MAP) — без него mp4-сборка нечитаема для Media3.
+                val initSegment = Regex("""#EXT-X-MAP:.*URI="([^"]+)"""")
+                    .find(playlistText)?.groupValues?.getOrNull(1)
+
                 val out = ByteArrayOutputStream()
+                initSegment?.let { mapUrl ->
+                    runCatching {
+                        httpClient.newCall(
+                            Request.Builder().url(mapUrl).header("User-Agent", USER_AGENT).build()
+                        ).execute().use { r ->
+                            if (r.isSuccessful) out.write(r.body?.bytes() ?: ByteArray(0))
+                        }
+                    }
+                }
                 val totalSegs = segments.size
                 segments.forEachIndexed { i, segUrl ->
                     val segBytes = httpClient.newCall(
@@ -207,8 +235,21 @@ object TrackDownloader {
                 }
             }
 
-            // 5. Сохранение в общую папку Music/Melo
-            val savedUri = saveToMusic(context, filename, id3 + mp3Bytes)
+            // 5. Определяем реальный контейнер потока и сохраняем в Music/Melo.
+            // Раньше сюда всегда дописывался ID3-тег и файл назывался .mp3 с MIME audio/mpeg —
+            // для WebM/fMP4 это ломало файл, и Media3 отдавал 3003 (контейнер не поддерживается).
+            val format = AudioContainer.detect(mp3Bytes)
+            if (!format.isPlayable) {
+                throw Exception("Аудио в неподдерживаемом формате (повреждённый поток)")
+            }
+            val filename = "$baseName.${format.extension}"
+            // ID3-тег умеет читать только MP3; для остальных контейнеров он ломает файл.
+            val payload = if (format == AudioFormat.MP3) id3 + mp3Bytes else mp3Bytes
+            com.melo.music.util.FileLog.d(
+                "MeloDownload",
+                "Saving ${format.extension} for '$label' (${payload.size} bytes)",
+            )
+            val savedUri = saveToMusic(context, filename, payload, format.mimeType)
 
             // 6. Добавление в OfflineManager
             if (savedUri != null) {
@@ -268,29 +309,13 @@ object TrackDownloader {
     private fun sanitizeFilename(s: String): String =
         s.replace(Regex("""[\\/:*?"<>|]"""), "_").trim()
 
-    private fun existsInMusic(context: Context, filename: String): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-            val projection = arrayOf(MediaStore.Audio.Media._ID)
-            val selection = "${MediaStore.Audio.Media.DISPLAY_NAME}=? AND " +
-                "${MediaStore.Audio.Media.RELATIVE_PATH} LIKE ?"
-            val args = arrayOf(filename, "%${Environment.DIRECTORY_MUSIC}/$MELO_DIR%")
-            return runCatching {
-                context.contentResolver.query(collection, projection, selection, args, null)
-                    ?.use { it.count > 0 } ?: false
-            }.getOrDefault(false)
-        }
-        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), MELO_DIR)
-        return File(dir, filename).exists()
-    }
-
-    private fun saveToMusic(context: Context, filename: String, bytes: ByteArray): String? {
+    private fun saveToMusic(context: Context, filename: String, bytes: ByteArray, mimeType: String): String? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val resolver = context.contentResolver
             val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
             val values = ContentValues().apply {
                 put(MediaStore.Audio.Media.DISPLAY_NAME, filename)
-                put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
+                put(MediaStore.Audio.Media.MIME_TYPE, mimeType)
                 put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/$MELO_DIR")
                 put(MediaStore.Audio.Media.IS_PENDING, 1)
             }
@@ -311,7 +336,7 @@ object TrackDownloader {
             val file = File(dir, filename)
             file.writeBytes(bytes)
             android.media.MediaScannerConnection.scanFile(
-                context, arrayOf(file.absolutePath), arrayOf("audio/mpeg"), null,
+                context, arrayOf(file.absolutePath), arrayOf(mimeType), null,
             )
             return android.net.Uri.fromFile(file).toString()
         }

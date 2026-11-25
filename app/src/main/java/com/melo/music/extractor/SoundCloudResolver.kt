@@ -42,8 +42,16 @@ object SoundCloudResolver {
 
     /**
      * Резолвит track URL в [ResolvedTrack] с прямым HLS плейлистом.
+     *
+     * @param preferProgressive ставит progressive-MP3 первым в списке кандидатов.
+     *        Нужен для офлайн-загрузки: HLS-сегменты SoundCloud — это fMP4-фрагменты
+     *        без init-сегмента, их побайтовая склейка даёт файл, который Media3 не читает.
      */
-    suspend fun resolve(context: Context, url: String): ResolvedTrack = withContext(Dispatchers.IO) {
+    suspend fun resolve(
+        context: Context,
+        url: String,
+        preferProgressive: Boolean = false,
+    ): ResolvedTrack = withContext(Dispatchers.IO) {
         val t0 = System.currentTimeMillis()
         val appContext = context.applicationContext
         FileLog.i(TAG, "== START resolve: $url ==")
@@ -161,7 +169,12 @@ object SoundCloudResolver {
             }
         }
 
-        val fullStreams = hlsAac + progMp3 + hlsMp3
+        val fullStreams = if (preferProgressive) {
+            // Для офлайна: сначала progressive-MP3 (цельный файл, который можно сохранить).
+            progMp3 + hlsAac + hlsMp3
+        } else {
+            hlsAac + progMp3 + hlsMp3
+        }
         val candidateTranscodings = fullStreams + snippedList
 
         if (candidateTranscodings.isEmpty()) {

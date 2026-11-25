@@ -295,7 +295,13 @@ internal fun PlaylistScreen(
 ) {
     BackHandler(onBack = onClose)
     val tracks = playlist.tracks
-    val hiRes = remember(playlist.coverUrl) { upscaleThumb(playlist.coverUrl, 600) }
+    val covers = remember(tracks) {
+        val list = tracks.mapNotNull { it.thumbnailUrl }.distinct()
+        if (list.isEmpty() && playlist.coverUrl != null) listOfNotNull(playlist.coverUrl) else list
+    }
+    val hiRes = remember(playlist.coverUrl, covers) {
+        upscaleThumb(playlist.coverUrl ?: covers.firstOrNull(), 600)
+    }
     val cs = MaterialTheme.colorScheme
     val isDark = cs.background.luminance() < 0.5f
     val white = if (isDark) Color.White else cs.onBackground
@@ -306,39 +312,53 @@ internal fun PlaylistScreen(
                 model = hiRes,
                 contentDescription = null,
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().blur(60.dp),
+                modifier = Modifier.fillMaxSize().blur(70.dp),
             )
+        } else if (covers.isNotEmpty()) {
+            CollageBackground(covers)
         }
         Box(
             modifier = Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
-                    if (isDark) listOf(Color.Black.copy(alpha = 0.45f), Color.Black.copy(alpha = 0.88f))
-                    else listOf(cs.background.copy(alpha = 0.65f), cs.background.copy(alpha = 0.95f)),
+                    if (isDark) listOf(Color.Black.copy(alpha = 0.55f), Color.Black.copy(alpha = 0.92f))
+                    else listOf(cs.background.copy(alpha = 0.75f), cs.background.copy(alpha = 0.98f)),
                 ),
             ),
         )
 
         LazyColumn(
             modifier = Modifier.fillMaxSize().bouncyOverscroll(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
                         IconButton(onClick = onClose) {
                             Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Закрыть", tint = white)
                         }
                     }
+                    Spacer(Modifier.height(4.dp))
                     Box(
-                        modifier = Modifier.size(160.dp).clip(RoundedCornerShape(20.dp)),
+                        modifier = Modifier
+                            .size(170.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .border(1.dp, white.copy(alpha = 0.12f), RoundedCornerShape(24.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
                         if (playlist.coverUrl != null) {
                             Artwork(url = playlist.coverUrl, modifier = Modifier.fillMaxSize())
+                        } else if (covers.size >= 4) {
+                            CollageBackground(covers)
+                        } else if (covers.isNotEmpty()) {
+                            Artwork(url = covers.first(), modifier = Modifier.fillMaxSize())
                         } else {
                             Box(
                                 modifier = Modifier.fillMaxSize().background(
@@ -355,12 +375,12 @@ internal fun PlaylistScreen(
                                     Icons.Rounded.MusicNote,
                                     contentDescription = null,
                                     tint = Color.White,
-                                    modifier = Modifier.size(56.dp),
+                                    modifier = Modifier.size(64.dp),
                                 )
                             }
                         }
                     }
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(18.dp))
                     Text(
                         text = playlist.name,
                         style = MaterialTheme.typography.headlineMedium,
@@ -372,19 +392,53 @@ internal fun PlaylistScreen(
                     Text(
                         text = "${tracks.size} треков",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = white.copy(alpha = 0.8f),
+                        color = white.copy(alpha = 0.75f),
                     )
-                    Spacer(Modifier.height(16.dp))
+                    if (tracks.isNotEmpty()) {
+                        Spacer(Modifier.height(18.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Button(
+                                onClick = { onPlay(tracks, 0) },
+                                shape = RoundedCornerShape(16.dp),
+                                contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp),
+                            ) {
+                                Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Слушать")
+                            }
+                            FilledTonalIconButton(
+                                onClick = {
+                                    val randomIdx = tracks.indices.random()
+                                    onPlay(tracks, randomIdx)
+                                },
+                                shape = RoundedCornerShape(16.dp),
+                            ) {
+                                Icon(Icons.Rounded.Shuffle, contentDescription = "Перемешать")
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
                 }
             }
 
             if (tracks.isEmpty()) {
                 item {
-                    Text(
-                        text = "Плейлист пуст. Добавляй треки через «···» на карточке трека.",
-                        color = white.copy(alpha = 0.8f),
-                        modifier = Modifier.padding(24.dp),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 40.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "Плейлист пуст.\nДобавляй треки через «···» на карточке любого трека.",
+                            color = white.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
                 }
             } else {
                 itemsIndexed(tracks, key = { i, it -> "$i:${it.url}@${it.speed}@${it.bassBoost}" }) { index, t ->

@@ -413,7 +413,9 @@ fun PlayerScreen(
     var playingList by rememberSaveable(stateSaver = TrackSaver.listOfSaver()) { mutableStateOf<List<TrackItem>>(emptyList()) }
     var playingIndex by rememberSaveable { mutableIntStateOf(-1) }
     var shuffle by rememberSaveable { mutableStateOf(false) }
-    val shuffleRecentHistory = remember { ArrayDeque<Int>() }
+    // Храним историю сыгранных индексов в текущей очереди shuffle.
+    // Сбрасывается при смене очереди или ручном включении shuffle.
+    val shufflePlayedIndices = remember { mutableSetOf<Int>() }
     var repeatOne by rememberSaveable { mutableStateOf(false) }
     // «Sea» — бесконечная персональная волна (радио YouTube Music + наш реранк).
     var seaActive by rememberSaveable { mutableStateOf(false) }
@@ -692,37 +694,48 @@ fun PlayerScreen(
     }
 
     // Фоновый prefetch следующих треков (очередь с одним воркером в Extractor).
+    var playNextImpl: (() -> Unit)? = null
+    val playNext = { playNextImpl?.invoke() }
     fun prefetchAround(list: List<TrackItem>, index: Int) {
         listOf(index + 1, index + 2, index + 3).forEach { i ->
             list.getOrNull(i)?.let { onPrefetch(it.url) }
         }
     }
 
-    // Заранее резолвит следующий трек и отдаёт сервису для кроссфейда.
+    // Честное перемешивание всей очереди без повторений, пока все треки не сыграют
     fun pickNextShuffleIndex(listSize: Int, currentIdx: Int): Int {
         if (listSize <= 1) return 0
         if (listSize == 2) return if (currentIdx == 0) 1 else 0
 
-        // Не повторять последние N сыгранных треков (половина очереди, но не менее 2 и не более 10)
-        val maxHistorySize = (listSize / 2).coerceIn(2, 10).coerceAtMost(listSize - 1)
-        val pool = (0 until listSize).filter { it != currentIdx && it !in shuffleRecentHistory }
-        val candidate = if (pool.isNotEmpty()) {
+        shufflePlayedIndices.add(currentIdx)
+        // Если уже сыграли все треки из очереди — начинаем новый цикл перемешивания
+        if (shufflePlayedIndices.size >= listSize) {
+            shufflePlayedIndices.clear()
+            shufflePlayedIndices.add(currentIdx)
+        }
+
+        val pool = (0 until listSize).filter { it !in shufflePlayedIndices }
+        val nextIdx = if (pool.isNotEmpty()) {
             pool.random()
         } else {
-            // Если все в истории, берем любой кроме текущего
             (0 until listSize).filter { it != currentIdx }.randomOrNull() ?: 0
         }
-        shuffleRecentHistory.addLast(currentIdx)
-        while (shuffleRecentHistory.size > maxHistorySize) {
-            shuffleRecentHistory.removeFirst()
-        }
-        return candidate
+        return nextIdx
     }
+
+    /**
+     * Токен актуальности резолва «следующего» трека.
+     * Раньше параллельные pushNextResolved() могли перетирать друг друга: в лог попадало
+     * «Next resolved OK: idx=3», а следом «idx=2» — и кроссфейд уходил не туда.
+     * Теперь только последний запущенный резолв имеет право обновить next.
+     */
+    val nextResolveToken = remember { java.util.concurrent.atomic.AtomicInteger(0) }
 
     fun pushNextResolved(fromIndex: Int) {
         val list = playingList
         if (repeatOne || list.isEmpty()) {
             com.melo.music.playback.PlaybackService.clearNext()
+            nextResolveToken.incrementAndGet()
             return
         }
         val nextIdx = if (shuffle) {
@@ -730,6 +743,7 @@ fun PlayerScreen(
         } else {
             (fromIndex + 1) % list.size
         }
+        val token = nextResolveToken.incrementAndGet()
         scope.launch {
             val nextItem = list.getOrNull(nextIdx) ?: return@launch
             val nextQuery = listOfNotNull(nextItem.title, nextItem.uploader).joinToString(" ").takeIf { it.isNotBlank() }
@@ -740,10 +754,11 @@ fun PlayerScreen(
                     resolved = runCatching { onResolveAudioUrl(nextItem.url, nextQuery, nextItem.title, nextItem.uploader) }.getOrNull()
                 }
             }
-            // Проверяем, что очередь/индекс не сменились, пока резолвили.
-            if (resolved != null && playingIndex == fromIndex) {
+            // Проверяем, что очередь/индекс не сменились и резолв не устарел.
+            if (resolved != null && playingIndex == fromIndex && nextResolveToken.get() == token) {
+                val thumb = resolved.thumbnailUrl?.takeIf { t -> t.isNotBlank() } ?: nextItem.thumbnailUrl
                 com.melo.music.playback.PlaybackService.setNext(
-                    resolved.audioUrl, nextItem.title, nextIdx, nextItem.speed, nextItem.thumbnailUrl, nextItem.uploader,
+                    resolved.audioUrl, nextItem.title, nextIdx, nextItem.speed, thumb, nextItem.uploader,
                 )
                 com.melo.music.util.FileLog.d("MeloFade", "Next resolved OK: [idx=$nextIdx] ${nextItem.title}")
             } else if (resolved == null) {
@@ -757,9 +772,10 @@ fun PlayerScreen(
         // Любой ручной выбор трека выходит из волны (волна сама зовёт с keepSea=true).
         if (!keepSea) seaActive = false
         // Тот же трек, та же скорость И тот же басс уже играют — это пауза/продолжить, а не перезапуск.
-        // (нормальная, slowed/sped up и bass версии имеют одинаковый url, но разные speed/bass).
+        // ВНИМАНИЕ: если это переключение на следующий трек в очереди (index != playingIndex),
+        // даже с одинаковым URL (например ремикс того же трека), мы НЕ ставим на паузу, а играем!
         val cur = nowPlaying
-        if (cur != null && list[index].url == cur.url &&
+        if (cur != null && index == playingIndex && list[index].url == cur.url &&
             kotlin.math.abs(list[index].speed - cur.speed) < 0.01f &&
             list[index].bassBoost == cur.bassBoost
         ) {
@@ -772,12 +788,17 @@ fun PlayerScreen(
         // Ручное переключение — отменяем активный кроссфейд и заготовку.
         com.melo.music.playback.PlaybackService.cancelCrossfade()
         com.melo.music.playback.PlaybackService.clearNext()
+        // Старые резолвы «следующего» трека больше не актуальны.
+        nextResolveToken.incrementAndGet()
         // Записать skip-data для предыдущего трека.
         val prevUrl = nowPlaying?.url
         if (prevUrl != null && trackStartTime > 0) {
             val listenedMs = android.os.SystemClock.elapsedRealtime() - trackStartTime
             val prevDuration = nowPlaying?.durationSeconds?.let { it * 1000L } ?: 0L
             SkipTracker.recordListen(prevUrl, listenedMs, prevDuration)
+        }
+        if (playingList != list) {
+            shufflePlayedIndices.clear()
         }
         playingList = list
         playingIndex = index
@@ -806,7 +827,8 @@ fun PlayerScreen(
                             ?: com.melo.music.extractor.cleanArtistName(null, it.title)
                             ?: com.melo.music.extractor.cleanArtistName(null, item.title)
                         val cleanTitle = com.melo.music.extractor.cleanTrackTitle(it.title.ifBlank { item.title }, cleanArtist)
-                        val resolvedWithArtist = it.copy(title = cleanTitle, artist = cleanArtist)
+                        val thumb = it.thumbnailUrl?.takeIf { t -> t.isNotBlank() } ?: item.thumbnailUrl
+                        val resolvedWithArtist = it.copy(title = cleanTitle, artist = cleanArtist, thumbnailUrl = thumb)
                         onPlayResolved(resolvedWithArtist)
                         // Сохранённая slowed/sped up/bass версия играет со своими параметрами.
                         setSpeed(item.speed)
@@ -815,7 +837,7 @@ fun PlayerScreen(
                     }
                 }
                 .onFailure {
-                    android.util.Log.e("MeloTrack", "RESOLVE FAILED [index=$index] url=${item.url}: ${it.message}", it)
+                    com.melo.music.util.FileLog.e("MeloTrack", "RESOLVE FAILED [index=$index] url=${item.url}: ${it.message}", it)
                     val isCopyright = it is com.melo.music.extractor.TrackCopyrightException ||
                         it.message?.contains("правообладател", ignoreCase = true) == true ||
                         it.message?.contains("copyright", ignoreCase = true) == true ||
@@ -834,6 +856,11 @@ fun PlayerScreen(
                             else -> "Не удалось воспроизвести: ${it.message}"
                         }
                     }
+                    // Если трек в волне «Sea» не смог зарезолвиться — автоматически пропускаем его на следующий!
+                    if (seaActive) {
+                        com.melo.music.util.FileLog.w("MeloTrack", "Sea wave track failed, auto-skipping to next: ${item.title}")
+                        playNext()
+                    }
                 }
             if (resolvingUrl == item.url) {
                 resolvingUrl = null
@@ -841,11 +868,12 @@ fun PlayerScreen(
         }
         prefetchAround(list, index)
     }
-    fun playNext() {
-        if (playingList.isEmpty()) return
-        trackSwitchDirection = 1
-        val next = if (shuffle) pickNextShuffleIndex(playingList.size, playingIndex) else (playingIndex + 1) % playingList.size
-        playAt(playingList, next, keepSea = seaActive)
+    playNextImpl = {
+        if (playingList.isNotEmpty()) {
+            trackSwitchDirection = 1
+            val next = if (shuffle) pickNextShuffleIndex(playingList.size, playingIndex) else (playingIndex + 1) % playingList.size
+            playAt(playingList, next, keepSea = seaActive)
+        }
     }
     fun playPrev() {
         if (playingList.isEmpty()) return

@@ -136,28 +136,16 @@ class MeloApp : Application(), ImageLoaderFactory {
                     .build()
 
                 var resp: okhttp3.Response? = null
-                try {
-                    resp = chain.proceed(primaryRequest)
-                    com.melo.music.util.FileLog.d("MeloImg", "<-- HTTP ${resp.code} for $primaryUrl")
-                    if (sc && resp.code == 404 && fallbackUrl != null && fallbackUrl != primaryUrl) {
-                        com.melo.music.util.FileLog.w("MeloImg", "404 on high-res -> fallback to: $fallbackUrl")
-                        resp.close()
-                        val fallbackReq = origReq.newBuilder()
-                            .url(fallbackUrl)
-                            .header(
-                                "User-Agent",
-                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                            )
-                            .build()
-                        resp = chain.withConnectTimeout(chain.connectTimeoutMillis(), TimeUnit.MILLISECONDS)
-                            .proceed(fallbackReq)
-                        com.melo.music.util.FileLog.d("MeloImg", "<-- HTTP ${resp.code} for fallback $fallbackUrl")
-                    }
-                } catch (e: Exception) {
-                    com.melo.music.util.FileLog.e("MeloImg", "Primary FAIL $primaryUrl: ${e.javaClass.simpleName} ${e.message}")
-                    if (sc && fallbackUrl != null && fallbackUrl != primaryUrl) {
-                        com.melo.music.util.FileLog.w("MeloImg", "Exception on high-res -> trying fallback $fallbackUrl")
-                        resp = runCatching {
+                var attempt = 0
+                val maxAttempts = 3
+                while (attempt < maxAttempts) {
+                    attempt++
+                    try {
+                        resp = chain.proceed(primaryRequest)
+                        com.melo.music.util.FileLog.d("MeloImg", "<-- HTTP ${resp.code} for $primaryUrl (att=$attempt)")
+                        if (sc && resp.code == 404 && fallbackUrl != null && fallbackUrl != primaryUrl) {
+                            com.melo.music.util.FileLog.w("MeloImg", "404 on high-res -> fallback to: $fallbackUrl")
+                            resp.close()
                             val fallbackReq = origReq.newBuilder()
                                 .url(fallbackUrl)
                                 .header(
@@ -165,16 +153,38 @@ class MeloApp : Application(), ImageLoaderFactory {
                                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                                 )
                                 .build()
-                            chain.withConnectTimeout(chain.connectTimeoutMillis(), TimeUnit.MILLISECONDS)
+                            resp = chain.withConnectTimeout(chain.connectTimeoutMillis(), TimeUnit.MILLISECONDS)
                                 .proceed(fallbackReq)
-                        }.getOrNull()
-                        if (resp != null) {
                             com.melo.music.util.FileLog.d("MeloImg", "<-- HTTP ${resp.code} for fallback $fallbackUrl")
                         }
+                        break
+                    } catch (e: Exception) {
+                        com.melo.music.util.FileLog.e("MeloImg", "Attempt $attempt FAIL $primaryUrl: ${e.javaClass.simpleName} ${e.message}")
+                        if (attempt >= maxAttempts) {
+                            if (sc && fallbackUrl != null && fallbackUrl != primaryUrl) {
+                                com.melo.music.util.FileLog.w("MeloImg", "Exception on high-res -> trying fallback $fallbackUrl")
+                                resp = runCatching {
+                                    val fallbackReq = origReq.newBuilder()
+                                        .url(fallbackUrl)
+                                        .header(
+                                            "User-Agent",
+                                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                                        )
+                                        .build()
+                                    chain.withConnectTimeout(chain.connectTimeoutMillis(), TimeUnit.MILLISECONDS)
+                                        .proceed(fallbackReq)
+                                }.getOrNull()
+                                if (resp != null) {
+                                    com.melo.music.util.FileLog.d("MeloImg", "<-- HTTP ${resp.code} for fallback $fallbackUrl")
+                                }
+                            }
+                            if (resp == null) throw e
+                        } else {
+                            try { Thread.sleep(400L * attempt) } catch (_: InterruptedException) {}
+                        }
                     }
-                    if (resp == null) throw e
                 }
-                resp
+                resp ?: throw java.io.IOException("Image load failed after retries")
             }
         val client = clientBuilder.build()
         return ImageLoader.Builder(this)

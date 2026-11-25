@@ -53,7 +53,9 @@ class MainActivity : ComponentActivity() {
         )
 
         lifecycleScope.launch(Dispatchers.IO) {
-            kotlinx.coroutines.delay(2000)
+            // Откладываем синхронизацию библиотеки на 10 секунд после старта,
+            // чтобы не забивать сеть и ByeDPI во время первого запуска трека
+            kotlinx.coroutines.delay(10000)
             com.melo.music.update.UpdateManager.checkForUpdates(this@MainActivity)
             if (com.melo.music.auth.YouTubeAccountManager.isLoggedIn) {
                 runCatching {
