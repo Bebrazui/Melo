@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
 // Данные подписи релиза держим вне репозитория (keystore.properties в .gitignore).
@@ -136,6 +137,11 @@ dependencies {
     implementation(libs.newpipe.extractor)
     implementation(libs.okhttp)
     implementation(libs.okhttp.dnsoverhttps)
+
+    // Room Database
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
 
     // Обложки треков
     implementation(libs.coil.compose)

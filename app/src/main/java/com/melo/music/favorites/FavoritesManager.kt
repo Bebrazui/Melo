@@ -2,16 +2,25 @@ package com.melo.music.favorites
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.melo.music.db.FavoriteEntity
+import com.melo.music.db.MeloDatabase
 import com.melo.music.extractor.Extractor
 import com.melo.music.extractor.ItemKind
 import com.melo.music.extractor.Source
 import com.melo.music.extractor.TrackItem
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.json.JSONArray
-import org.json.JSONObject
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Хранилище избранных треков в SharedPreferences.
- * Выживает перезаход приложения.
+ * Хранилище избранных треков на Room Database.
+ * Автоматически мигрирует старые данные из SharedPreferences.
  */
 object FavoritesManager {
 
@@ -21,15 +30,56 @@ object FavoritesManager {
 
     private var prefs: SharedPreferences? = null
     private var appContext: Context? = null
-    private var inMemoryCache: MutableList<TrackItem>? = null
+    private var database: MeloDatabase? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Быстрый кэш в памяти для мгновенного синхронного доступа в UI (getAll(), isLiked())
+    private val inMemoryCache = CopyOnWriteArrayList<TrackItem>()
+    private val _favoritesFlow = MutableStateFlow<List<TrackItem>>(emptyList())
+    val favoritesFlow: StateFlow<List<TrackItem>> = _favoritesFlow.asStateFlow()
+
+    @Volatile
+    private var initialized = false
 
     fun init(context: Context) {
-        appContext = context.applicationContext
-        prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        loadFromPrefs()
+        if (initialized) return
+        val app = context.applicationContext
+        appContext = app
+        prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val db = MeloDatabase.getInstance(app)
+        database = db
+
+        // Загрузка кэша и фоновая миграция
+        scope.launch {
+            val dao = db.favoritesDao()
+            // Проверяем, есть ли старые данные в SharedPreferences для миграции
+            val oldJson = prefs?.getString(KEY_TRACKS, null)
+            if (!oldJson.isNullOrBlank()) {
+                val migrated = parseLegacyJson(oldJson)
+                if (migrated.isNotEmpty()) {
+                    dao.insertAll(migrated.map { FavoriteEntity.fromTrackItem(it) })
+                }
+                prefs?.edit()?.remove(KEY_TRACKS)?.apply()
+            }
+
+            // Инициализация кэша из Room
+            val dbTracks = dao.getAll().map { it.toTrackItem() }
+            inMemoryCache.clear()
+            inMemoryCache.addAll(dbTracks)
+            _favoritesFlow.value = inMemoryCache.toList()
+
+            // Наблюдаем за базой для реактивных обновлений
+            dao.observeAll().collect { list ->
+                val items = list.map { it.toTrackItem() }
+                inMemoryCache.clear()
+                inMemoryCache.addAll(items)
+                _favoritesFlow.value = items
+            }
+        }
+        initialized = true
     }
 
-    /** Открыты ли лайкнутые песни для других. По умолчанию открыты. */
+    /** Открыты ли лайкнутые песни для других. */
     fun isPublic(): Boolean = prefs?.getBoolean(KEY_PUBLIC, true) ?: true
 
     fun setPublic(value: Boolean) {
@@ -37,90 +87,68 @@ object FavoritesManager {
         com.melo.music.sync.LibrarySync.onFavoritesChanged()
     }
 
-    @Synchronized
-    private fun loadFromPrefs(): MutableList<TrackItem> {
-        val cached = inMemoryCache
-        if (cached != null) return cached
-        val json = prefs?.getString(KEY_TRACKS, null) ?: return mutableListOf<TrackItem>().also { inMemoryCache = it }
-        val list = runCatching {
-            val arr = JSONArray(json)
-            (0 until arr.length()).map { i ->
-                val obj = arr.getJSONObject(i)
-                TrackItem(
-                    title = obj.getString("title"),
-                    uploader = obj.optString("uploader", "").ifBlank { null },
-                    url = obj.getString("url"),
-                    durationSeconds = obj.optLong("duration", 0),
-                    thumbnailUrl = obj.optString("thumbnail", "").ifBlank { null },
-                    source = Source.valueOf(obj.optString("source", "YOUTUBE_MUSIC")),
-                    kind = ItemKind.TRACK,
-                    speed = obj.optDouble("speed", 1.0).toFloat(),
-                    bassBoost = obj.optBoolean("bassBoost", false),
-                    crush = obj.optDouble("crush", 0.0).toFloat(),
-                    pitchSemi = obj.optDouble("pitchSemi", 0.0).toFloat(),
-                    noteShiftSeed = obj.optLong("noteShiftSeed", 0L),
-                )
-            }.toMutableList()
-        }.getOrDefault(mutableListOf())
-        inMemoryCache = list
-        return list
-    }
+    fun getAll(): MutableList<TrackItem> = ArrayList(inMemoryCache)
 
-    @Synchronized
-    fun getAll(): MutableList<TrackItem> = ArrayList(inMemoryCache ?: loadFromPrefs())
-
-    @Synchronized
-    fun isLiked(url: String): Boolean = (inMemoryCache ?: loadFromPrefs()).any { it.url == url }
+    fun isLiked(url: String): Boolean = inMemoryCache.any { it.url == url }
 
     /** Совпадение с учётом скорости, басс-буста и эффектов. */
-    @Synchronized
-    fun isLiked(item: TrackItem): Boolean =
-        (inMemoryCache ?: loadFromPrefs()).any { matches(it, item) }
+    fun isLiked(item: TrackItem): Boolean = inMemoryCache.any { matches(it, item) }
 
-    @Synchronized
     fun toggle(item: TrackItem): Boolean {
-        val list = inMemoryCache ?: loadFromPrefs()
-        val idx = list.indexOfFirst { matches(it, item) }
-        return if (idx >= 0) {
-            list.removeAt(idx)
-            save(list)
+        val existing = inMemoryCache.firstOrNull { matches(it, item) }
+        val dao = database?.favoritesDao()
+        return if (existing != null) {
+            inMemoryCache.remove(existing)
+            _favoritesFlow.value = inMemoryCache.toList()
+            scope.launch {
+                dao?.deleteById(FavoriteEntity.fromTrackItem(item).id)
+            }
             com.melo.music.sync.LibrarySync.onFavoritesChanged()
             false
         } else {
-            list.add(item)
-            save(list)
+            inMemoryCache.add(0, item)
+            _favoritesFlow.value = inMemoryCache.toList()
+            scope.launch {
+                dao?.insert(FavoriteEntity.fromTrackItem(item))
+            }
             com.melo.music.sync.LibrarySync.onFavoritesChanged()
-            // Заранее резолвим прямую ссылку → следующее воспроизведение мгновенное.
             appContext?.let { ctx -> Extractor.prefetch(ctx, item.url) }
             true
         }
     }
 
-    /** Полная замена локального списка (используется облачным синком — без обратной выгрузки). */
-    @Synchronized
-    fun replaceAll(list: List<TrackItem>) = save(list)
-
-    @Synchronized
-    private fun save(list: List<TrackItem>) {
-        inMemoryCache = list.toMutableList()
-        val arr = JSONArray()
-        for (t in list) {
-            arr.put(JSONObject().apply {
-                put("title", t.title)
-                put("uploader", t.uploader ?: "")
-                put("url", t.url)
-                put("duration", t.durationSeconds)
-                put("thumbnail", t.thumbnailUrl ?: "")
-                put("source", t.source.name)
-                put("speed", t.speed.toDouble())
-                put("bassBoost", t.bassBoost)
-                put("crush", t.crush.toDouble())
-                put("pitchSemi", t.pitchSemi.toDouble())
-                put("noteShiftSeed", t.noteShiftSeed)
-            })
+    /** Полная замена списка (облачный синк). */
+    fun replaceAll(list: List<TrackItem>) {
+        inMemoryCache.clear()
+        inMemoryCache.addAll(list)
+        _favoritesFlow.value = list
+        scope.launch {
+            val dao = database?.favoritesDao() ?: return@launch
+            dao.clearAll()
+            dao.insertAll(list.map { FavoriteEntity.fromTrackItem(it) })
         }
-        prefs?.edit()?.putString(KEY_TRACKS, arr.toString())?.apply()
     }
+
+    private fun parseLegacyJson(json: String): List<TrackItem> = runCatching {
+        val arr = JSONArray(json)
+        (0 until arr.length()).map { i ->
+            val obj = arr.getJSONObject(i)
+            TrackItem(
+                title = obj.getString("title"),
+                uploader = obj.optString("uploader", "").ifBlank { null },
+                url = obj.getString("url"),
+                durationSeconds = obj.optLong("duration", 0),
+                thumbnailUrl = obj.optString("thumbnail", "").ifBlank { null },
+                source = runCatching { Source.valueOf(obj.optString("source", "YOUTUBE_MUSIC")) }.getOrDefault(Source.YOUTUBE_MUSIC),
+                kind = ItemKind.TRACK,
+                speed = obj.optDouble("speed", 1.0).toFloat(),
+                bassBoost = obj.optBoolean("bassBoost", false),
+                crush = obj.optDouble("crush", 0.0).toFloat(),
+                pitchSemi = obj.optDouble("pitchSemi", 0.0).toFloat(),
+                noteShiftSeed = obj.optLong("noteShiftSeed", 0L),
+            )
+        }
+    }.getOrDefault(emptyList())
 
     private fun sameSpeed(a: Float, b: Float) = kotlin.math.abs(a - b) < 0.01f
 
