@@ -1752,7 +1752,7 @@ private fun EqualizerSection() {
                         val levels = remember(enabled, selectedPreset) {
                             (0 until bandCount).map { EqualizerManager.getBandLevel(it).toInt() }
                         }
-                        var bandLevels by remember { mutableStateOf(levels) }
+                        var bandLevels by remember(enabled, selectedPreset) { mutableStateOf(levels) }
 
                         Text(
                             "Точная настройка частот",
