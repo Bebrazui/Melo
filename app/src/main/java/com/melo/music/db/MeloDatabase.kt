@@ -5,10 +5,21 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [FavoriteEntity::class], version = 1, exportSchema = false)
+@Database(
+    entities = [
+        FavoriteEntity::class,
+        HistoryEntity::class,
+        PlayCountEntity::class,
+        PlaylistEntity::class
+    ],
+    version = 2,
+    exportSchema = false
+)
 abstract class MeloDatabase : RoomDatabase() {
 
     abstract fun favoritesDao(): FavoritesDao
+    abstract fun historyDao(): HistoryDao
+    abstract fun playlistDao(): PlaylistDao
 
     companion object {
         @Volatile
@@ -20,7 +31,9 @@ abstract class MeloDatabase : RoomDatabase() {
                     context.applicationContext,
                     MeloDatabase::class.java,
                     "melo.db"
-                ).build().also { INSTANCE = it }
+                )
+                .fallbackToDestructiveMigration() // Для плавного обновления схемы на этапе разработки
+                .build().also { INSTANCE = it }
             }
         }
     }

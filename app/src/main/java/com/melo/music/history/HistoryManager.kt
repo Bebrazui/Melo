@@ -2,14 +2,24 @@ package com.melo.music.history
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.melo.music.db.HistoryEntity
+import com.melo.music.db.MeloDatabase
+import com.melo.music.db.PlayCountEntity
 import com.melo.music.extractor.ItemKind
 import com.melo.music.extractor.Source
 import com.melo.music.extractor.TrackItem
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * История прослушивания в SharedPreferences с in-memory кэшем (последние первыми, без дублей).
+ * История прослушивания на Room Database с in-memory кэшем.
+ * Автоматически мигрирует данные из SharedPreferences.
  */
 object HistoryManager {
 
@@ -19,124 +29,122 @@ object HistoryManager {
     private const val CAP = 50
 
     private var prefs: SharedPreferences? = null
-    private val inMemoryRecent = mutableListOf<TrackItem>()
-    private val inMemoryPlays = mutableMapOf<String, Pair<Int, Long>>()
+    private var database: MeloDatabase? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val inMemoryRecent = CopyOnWriteArrayList<TrackItem>()
+    private val inMemoryPlays = ConcurrentHashMap<String, Pair<Int, Long>>()
+
+    @Volatile
     private var initialized = false
 
     fun init(context: Context) {
-        val p = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs = p
-        loadAll(p)
-    }
-
-    @Synchronized
-    private fun loadAll(p: SharedPreferences) {
         if (initialized) return
-        inMemoryRecent.clear()
-        inMemoryPlays.clear()
+        val app = context.applicationContext
+        val p = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs = p
+        val db = MeloDatabase.getInstance(app)
+        database = db
 
-        val json = p.getString(KEY, null)
-        if (!json.isNullOrBlank()) {
-            runCatching {
-                val arr = JSONArray(json)
-                for (i in 0 until arr.length()) {
-                    val obj = arr.getJSONObject(i)
-                    inMemoryRecent.add(
-                        TrackItem(
-                            title = obj.getString("title"),
-                            uploader = obj.optString("uploader", "").ifBlank { null },
-                            url = obj.getString("url"),
-                            durationSeconds = obj.optLong("duration", 0),
-                            thumbnailUrl = obj.optString("thumbnail", "").ifBlank { null },
-                            source = runCatching { Source.valueOf(obj.optString("source", "YOUTUBE_MUSIC")) }
-                                .getOrDefault(Source.YOUTUBE_MUSIC),
-                            kind = ItemKind.TRACK,
-                        ),
-                    )
+        scope.launch {
+            val dao = db.historyDao()
+
+            // 1. Миграция старой истории из SharedPreferences
+            val oldJson = p.getString(KEY, null)
+            if (!oldJson.isNullOrBlank()) {
+                val legacyRecent = parseLegacyRecent(oldJson)
+                if (legacyRecent.isNotEmpty()) {
+                    legacyRecent.forEach { dao.insert(HistoryEntity.fromTrackItem(it)) }
                 }
+                p.edit().remove(KEY).apply()
             }
-        }
 
-        val jsonPlays = p.getString(KEY_PLAYS, null)
-        if (!jsonPlays.isNullOrBlank()) {
-            runCatching {
-                val obj = JSONObject(jsonPlays)
-                obj.keys().forEach { url ->
-                    val o = obj.getJSONObject(url)
-                    inMemoryPlays[url] = o.getInt("count") to o.optLong("ts")
+            // 2. Миграция статистики прослушиваний
+            val oldPlaysJson = p.getString(KEY_PLAYS, null)
+            if (!oldPlaysJson.isNullOrBlank()) {
+                val legacyPlays = parseLegacyPlays(oldPlaysJson)
+                if (legacyPlays.isNotEmpty()) {
+                    dao.insertAllPlayCounts(legacyPlays.map { (url, pair) ->
+                        PlayCountEntity(url = url, count = pair.first, lastPlayedAt = pair.second)
+                    })
                 }
+                p.edit().remove(KEY_PLAYS).apply()
+            }
+
+            // 3. Загрузка в память
+            val fromDb = dao.getRecent(CAP).map { it.toTrackItem() }
+            inMemoryRecent.clear()
+            inMemoryRecent.addAll(fromDb)
+
+            val playsFromDb = dao.getAllPlayCounts()
+            inMemoryPlays.clear()
+            playsFromDb.forEach {
+                inMemoryPlays[it.url] = it.count to it.lastPlayedAt
             }
         }
         initialized = true
     }
 
-    @Synchronized
-    fun getAll(): List<TrackItem> {
-        ensureLoaded()
-        return inMemoryRecent.toList()
-    }
+    fun getAll(): List<TrackItem> = inMemoryRecent.toList()
 
-    /** Добавляет трек в начало истории (убирая прежнее вхождение) и инкрементирует счётчик. */
-    @Synchronized
+    /** Добавляет трек в начало истории и инкрементирует счётчик. */
     fun add(item: TrackItem) {
         if (item.kind != ItemKind.TRACK) return
-        ensureLoaded()
         inMemoryRecent.removeAll { it.url == item.url }
         inMemoryRecent.add(0, item)
-        while (inMemoryRecent.size > CAP) inMemoryRecent.removeAt(inMemoryRecent.size - 1)
-        saveRecent(inMemoryRecent)
+        while (inMemoryRecent.size > CAP) {
+            inMemoryRecent.removeAt(inMemoryRecent.size - 1)
+        }
+
+        scope.launch {
+            val dao = database?.historyDao() ?: return@launch
+            dao.insert(HistoryEntity.fromTrackItem(item))
+            dao.trim(CAP)
+        }
         bumpPlays(item.url)
     }
 
-    // ── Персональная статистика прослушиваний ───────────────────────────────
-
-    @Synchronized
     private fun bumpPlays(url: String) {
-        ensureLoaded()
         val (count, _) = inMemoryPlays[url] ?: (0 to 0L)
-        inMemoryPlays[url] = count + 1 to System.currentTimeMillis()
-        while (inMemoryPlays.size > 500) inMemoryPlays.remove(inMemoryPlays.keys.first())
-        val obj = JSONObject()
-        inMemoryPlays.forEach { (u, v) ->
-            obj.put(u, JSONObject().apply { put("count", v.first); put("ts", v.second) })
-        }
-        prefs?.edit()?.putString(KEY_PLAYS, obj.toString())?.apply()
-    }
+        val newCount = count + 1
+        val now = System.currentTimeMillis()
+        inMemoryPlays[url] = newCount to now
 
-    /** Сколько раз пользователь слушал трек. */
-    @Synchronized
-    fun playCount(url: String): Int {
-        ensureLoaded()
-        return inMemoryPlays[url]?.first ?: 0
-    }
-
-    /** Момент последнего прослушивания (epoch мс), 0 если не слушал. */
-    @Synchronized
-    fun lastPlayedAt(url: String): Long {
-        ensureLoaded()
-        return inMemoryPlays[url]?.second ?: 0L
-    }
-
-    private fun ensureLoaded() {
-        if (!initialized) {
-            prefs?.let { loadAll(it) }
-        }
-    }
-
-    private fun saveRecent(list: List<TrackItem>) {
-        val arr = JSONArray()
-        for (t in list) {
-            arr.put(
-                JSONObject().apply {
-                    put("title", t.title)
-                    put("uploader", t.uploader ?: "")
-                    put("url", t.url)
-                    put("duration", t.durationSeconds)
-                    put("thumbnail", t.thumbnailUrl ?: "")
-                    put("source", t.source.name)
-                },
+        scope.launch {
+            database?.historyDao()?.insertPlayCount(
+                PlayCountEntity(url = url, count = newCount, lastPlayedAt = now)
             )
         }
-        prefs?.edit()?.putString(KEY, arr.toString())?.apply()
     }
+
+    fun playCount(url: String): Int = inMemoryPlays[url]?.first ?: 0
+
+    fun lastPlayedAt(url: String): Long = inMemoryPlays[url]?.second ?: 0L
+
+    private fun parseLegacyRecent(json: String): List<TrackItem> = runCatching {
+        val arr = JSONArray(json)
+        (0 until arr.length()).map { i ->
+            val obj = arr.getJSONObject(i)
+            TrackItem(
+                title = obj.getString("title"),
+                uploader = obj.optString("uploader", "").ifBlank { null },
+                url = obj.getString("url"),
+                durationSeconds = obj.optLong("duration", 0),
+                thumbnailUrl = obj.optString("thumbnail", "").ifBlank { null },
+                source = runCatching { Source.valueOf(obj.optString("source", "YOUTUBE_MUSIC")) }
+                    .getOrDefault(Source.YOUTUBE_MUSIC),
+                kind = ItemKind.TRACK,
+            )
+        }
+    }.getOrDefault(emptyList())
+
+    private fun parseLegacyPlays(json: String): Map<String, Pair<Int, Long>> = runCatching {
+        val result = mutableMapOf<String, Pair<Int, Long>>()
+        val obj = JSONObject(json)
+        obj.keys().forEach { url ->
+            val o = obj.getJSONObject(url)
+            result[url] = o.getInt("count") to o.optLong("ts")
+        }
+        result
+    }.getOrDefault(emptyMap())
 }

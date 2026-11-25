@@ -2,12 +2,19 @@ package com.melo.music.playlists
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.melo.music.db.MeloDatabase
+import com.melo.music.db.PlaylistEntity
 import com.melo.music.extractor.Extractor
 import com.melo.music.extractor.ItemKind
 import com.melo.music.extractor.Source
 import com.melo.music.extractor.TrackItem
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.CopyOnWriteArrayList
 
 /** Плейлист: id, имя и список треков. */
 data class Playlist(
@@ -22,7 +29,8 @@ data class Playlist(
 }
 
 /**
- * Плейлисты в SharedPreferences с in-memory кэшем (переживают перезапуск).
+ * Плейлисты на Room Database с in-memory кэшем.
+ * Автоматически мигрирует данные из SharedPreferences.
  */
 object PlaylistManager {
 
@@ -31,98 +39,108 @@ object PlaylistManager {
 
     private var prefs: SharedPreferences? = null
     private var appContext: Context? = null
-    private val inMemoryPlaylists = mutableListOf<Playlist>()
+    private var database: MeloDatabase? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val inMemoryPlaylists = CopyOnWriteArrayList<Playlist>()
+
+    @Volatile
     private var initialized = false
 
     fun init(context: Context) {
-        appContext = context.applicationContext
-        val p = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs = p
-        loadAll(p)
-    }
-
-    @Synchronized
-    private fun loadAll(p: SharedPreferences) {
         if (initialized) return
-        inMemoryPlaylists.clear()
-        val json = p.getString(KEY, null)
-        if (!json.isNullOrBlank()) {
-            runCatching {
-                val arr = JSONArray(json)
-                for (i in 0 until arr.length()) {
-                    val obj = arr.getJSONObject(i)
-                    inMemoryPlaylists.add(
-                        Playlist(
-                            id = obj.getString("id"),
-                            name = obj.getString("name"),
-                            tracks = parseTracks(obj.getJSONArray("tracks")),
-                            isPublic = obj.optBoolean("isPublic", true),
-                        ),
-                    )
+        val app = context.applicationContext
+        appContext = app
+        val p = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs = p
+        val db = MeloDatabase.getInstance(app)
+        database = db
+
+        scope.launch {
+            val dao = db.playlistDao()
+
+            // 1. Миграция старых плейлистов из SharedPreferences
+            val oldJson = p.getString(KEY, null)
+            if (!oldJson.isNullOrBlank()) {
+                val legacy = parseLegacyPlaylists(oldJson)
+                if (legacy.isNotEmpty()) {
+                    dao.insertAll(legacy.map {
+                        PlaylistEntity(
+                            id = it.id,
+                            name = it.name,
+                            isPublic = it.isPublic,
+                            tracksJson = serializeTracks(it.tracks)
+                        )
+                    })
                 }
+                p.edit().remove(KEY).apply()
             }
+
+            // 2. Загрузка в память
+            val fromDb = dao.getAll().map {
+                Playlist(
+                    id = it.id,
+                    name = it.name,
+                    tracks = parseTracks(it.tracksJson),
+                    isPublic = it.isPublic
+                )
+            }
+            inMemoryPlaylists.clear()
+            inMemoryPlaylists.addAll(fromDb)
         }
         initialized = true
     }
 
-    private fun ensureLoaded() {
-        if (!initialized) {
-            prefs?.let { loadAll(it) }
-        }
-    }
+    fun getAll(): MutableList<Playlist> = ArrayList(inMemoryPlaylists)
 
-    @Synchronized
-    fun getAll(): MutableList<Playlist> {
-        ensureLoaded()
-        return inMemoryPlaylists.map { it.copy() }.toMutableList()
-    }
-
-    @Synchronized
     fun create(name: String): Playlist {
-        ensureLoaded()
         val playlist = Playlist(
             id = System.currentTimeMillis().toString(),
             name = name.trim().ifBlank { "Без названия" },
             tracks = emptyList(),
         )
         inMemoryPlaylists.add(playlist)
-        save(inMemoryPlaylists)
+        saveDb(playlist)
         com.melo.music.sync.LibrarySync.onPlaylistsChanged()
         return playlist
     }
 
-    @Synchronized
     fun delete(id: String) {
-        ensureLoaded()
         inMemoryPlaylists.removeAll { it.id == id }
-        save(inMemoryPlaylists)
+        scope.launch {
+            database?.playlistDao()?.deleteById(id)
+        }
         com.melo.music.sync.LibrarySync.onPlaylistsChanged()
     }
 
-    /** Полная замена локального списка (используется облачным синком — без обратной выгрузки). */
-    @Synchronized
+    /** Полная замена локального списка (используется облачным синком). */
     fun replaceAll(list: List<Playlist>) {
-        ensureLoaded()
         inMemoryPlaylists.clear()
         inMemoryPlaylists.addAll(list)
-        save(inMemoryPlaylists)
+        scope.launch {
+            val dao = database?.playlistDao() ?: return@launch
+            dao.clearAll()
+            dao.insertAll(list.map {
+                PlaylistEntity(
+                    id = it.id,
+                    name = it.name,
+                    isPublic = it.isPublic,
+                    tracksJson = serializeTracks(it.tracks)
+                )
+            })
+        }
     }
 
-    /** Открыть/закрыть плейлист для других пользователей. */
-    @Synchronized
     fun setPublic(id: String, value: Boolean) {
-        ensureLoaded()
         val idx = inMemoryPlaylists.indexOfFirst { it.id == id }
         if (idx < 0) return
-        inMemoryPlaylists[idx] = inMemoryPlaylists[idx].copy(isPublic = value)
-        save(inMemoryPlaylists)
+        val updated = inMemoryPlaylists[idx].copy(isPublic = value)
+        inMemoryPlaylists[idx] = updated
+        saveDb(updated)
         com.melo.music.sync.LibrarySync.onPlaylistsChanged()
     }
 
-    /** Добавляет трек в плейлист (без дублей). Возвращает true, если добавлен. */
-    @Synchronized
     fun addTrack(playlistId: String, track: TrackItem): Boolean {
-        ensureLoaded()
         val idx = inMemoryPlaylists.indexOfFirst { it.id == playlistId }
         if (idx < 0) return false
         val pl = inMemoryPlaylists[idx]
@@ -134,63 +152,60 @@ object PlaylistManager {
                 kotlin.math.abs(it.pitchSemi - track.pitchSemi) < 0.01f &&
                 it.noteShiftSeed == track.noteShiftSeed
         }) return false
-        inMemoryPlaylists[idx] = pl.copy(tracks = pl.tracks + track)
-        save(inMemoryPlaylists)
+
+        val updated = pl.copy(tracks = pl.tracks + track)
+        inMemoryPlaylists[idx] = updated
+        saveDb(updated)
         com.melo.music.sync.LibrarySync.onPlaylistsChanged()
-        // Заранее резолвим прямую ссылку → воспроизведение из плейлиста мгновенное.
         appContext?.let { ctx -> Extractor.prefetch(ctx, track.url) }
         return true
     }
 
-    @Synchronized
     fun removeTrack(playlistId: String, trackUrl: String) {
-        ensureLoaded()
         val idx = inMemoryPlaylists.indexOfFirst { it.id == playlistId }
         if (idx < 0) return
         val pl = inMemoryPlaylists[idx]
-        inMemoryPlaylists[idx] = pl.copy(tracks = pl.tracks.filterNot { it.url == trackUrl })
-        save(inMemoryPlaylists)
+        val updated = pl.copy(tracks = pl.tracks.filterNot { it.url == trackUrl })
+        inMemoryPlaylists[idx] = updated
+        saveDb(updated)
         com.melo.music.sync.LibrarySync.onPlaylistsChanged()
     }
 
-    private fun save(list: List<Playlist>) {
-        val arr = JSONArray()
-        for (pl in list) {
-            arr.put(
-                JSONObject().apply {
-                    put("id", pl.id)
-                    put("name", pl.name)
-                    put("tracks", serializeTracks(pl.tracks))
-                    put("isPublic", pl.isPublic)
-                },
+    private fun saveDb(playlist: Playlist) {
+        scope.launch {
+            database?.playlistDao()?.insert(
+                PlaylistEntity(
+                    id = playlist.id,
+                    name = playlist.name,
+                    isPublic = playlist.isPublic,
+                    tracksJson = serializeTracks(playlist.tracks)
+                )
             )
         }
-        prefs?.edit()?.putString(KEY, arr.toString())?.apply()
     }
 
-    private fun serializeTracks(tracks: List<TrackItem>): JSONArray {
+    private fun serializeTracks(tracks: List<TrackItem>): String {
         val arr = JSONArray()
         for (t in tracks) {
-            arr.put(
-                JSONObject().apply {
-                    put("title", t.title)
-                    put("uploader", t.uploader ?: "")
-                    put("url", t.url)
-                    put("duration", t.durationSeconds)
-                    put("thumbnail", t.thumbnailUrl ?: "")
-                    put("source", t.source.name)
-                    put("speed", t.speed.toDouble())
-                    put("bassBoost", t.bassBoost)
-                    put("crush", t.crush.toDouble())
-                    put("pitchSemi", t.pitchSemi.toDouble())
-                    put("noteShiftSeed", t.noteShiftSeed)
-                },
-            )
+            arr.put(JSONObject().apply {
+                put("title", t.title)
+                put("uploader", t.uploader ?: "")
+                put("url", t.url)
+                put("duration", t.durationSeconds)
+                put("thumbnail", t.thumbnailUrl ?: "")
+                put("source", t.source.name)
+                put("speed", t.speed.toDouble())
+                put("bassBoost", t.bassBoost)
+                put("crush", t.crush.toDouble())
+                put("pitchSemi", t.pitchSemi.toDouble())
+                put("noteShiftSeed", t.noteShiftSeed)
+            })
         }
-        return arr
+        return arr.toString()
     }
 
-    private fun parseTracks(arr: JSONArray): List<TrackItem> =
+    private fun parseTracks(json: String): List<TrackItem> = runCatching {
+        val arr = JSONArray(json)
         (0 until arr.length()).map { i ->
             val obj = arr.getJSONObject(i)
             TrackItem(
@@ -209,4 +224,18 @@ object PlaylistManager {
                 noteShiftSeed = obj.optLong("noteShiftSeed", 0L),
             )
         }
+    }.getOrDefault(emptyList())
+
+    private fun parseLegacyPlaylists(json: String): List<Playlist> = runCatching {
+        val arr = JSONArray(json)
+        (0 until arr.length()).map { i ->
+            val obj = arr.getJSONObject(i)
+            Playlist(
+                id = obj.getString("id"),
+                name = obj.getString("name"),
+                tracks = parseTracks(obj.getJSONArray("tracks").toString()),
+                isPublic = obj.optBoolean("isPublic", true),
+            )
+        }
+    }.getOrDefault(emptyList())
 }

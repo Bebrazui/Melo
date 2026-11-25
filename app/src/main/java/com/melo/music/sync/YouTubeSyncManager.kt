@@ -100,7 +100,7 @@ object YouTubeSyncManager {
         }
     }
 
-    private fun fetchLikedMusic(context: Context): List<TrackItem> {
+    private suspend fun fetchLikedMusic(context: Context): List<TrackItem> {
         val tracks = mutableListOf<TrackItem>()
         // Запрос через официальный InnerTube browse (VLLM или FEmusic_liked_videos) с авторизационными куками
         for (browseId in listOf("VLLM", "FEmusic_liked_videos")) {
@@ -174,14 +174,11 @@ object YouTubeSyncManager {
         return playlists
     }
 
-    private fun fetchPlaylistTracks(context: Context, browseId: String): List<TrackItem> {
+    private suspend fun fetchPlaylistTracks(context: Context, browseId: String): List<TrackItem> {
         val tracks = mutableListOf<TrackItem>()
         val playlistId = if (browseId.startsWith("VL")) browseId.removePrefix("VL") else browseId
         val viaNewPipe = runCatching {
-            val res = kotlinx.coroutines.runBlocking {
-                NewPipeResolver.importPlaylist(context, "https://music.youtube.com/playlist?list=$playlistId")
-            }
-            res.second
+            NewPipeResolver.importPlaylist(context, "https://music.youtube.com/playlist?list=$playlistId").second
         }.getOrNull()
 
         if (!viaNewPipe.isNullOrEmpty() && viaNewPipe.none { it.title == "Трек" || it.title == "Трек YouTube Music" }) {
@@ -196,7 +193,7 @@ object YouTubeSyncManager {
         return tracks
     }
 
-    private fun parseTracksFromJson(context: Context, root: JSONObject, out: MutableList<TrackItem>) {
+    private suspend fun parseTracksFromJson(context: Context, root: JSONObject, out: MutableList<TrackItem>) {
         val rootStr = root.toString()
         val marker = "\"musicResponsiveListItemRenderer\":"
         var idx = 0
@@ -296,9 +293,7 @@ object YouTubeSyncManager {
             val item = out[i]
             if (item.title == "Трек" || item.title == "Трек YouTube Music" || item.uploader.isNullOrBlank()) {
                 val resolvedMeta = runCatching {
-                    kotlinx.coroutines.runBlocking {
-                        NewPipeResolver.resolveSingleTrack(context, item.url)
-                    }
+                    NewPipeResolver.resolveSingleTrack(context, item.url)
                 }.getOrNull()
                 if (resolvedMeta != null && resolvedMeta.title.isNotBlank()) {
                     out[i] = item.copy(
