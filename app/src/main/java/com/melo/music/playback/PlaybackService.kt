@@ -626,7 +626,14 @@ class PlaybackService : MediaSessionService() {
                 }
             } catch (_: Exception) {
             }
-            handler.postDelayed(this, 200)
+            // Адаптивный интервал: когда трек играет далеко от конца, проверяем реже (1000мс),
+            // экономя батарею в фоне. У конца трека (последние 30с) или при таймере сна — проверяем каждые 250мс.
+            val p = active
+            val dur = p.duration
+            val pos = p.currentPosition
+            val nearEnd = dur > 0 && (dur - pos) <= (crossfadeMs + 30_000L)
+            val delayMs = if (!p.isPlaying) 1000L else if (sleepEndAt > 0L || nearEnd) 250L else 1000L
+            handler.postDelayed(this, delayMs)
         }
     }
 

@@ -10,9 +10,10 @@ import androidx.room.RoomDatabase
         FavoriteEntity::class,
         HistoryEntity::class,
         PlayCountEntity::class,
-        PlaylistEntity::class
+        PlaylistEntity::class,
+        StreamCacheEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class MeloDatabase : RoomDatabase() {
@@ -20,6 +21,7 @@ abstract class MeloDatabase : RoomDatabase() {
     abstract fun favoritesDao(): FavoritesDao
     abstract fun historyDao(): HistoryDao
     abstract fun playlistDao(): PlaylistDao
+    abstract fun streamCacheDao(): StreamCacheDao
 
     companion object {
         @Volatile
@@ -32,7 +34,7 @@ abstract class MeloDatabase : RoomDatabase() {
                     MeloDatabase::class.java,
                     "melo.db"
                 )
-                .fallbackToDestructiveMigration() // Для плавного обновления схемы на этапе разработки
+                .fallbackToDestructiveMigration()
                 .build().also { INSTANCE = it }
             }
         }

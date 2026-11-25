@@ -179,8 +179,6 @@ class MeloApp : Application(), ImageLoaderFactory {
                                 }
                             }
                             if (resp == null) throw e
-                        } else {
-                            try { Thread.sleep(400L * attempt) } catch (_: InterruptedException) {}
                         }
                     }
                 }
