@@ -29,9 +29,9 @@ android {
             useSupportLibrary = true
         }
 
-        // youtubedl-android поставляет нативный Python/yt-dlp по ABI.
+        // NDK ABI фильтр: нативный ByeDPI daemon
         ndk {
-            abiFilters += listOf("arm64-v8a")
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
     }
 
@@ -91,10 +91,6 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
-        // youtubedl-android требует распаковки нативных библиотек.
-        jniLibs {
-            useLegacyPackaging = true
-        }
     }
 
     externalNativeBuild {
@@ -128,10 +124,6 @@ dependencies {
     implementation(libs.media3.ui)
 
     implementation(libs.kotlinx.coroutines.android)
-
-    // yt-dlp на устройстве (SoundCloud, Яндекс и прочее)
-    implementation(libs.youtubedl.library)
-    implementation(libs.youtubedl.ffmpeg)
 
     // NewPipe Extractor — YouTube
     implementation(libs.newpipe.extractor)

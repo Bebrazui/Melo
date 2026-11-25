@@ -13,11 +13,7 @@
 -dontwarn javax.script.**
 -dontwarn org.mozilla.javascript.**
 
-# ── 3. youtubedl-android & FFmpeg ──
--keep class com.yausername.youtubedl_android.** { *; }
--keep class com.yausername.ffmpeg.** { *; }
--dontwarn com.yausername.youtubedl_android.**
--dontwarn com.yausername.ffmpeg.**
+
 
 # ── 4. OkHttp & DNS over HTTPS ──
 -keepattributes Signature
