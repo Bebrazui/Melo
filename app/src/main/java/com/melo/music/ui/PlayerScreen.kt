@@ -290,6 +290,15 @@ internal val FoglihtenFontFamily = FontFamily(
  * по региону. Тап по треку → on-device резолв (NewPipe) → фоновое воспроизведение.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
+sealed interface ActivePlayerSheet {
+    data class ContextMenu(val track: TrackItem) : ActivePlayerSheet
+    data class SpeedVariant(val track: TrackItem) : ActivePlayerSheet
+    data class PlaylistDetails(val playlist: Playlist) : ActivePlayerSheet
+    data object Queue : ActivePlayerSheet
+    data object YouTubeLogin : ActivePlayerSheet
+    data object Import : ActivePlayerSheet
+}
+
 @Composable
 fun PlayerScreen(
     onSearch: (String) -> Flow<List<TrackItem>>,
@@ -376,16 +385,13 @@ fun PlayerScreen(
     var miniPlayerBounds by remember { mutableStateOf<Rect?>(null) }
     var miniArtBounds by remember { mutableStateOf<Rect?>(null) }
     var artistOpen by rememberSaveable(stateSaver = TrackSaver.singleSaver()) { mutableStateOf<TrackItem?>(null) }
-    var playlistOpen by remember { mutableStateOf<Playlist?>(null) }
+    var activeSheet by remember { mutableStateOf<ActivePlayerSheet?>(null) }
     var searchMode by rememberSaveable { mutableStateOf(false) }
     var homeSettings by remember { mutableStateOf(false) }
     // Экран входа: при первом запуске обязателен (не закрыть), из «Аккаунта» — закрываемый.
     var authVisible by remember { mutableStateOf(!com.melo.music.settings.AppSettings.seenWelcome) }
     var authDismissible by remember { mutableStateOf(false) }
-    var showYouTubeLoginSheet by remember { mutableStateOf(false) }
-    var importOpen by remember { mutableStateOf(false) }
     var libraryVersion by remember { mutableIntStateOf(0) }
-    var showQueue by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf(HistoryManager.getAll()) }
     var query by rememberSaveable { mutableStateOf("") }
     var ghostSuggestions by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -432,9 +438,6 @@ fun PlayerScreen(
         }
     }
 
-    var contextMenuTrack by remember { mutableStateOf<TrackItem?>(null) }
-    // Цель сохранения кастомной/slowed/sped up/bass/fx версии.
-    var speedVariantTarget by remember { mutableStateOf<TrackItem?>(null) }
     // Поиск людей + открытый чужой профиль.
     var userResults by remember { mutableStateOf<List<com.melo.music.profile.MeloProfile>>(emptyList()) }
     var profileOpen by remember { mutableStateOf<com.melo.music.profile.MeloProfile?>(null) }
@@ -1202,7 +1205,7 @@ fun PlayerScreen(
                                     },
                                     onOpenArtist = { artistOpen = it },
                                     onOpenUser = { profileOpen = it },
-                                    onTrackLongClick = { contextMenuTrack = it },
+                                    onTrackLongClick = { activeSheet = ActivePlayerSheet.ContextMenu(it) },
                                     onLoadAlbumTracks = { onLoadAlbumTracks(it) },
                                 )
                             }
@@ -1217,7 +1220,7 @@ fun PlayerScreen(
                             isPlaying = isPlaying,
                             resolvingUrl = resolvingUrl,
                             onPlay = { list, index -> playAt(list, index) },
-                            onTrackLongClick = { contextMenuTrack = it },
+                            onTrackLongClick = { activeSheet = ActivePlayerSheet.ContextMenu(it) },
                             onMood = { seed -> query = seed; runSearch() },
                             onOpenAccount = { selectedTab = MeloTab.Account },
                             onPrefetch = onPrefetch,
@@ -1313,7 +1316,7 @@ fun PlayerScreen(
                                             kotlin.math.abs((nowPlaying?.pitchSemi ?: 0f) - item.pitchSemi) < 0.01f &&
                                             (nowPlaying?.noteShiftSeed ?: 0L) == item.noteShiftSeed && isPlaying,
                                         onClick = { playAt(likedList, index) },
-                                        onLongClick = { contextMenuTrack = item },
+                                        onLongClick = { activeSheet = ActivePlayerSheet.ContextMenu(item) },
                                     )
                                 }
                             }
@@ -1325,9 +1328,9 @@ fun PlayerScreen(
                 MeloTab.Map -> Box(modifier = Modifier.fillMaxSize())
 
                 MeloTab.Account -> AccountTab(
-                    onOpenPlaylist = { playlistOpen = it },
+                    onOpenPlaylist = { activeSheet = ActivePlayerSheet.PlaylistDetails(it) },
                     onOpenSettings = { homeSettings = true },
-                    onOpenImport = { importOpen = true },
+                    onOpenImport = { activeSheet = ActivePlayerSheet.Import },
                     onOpenLogin = { authDismissible = true; authVisible = true },
                     refreshKey = libraryVersion,
                     onOpenArtist = { artistOpen = it },
@@ -1481,13 +1484,15 @@ fun PlayerScreen(
                     onRandomizeNotes = { randomizeNotes() },
                     onResetAudioFx = { resetAudioFx() },
                     onAddSpeedVariant = { sp ->
-                        speedVariantTarget = speedVariant(
-                            base = item,
-                            speed = sp,
-                            bassBoost = isBassBoost,
-                            crush = crushAmount,
-                            pitchSemi = pitchSemi,
-                            noteShiftSeed = noteShiftSeed,
+                        activeSheet = ActivePlayerSheet.SpeedVariant(
+                            speedVariant(
+                                base = item,
+                                speed = sp,
+                                bassBoost = isBassBoost,
+                                crush = crushAmount,
+                                pitchSemi = pitchSemi,
+                                noteShiftSeed = noteShiftSeed,
+                            )
                         )
                     },
                     onSeek = { ms -> controller?.seekTo(ms) },
@@ -1497,7 +1502,7 @@ fun PlayerScreen(
                     onToggleShuffle = { shuffle = !shuffle },
                     onToggleRepeat = { repeatOne = !repeatOne },
                     onToggleLike = { toggleLike(nowPlaying ?: item) },
-                    onShowQueue = { showQueue = true },
+                    onShowQueue = { activeSheet = ActivePlayerSheet.Queue },
                     onFetchLyrics = { onFetchLyrics(item.title, item.uploader) },
                     onOpenArtist = { artistItem ->
                         playerExpanded = false
@@ -1551,7 +1556,7 @@ fun PlayerScreen(
                         if (tracks.isNotEmpty()) playAt(tracks, tracks.indices.random())
                     },
                     onLoadAlbumTracks = { url -> onLoadAlbumTracks(url) },
-                    onTrackLongClick = { contextMenuTrack = it },
+                    onTrackLongClick = { activeSheet = ActivePlayerSheet.ContextMenu(it) },
                     onOpenSimilar = { artistOpen = it },
                     onClose = { artistOpen = null },
                 )
@@ -1559,7 +1564,7 @@ fun PlayerScreen(
         }
 
         AnimatedVisibility(
-            visible = playlistOpen != null,
+            visible = activeSheet is ActivePlayerSheet.PlaylistDetails,
             enter = slideInVertically(
                 animationSpec = tween(Motion.TRANSITION_MS, easing = Motion.EmphasizedDecelerate),
                 initialOffsetY = { it },
@@ -1569,7 +1574,7 @@ fun PlayerScreen(
                 targetOffsetY = { it },
             ) + fadeOut(tween(180)),
         ) {
-            playlistOpen?.let { pl ->
+            (activeSheet as? ActivePlayerSheet.PlaylistDetails)?.playlist?.let { pl ->
                 PlaylistScreen(
                     playlist = pl,
                     nowPlayingUrl = nowPlaying?.url,
@@ -1578,33 +1583,33 @@ fun PlayerScreen(
                     isPlaying = isPlaying,
                     resolvingUrl = resolvingUrl,
                     onPlay = { tracks, index -> playAt(tracks, index) },
-                    onTrackLongClick = { contextMenuTrack = it },
-                    onClose = { playlistOpen = null },
+                    onTrackLongClick = { activeSheet = ActivePlayerSheet.ContextMenu(it) },
+                    onClose = { activeSheet = null },
                 )
             }
         }
     }
 
     TrackContextMenu(
-        item = contextMenuTrack?.let {
+        item = (activeSheet as? ActivePlayerSheet.ContextMenu)?.track?.let {
             if (nowPlaying?.url == it.url) nowPlaying else it
         },
-        onDismiss = { contextMenuTrack = null },
+        onDismiss = { if (activeSheet is ActivePlayerSheet.ContextMenu) activeSheet = null },
     )
 
-    speedVariantTarget?.let { variant ->
+    (activeSheet as? ActivePlayerSheet.SpeedVariant)?.track?.let { variant ->
         SpeedVariantSheet(
             variant = variant,
             onFavorite = {
                 FavoritesManager.toggle(variant)
                 likedVersion++
-                speedVariantTarget = null
+                activeSheet = null
             },
             onAddToPlaylist = { playlist ->
                 PlaylistManager.addTrack(playlist.id, variant)
-                speedVariantTarget = null
+                activeSheet = null
             },
-            onDismiss = { speedVariantTarget = null },
+            onDismiss = { activeSheet = null },
         )
     }
 
@@ -1657,7 +1662,7 @@ fun PlayerScreen(
             onStartRegister = { e, p, n -> com.melo.music.auth.AuthManager.startEmailRegister(e, p, n) },
             onConfirmCode = { uid, c -> com.melo.music.auth.AuthManager.confirmEmailCode(uid, c) },
             onGoogle = { onGoogleLogin() },
-            onYouTubeLogin = { showYouTubeLoginSheet = true },
+            onYouTubeLogin = { activeSheet = ActivePlayerSheet.YouTubeLogin },
             onLocal = {
                 com.melo.music.settings.AppSettings.setSeenWelcome()
                 authVisible = false
@@ -1675,11 +1680,11 @@ fun PlayerScreen(
         )
     }
 
-    if (showYouTubeLoginSheet) {
+    if (activeSheet is ActivePlayerSheet.YouTubeLogin) {
         com.melo.music.ui.auth.GoogleLoginBottomSheet(
-            onDismiss = { showYouTubeLoginSheet = false },
+            onDismiss = { activeSheet = null },
             onSuccess = {
-                showYouTubeLoginSheet = false
+                activeSheet = null
                 com.melo.music.settings.AppSettings.setSeenWelcome()
                 authVisible = false
                 // Автоматически запускаем синк в фоне
@@ -1692,17 +1697,17 @@ fun PlayerScreen(
     }
 
     AnimatedVisibility(
-        visible = importOpen,
+        visible = activeSheet is ActivePlayerSheet.Import,
         enter = slideInHorizontally(tween(280)) { it } + fadeIn(),
         exit = slideOutHorizontally(tween(240)) { it } + fadeOut(),
     ) {
         ImportScreen(
-            onBack = { importOpen = false },
+            onBack = { activeSheet = null },
             onImported = { libraryVersion++ },
         )
     }
 
-    if (showQueue) {
+    if (activeSheet is ActivePlayerSheet.Queue) {
         QueueSheet(
             tracks = playingList,
             currentIndex = playingIndex,
@@ -1711,7 +1716,7 @@ fun PlayerScreen(
             onJump = { i -> playAt(playingList, i, keepSea = seaActive) },
             onRemove = { i -> removeFromQueue(i) },
             onMove = { from, to -> moveInQueue(from, to) },
-            onDismiss = { showQueue = false },
+            onDismiss = { activeSheet = null },
         )
     }
 }
