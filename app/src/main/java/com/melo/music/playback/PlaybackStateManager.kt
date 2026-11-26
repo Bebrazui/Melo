@@ -50,6 +50,14 @@ object PlaybackStateManager {
         _state.update { it.copy(playingIndex = index) }
     }
 
+    fun updatePlayingList(list: List<TrackItem>) {
+        _state.update { it.copy(playingList = list) }
+    }
+
+    fun updateTrackSwitchDirection(dir: Int) {
+        _state.update { it.copy(trackSwitchDirection = dir) }
+    }
+
     fun toggleShuffle(): Boolean {
         val next = !_state.value.isShuffle
         _state.update { it.copy(isShuffle = next) }

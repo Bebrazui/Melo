@@ -48,6 +48,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.runtime.collectAsState
+import com.melo.music.playback.PlaybackStateManager
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.aspectRatio
@@ -409,23 +411,50 @@ fun PlayerScreen(
     var hasScrolled by remember { mutableStateOf(false) }
     var lastItemCount by remember { mutableIntStateOf(0) }
 
-    var nowPlaying by rememberSaveable(stateSaver = TrackSaver.singleSaver()) { mutableStateOf<TrackItem?>(null) }
-    var copyrightBlockedTrack by remember { mutableStateOf<TrackItem?>(null) }
-    var resolvingUrl by rememberSaveable { mutableStateOf<String?>(null) }
-    var trackStartTime by remember { mutableLongStateOf(0L) }
-    var trackSwitchDirection by remember { mutableIntStateOf(1) }
+    val playbackUiState by PlaybackStateManager.state.collectAsState()
+    val nowPlaying = playbackUiState.nowPlaying
+    val resolvingUrl = playbackUiState.resolvingUrl
+    val playingList = playbackUiState.playingList
+    val playingIndex = playbackUiState.playingIndex
+    var shuffle by remember {
+        mutableStateOf(playbackUiState.isShuffle)
+    }
+    LaunchedEffect(playbackUiState.isShuffle) {
+        if (shuffle != playbackUiState.isShuffle) shuffle = playbackUiState.isShuffle
+    }
+    var repeatOne by remember {
+        mutableStateOf(playbackUiState.isRepeatOne)
+    }
+    LaunchedEffect(playbackUiState.isRepeatOne) {
+        if (repeatOne != playbackUiState.isRepeatOne) repeatOne = playbackUiState.isRepeatOne
+    }
+    var seaActive by remember {
+        mutableStateOf(playbackUiState.isSeaActive)
+    }
+    LaunchedEffect(playbackUiState.isSeaActive) {
+        if (seaActive != playbackUiState.isSeaActive) seaActive = playbackUiState.isSeaActive
+    }
+    var seaLoading by remember {
+        mutableStateOf(playbackUiState.isSeaLoading)
+    }
+    LaunchedEffect(playbackUiState.isSeaLoading) {
+        if (seaLoading != playbackUiState.isSeaLoading) seaLoading = playbackUiState.isSeaLoading
+    }
+    var trackSwitchDirection by remember {
+        mutableIntStateOf(playbackUiState.trackSwitchDirection)
+    }
+    LaunchedEffect(playbackUiState.trackSwitchDirection) {
+        if (trackSwitchDirection != playbackUiState.trackSwitchDirection) {
+            trackSwitchDirection = playbackUiState.trackSwitchDirection
+        }
+    }
 
-    // Очередь воспроизведения (управляется в UI) + режимы.
-    var playingList by rememberSaveable(stateSaver = TrackSaver.listOfSaver()) { mutableStateOf<List<TrackItem>>(emptyList()) }
-    var playingIndex by rememberSaveable { mutableIntStateOf(-1) }
-    var shuffle by rememberSaveable { mutableStateOf(false) }
+    var copyrightBlockedTrack by remember { mutableStateOf<TrackItem?>(null) }
+    var trackStartTime by remember { mutableLongStateOf(0L) }
+
     // Храним историю сыгранных индексов в текущей очереди shuffle.
     // Сбрасывается при смене очереди или ручном включении shuffle.
     val shufflePlayedIndices = remember { mutableSetOf<Int>() }
-    var repeatOne by rememberSaveable { mutableStateOf(false) }
-    // «Sea» — бесконечная персональная волна (радио YouTube Music + наш реранк).
-    var seaActive by rememberSaveable { mutableStateOf(false) }
-    var seaLoading by remember { mutableStateOf(false) }
     // Избранное — сохраняется в SharedPreferences.
     var likedVersion by remember { mutableIntStateOf(0) }
     fun getLiked(): MutableList<TrackItem> = FavoritesManager.getAll()
@@ -489,12 +518,14 @@ fun PlayerScreen(
         EqualizerManager.setCrushAmount(cr)
         EqualizerManager.setNoteShiftSeed(ns)
 
-        nowPlaying = nowPlaying?.copy(
-            speed = sp,
-            bassBoost = bb,
-            crush = cr,
-            pitchSemi = ps,
-            noteShiftSeed = ns,
+        PlaybackStateManager.updateNowPlaying(
+            nowPlaying?.copy(
+                speed = sp,
+                bassBoost = bb,
+                crush = cr,
+                pitchSemi = ps,
+                noteShiftSeed = ns,
+            )
         )
     }
 
@@ -550,9 +581,9 @@ fun PlayerScreen(
         if (nowPlaying == null) {
             val sTrack = com.melo.music.playback.PlaybackService.currentTrackItem
             if (sTrack != null) {
-                nowPlaying = sTrack
-                if (playingList.isEmpty()) playingList = com.melo.music.playback.PlaybackService.queue
-                if (playingIndex == -1) playingIndex = com.melo.music.playback.PlaybackService.queueIndex
+                PlaybackStateManager.updateNowPlaying(sTrack)
+                if (playingList.isEmpty()) PlaybackStateManager.updatePlayingList(com.melo.music.playback.PlaybackService.queue)
+                if (playingIndex == -1) PlaybackStateManager.updatePlayingIndex(com.melo.music.playback.PlaybackService.queueIndex)
             } else if (controller?.currentMediaItem != null) {
                 val meta = controller.currentMediaItem?.mediaMetadata
                 val rawTitle = meta?.title?.toString()
@@ -561,13 +592,15 @@ fun PlayerScreen(
                     val extractedArtist = rawArtist?.let { com.melo.music.extractor.cleanArtistName(it) }
                         ?: com.melo.music.extractor.cleanArtistName(null, rawTitle)
                     val extractedTitle = com.melo.music.extractor.cleanTrackTitle(rawTitle, extractedArtist)
-                    nowPlaying = TrackItem(
-                        title = extractedTitle,
-                        uploader = extractedArtist ?: "",
-                        url = com.melo.music.playback.PlaybackService.currentAudioStreamUrl ?: "",
-                        durationSeconds = 0L,
-                        thumbnailUrl = meta.artworkUri?.toString(),
-                        source = Source.YOUTUBE_MUSIC,
+                    PlaybackStateManager.updateNowPlaying(
+                        TrackItem(
+                            title = extractedTitle,
+                            uploader = extractedArtist ?: "",
+                            url = com.melo.music.playback.PlaybackService.currentAudioStreamUrl ?: "",
+                            durationSeconds = 0L,
+                            thumbnailUrl = meta.artworkUri?.toString(),
+                            source = Source.YOUTUBE_MUSIC,
+                        )
                     )
                 }
             }
@@ -803,10 +836,9 @@ fun PlayerScreen(
         if (playingList != list) {
             shufflePlayedIndices.clear()
         }
-        playingList = list
-        playingIndex = index
         val item = list[index]
-        nowPlaying = item
+        PlaybackStateManager.updateQueue(list, index, trackSwitchDirection)
+        PlaybackStateManager.updateNowPlaying(item)
         com.melo.music.playback.PlaybackService.setQueue(list, index)
         trackStartTime = android.os.SystemClock.elapsedRealtime()
         HistoryManager.add(item)
@@ -816,7 +848,7 @@ fun PlayerScreen(
         playerProvider()?.pause()
         scope.launch {
             val tStart = android.os.SystemClock.elapsedRealtime()
-            resolvingUrl = item.url
+            PlaybackStateManager.updateResolvingUrl(item.url)
             val query = listOfNotNull(item.title, item.uploader).joinToString(" ").takeIf { it.isNotBlank() }
             runCatching { onResolveAudioUrl(item.url, query, item.title, item.uploader) }
                 .onSuccess {
@@ -866,7 +898,7 @@ fun PlayerScreen(
                     }
                 }
             if (resolvingUrl == item.url) {
-                resolvingUrl = null
+                PlaybackStateManager.updateResolvingUrl(null)
             }
         }
         prefetchAround(list, index)
@@ -893,18 +925,17 @@ fun PlayerScreen(
         when {
             index == playingIndex -> {
                 if (newList.isEmpty()) {
-                    playingList = newList
-                    playingIndex = -1
+                    PlaybackStateManager.updateQueue(newList, -1)
                     return
                 }
                 val newIdx = index.coerceAtMost(newList.lastIndex)
-                playingList = newList
+                PlaybackStateManager.updatePlayingList(newList)
                 playAt(newList, newIdx, keepSea = seaActive)
                 return
             }
-            index < playingIndex -> playingIndex -= 1
+            index < playingIndex -> PlaybackStateManager.updatePlayingIndex(playingIndex - 1)
         }
-        playingList = newList
+        PlaybackStateManager.updatePlayingList(newList)
         pushNextResolved(playingIndex)
     }
 
@@ -912,12 +943,11 @@ fun PlayerScreen(
         if (from !in playingList.indices || to !in playingList.indices || from == to) return
         val newList = playingList.toMutableList()
         newList.add(to, newList.removeAt(from))
-        playingList = newList
-        // Держим индекс на реально играющем треке.
-        playingIndex = newList.indexOfFirst { it.url == nowPlaying?.url }
+        val targetIdx = newList.indexOfFirst { it.url == nowPlaying?.url }
             .let { if (it >= 0) it else playingIndex.coerceIn(0, newList.lastIndex) }
+        PlaybackStateManager.updateQueue(newList, targetIdx)
         com.melo.music.playback.PlaybackService.clearNext()
-        pushNextResolved(playingIndex)
+        pushNextResolved(targetIdx)
     }
 
     // ── Sea: бесконечная волна ──────────────────────────────────────────────
@@ -964,11 +994,13 @@ fun PlayerScreen(
         if (!seaActive || seaLoading) return
         val base = nowPlaying ?: playingList.lastOrNull() ?: return
         seaLoading = true
+        PlaybackStateManager.setSeaLoading(true)
         scope.launch {
             val exclude = (playingList.map { it.url } + HistoryManager.getAll().map { it.url }).toSet()
             val more = buildSeaBatch(base, exclude)
-            if (more.isNotEmpty()) playingList = playingList + more
+            if (more.isNotEmpty()) PlaybackStateManager.updatePlayingList(playingList + more)
             seaLoading = false
+            PlaybackStateManager.setSeaLoading(false)
         }
     }
     // Подтягиваем волну заранее, у конца очереди.
@@ -987,6 +1019,7 @@ fun PlayerScreen(
                 controller?.let { it.seekTo(0); it.play() }
             } else {
                 trackSwitchDirection = 1
+                PlaybackStateManager.updateTrackSwitchDirection(1)
                 playNext()
             }
         }
@@ -997,8 +1030,9 @@ fun PlayerScreen(
         crossfadeAdvanceRef.value = ref@{ idx ->
             val item = playingList.getOrNull(idx) ?: return@ref
             trackSwitchDirection = 1
-            playingIndex = idx
-            nowPlaying = item
+            PlaybackStateManager.updateTrackSwitchDirection(1)
+            PlaybackStateManager.updatePlayingIndex(idx)
+            PlaybackStateManager.updateNowPlaying(item)
             com.melo.music.playback.PlaybackService.setQueue(playingList, idx)
             trackStartTime = android.os.SystemClock.elapsedRealtime()
             HistoryManager.add(item)
