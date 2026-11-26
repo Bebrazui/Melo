@@ -624,7 +624,8 @@ class PlaybackService : MediaSessionService() {
                         startCrossfade()
                     }
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                com.melo.music.util.FileLog.e("MeloFade", "crossfadeTick error: ${e.message}", e)
             }
             // Адаптивный интервал: когда трек играет далеко от конца, проверяем реже (1000мс),
             // экономя батарею в фоне. У конца трека (последние 30с) или при таймере сна — проверяем каждые 250мс.

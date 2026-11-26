@@ -80,7 +80,8 @@ object EqualizerManager {
             rv.preset = (prefs?.getInt(KEY_REVERB, 0) ?: 0).toShort()
             rv.enabled = true // всегда включён; «нет реверба» = preset NONE / send 0.
             auxReverb = rv
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            com.melo.music.util.FileLog.w("EqualizerManager", "PresetReverb init failed: ${e.message}")
             auxReverb = null
         }
     }
@@ -114,7 +115,8 @@ object EqualizerManager {
                 }
             }
             equalizer = eq
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            com.melo.music.util.FileLog.w("EqualizerManager", "Equalizer attach failed: ${e.message}")
             equalizer = null
         }
 
@@ -125,7 +127,8 @@ object EqualizerManager {
             le.setTargetGain(gain)
             le.enabled = gain > 0
             loudness = le
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            com.melo.music.util.FileLog.w("EqualizerManager", "LoudnessEnhancer attach failed: ${e.message}")
             loudness = null
         }
 
@@ -139,7 +142,8 @@ object EqualizerManager {
             }
             virt.enabled = spatialEnabled
             virtualizer = virt
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            com.melo.music.util.FileLog.w("EqualizerManager", "Virtualizer attach failed: ${e.message}")
             virtualizer = null
         }
 
@@ -154,7 +158,8 @@ object EqualizerManager {
                 ir.enabled = false
             }
             insertReverb = ir
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            com.melo.music.util.FileLog.w("EqualizerManager", "PresetReverb attach failed: ${e.message}")
             insertReverb = null
         }
 
@@ -168,7 +173,8 @@ object EqualizerManager {
             }
             bb.enabled = bbEnabled
             bassBoost = bb
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            com.melo.music.util.FileLog.w("EqualizerManager", "BassBoost attach failed: ${e.message}")
             bassBoost = null
         }
     }
