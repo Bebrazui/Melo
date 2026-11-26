@@ -1,4 +1,4 @@
-name: Release Melo APK
+name: Release Melo APK & DEX Patch
 
 on:
   push:
@@ -6,10 +6,10 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
-      release_tag:
-        description: 'Tag для релиза (например v0.5.9). Пусто — берётся текущий ref.'
+      patch_version:
+        description: 'Patch version number (e.g. 15)'
         required: false
-        default: ''
+        default: '1'
 
 permissions:
   contents: write
@@ -18,217 +18,80 @@ jobs:
   build-and-release:
     runs-on: ubuntu-latest
 
-    env:
-      # Имя флейвора Google — основной APK (с Google Sign-In).
-      PRIMARY_FLAVOR: google
-      # Имя флейвора RuStore.
-      SECONDARY_FLAVOR: ruStore
-
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.inputs.release_tag || github.ref }}
-          fetch-depth: 0
-
-      # Отдельный checkout master — туда обновляем version.json после публикации.
-      - name: Checkout master for version.json
-        uses: actions/checkout@v6
-        with:
-          ref: master
-          path: version-update
-          persist-credentials: true
+        uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # setup-android@v3 ставил пакет 'tools', которого больше нет в cmdline-tools 16+
-      # (падало с "Failed to find package 'tools'"). v4 ставит только platform-tools.
-      # Явно перечисляем всё, что нужно проекту: API 35, build-tools 35, NDK 27 и CMake 3.22.
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          packages: |
-            platform-tools
-            platforms;android-35
-            build-tools;35.0.0
-            ndk;27.0.12077973
-            cmake;3.22.1
-
-      - name: Setup Gradle cache
-        uses: gradle/actions/setup-gradle@v6
+        uses: android-actions/setup-android@v3
 
       - name: Grant Execute Permission for Gradlew
         run: chmod +x gradlew
 
-      # keystore.properties и .jks лежат в .gitignore, поэтому в CI их нет.
-      # Восстанавливаем из секретов, иначе release-сборка выйдет неподписанной.
-      - name: Restore Release Keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      - name: Build Release APK
+        run: ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Prepare Patch & Release Metadata
+        id: prepare_assets
         run: |
-          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
-            echo "::error::Отсутствуют секреты KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD. Без них release APK останется неподписанным."
+          mkdir -p release_output
+          
+          # 1. Копируем скомпилированный APK
+          APK_FILE=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -f "$APK_FILE" ]; then
+            cp "$APK_FILE" release_output/melo-latest.apk
+            APK_SHA=$(sha256sum release_output/melo-latest.apk | awk '{print $1}')
+          else
+            echo "APK not found!"
             exit 1
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > melo-release.jks
-          cat > keystore.properties <<EOF
-          storeFile=melo-release.jks
-          storePassword=$KEYSTORE_PASSWORD
-          keyAlias=$KEY_ALIAS
-          keyPassword=$KEY_PASSWORD
-          EOF
-          echo "Keystore restored."
 
-      # Оба флейвора: Google (основной) и RuStore.
-      - name: Build Release APKs
-        run: |
-          ./gradlew \
-            :app:assembleGoogleRelease \
-            :app:assembleRuStoreRelease \
-            --stacktrace \
-            --no-daemon
-
-      - name: Collect Release Artifacts
-        id: collect
-        run: |
-          set -euo pipefail
-          mkdir -p release_output
-
-          PRIMARY_SRC="app/build/outputs/apk/${PRIMARY_FLAVOR}/release/app-${PRIMARY_FLAVOR}-release.apk"
-          SECONDARY_SRC="app/build/outputs/apk/${SECONDARY_FLAVOR}/release/app-${SECONDARY_FLAVOR}-release.apk"
-
-          for f in "$PRIMARY_SRC" "$SECONDARY_SRC"; do
-            if [ ! -f "$f" ]; then
-              echo "::error::Не найден APK: $f"
-              echo "Доступные APK:"
-              find app/build/outputs/apk -name '*.apk' || true
-              exit 1
+          # 2. Если есть скомпилированный patch DEX, упаковываем его
+          PATCH_VERSION="${{ github.event.inputs.patch_version || '1' }}"
+          PATCH_FILE="release_output/patch-v${PATCH_VERSION}.dex"
+          
+          # Если d8 доступен, создаем микро-патч из скомпилированных классов
+          if [ -d "app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes" ]; then
+            $ANDROID_HOME/build-tools/34.0.0/d8 $(find app/build/intermediates/javac/release -name "*.class") --output release_output/ || true
+            if [ -f "release_output/classes.dex" ]; then
+              mv release_output/classes.dex "$PATCH_FILE"
             fi
-          done
-
-          # Имена ассетов фиксированы контрактом: version.json и Melo-Releases
-          # ожидают app-release.apk (google) и app-ruStore-release.apk.
-          cp "$PRIMARY_SRC" release_output/app-release.apk
-          cp "$SECONDARY_SRC" release_output/app-ruStore-release.apk
-
-          # Плоский каталог без флейвора — старые сборки оставляли его позади.
-          rm -rf app/build/outputs/apk/release
-
-          APK_SHA=$(sha256sum release_output/app-release.apk | awk '{print $1}')
-          RUSTORE_SHA=$(sha256sum release_output/app-ruStore-release.apk | awk '{print $1}')
-
-          echo "app_sha256=$APK_SHA" >> "$GITHUB_OUTPUT"
-          echo "rustore_sha256=$RUSTORE_SHA" >> "$GITHUB_OUTPUT"
-          echo "APK sha256: $APK_SHA"
-          echo "RuStore APK sha256: $RUSTORE_SHA"
-
-      # Опциональный шаг: d8 собирает DEX из скомпилированных классов.
-      # В приложении пока нет загрузчика патчей (DexClassLoader не используется),
-      # поэтому шаг не должен ронять публикацию релиза.
-      - name: Build Optional DEX Patch
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          CLASSES_DIR="app/build/tmp/kotlin-classes/${PRIMARY_FLAVOR}Release"
-          if [ ! -d "$CLASSES_DIR" ]; then
-            echo "Нет каталога классов $CLASSES_DIR — патч пропущен."
-            exit 0
-          fi
-          D8=$(ls -d "$ANDROID_HOME"/build-tools/35.*/d8 | sort -V | tail -n 1)
-          "$D8" $(find "$CLASSES_DIR" -name '*.class') --output release_output/ --min-api 26 || true
-          if [ -f release_output/classes.dex ]; then
-            mv release_output/classes.dex "release_output/patch-v${PATCH_VERSION:-1}.dex"
-            echo "DEX patch собран."
-          else
-            echo "d8 не выдал classes.dex — патч пропущен."
           fi
 
-      - name: Prepare Release Metadata
-        id: meta
-        run: |
-          set -euo pipefail
+          PATCH_SHA=""
+          if [ -f "$PATCH_FILE" ]; then
+            PATCH_SHA=$(sha256sum "$PATCH_FILE" | awk '{print $1}')
+          fi
+
+          # 3. Генерируем метаданные релиза release_info.json
           TAG_NAME="${GITHUB_REF#refs/tags/}"
-          [ -n "$TAG_NAME" ] || TAG_NAME="${GITHUB_REF_NAME}"
-
-          # Версию берём из build.gradle.kts — это источник истины для собранного APK.
-          VERSION_CODE=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts | head -n 1)
-          VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -n 1)
-          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
-          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
-
-          cat > release_output/release_info.json <<EOF
+          cat <<EOF > release_output/release_info.json
           {
-            "versionCode": $VERSION_CODE,
-            "versionName": "$VERSION_NAME",
-            "tag": "$TAG_NAME",
-            "apkName": "app-release.apk",
-            "apkSha256": "${{ steps.collect.outputs.app_sha256 }}",
-            "ruStoreApkName": "app-ruStore-release.apk",
-            "ruStoreApkSha256": "${{ steps.collect.outputs.rustore_sha256 }}",
+            "versionName": "${TAG_NAME:-v1.0.0}",
+            "apkName": "melo-latest.apk",
+            "apkSha256": "$APK_SHA",
+            "patchVersion": $PATCH_VERSION,
+            "patchName": "patch-v${PATCH_VERSION}.dex",
+            "patchSha256": "$PATCH_SHA",
             "publishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }
           EOF
-          jq empty release_output/release_info.json
 
       - name: Publish to GitHub Releases
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.meta.outputs.tag }}
           files: |
-            release_output/app-release.apk
-            release_output/app-ruStore-release.apk
+            release_output/*.apk
+            release_output/*.dex
             release_output/release_info.json
           draft: false
           prerelease: false
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Приложение проверяет обновления по version.json из ветки master,
-      # поэтому после публикации релиза обновляем его и заливаем в master.
-      - name: Update version.json on master
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          cd version-update
-          TAG_NAME="${{ steps.meta.outputs.tag }}"
-          VERSION_CODE="${{ steps.meta.outputs.version_code }}"
-          VERSION_NAME="${{ steps.meta.outputs.version_name }}"
-          APK_SHA="${{ steps.collect.outputs.app_sha256 }}"
-          APK_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/app-release.apk"
-
-          # Changelog берём из сгенерированных release notes, иначе — дефолт.
-          NOTES=$(gh api "repos/${{ github.repository }}/releases/tags/${TAG_NAME}" --jq '.body' 2>/dev/null || true)
-          [ -n "$NOTES" ] || NOTES="Обновление до ${VERSION_NAME}"
-
-          # jq корректно экранирует многострочные notes и кавычки в JSON.
-          jq -n \
-            --argjson versionCode "$VERSION_CODE" \
-            --arg versionName "$VERSION_NAME" \
-            --arg apkUrl "$APK_URL" \
-            --arg changelog "$NOTES" \
-            --arg sha256 "$APK_SHA" \
-            '{versionCode: $versionCode, versionName: $versionName, apkUrl: $apkUrl, changelog: $changelog, sha256: $sha256}' \
-            > version.json
-          jq empty version.json
-          cat version.json
-
-          git config user.name  'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add version.json
-          if git diff --cached --quiet; then
-            echo "version.json не изменился — коммит не нужен."
-          else
-            git commit -m "chore: update version.json for ${TAG_NAME}"
-            git push origin HEAD:master
-            echo "version.json обновлён в master."
-          fi
